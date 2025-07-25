@@ -63,7 +63,7 @@ const ProjectOverview = () => {
     { title: 'Tổng mentions', value: formatNumber(overview.totalMentions), sub: 'Bài đăng đã cào' },
     {
       title: 'Chỉ số NSR',
-      value: `${overview.nsrScore > 0 ? '+' : ''}${overview.nsrScore}%`,
+      value: `${overview.nsrScore > 0 ? '+' : ''}${Math.round(overview.nsrScore)}%`,
       sub: `${overview.positiveCount} tích cực · ${overview.negativeCount} tiêu cực`,
       accent: overview.nsrScore >= 0 ? 'text-[#00B4D8]' : 'text-[#FF7575]',
     },
