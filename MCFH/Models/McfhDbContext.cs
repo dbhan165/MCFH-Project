@@ -78,7 +78,7 @@ public partial class McfhDbContext : DbContext
             var config = new ConfigurationBuilder().AddJsonFile("appsettings.json").Build();
             optionsBuilder.UseSqlServer(config.GetConnectionString("MyCnn"));
         }
-    }
+    } 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AiAnalysis>(entity =>
