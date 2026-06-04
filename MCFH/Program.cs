@@ -1,3 +1,8 @@
+﻿using MCFH.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace MCFH
 {
@@ -8,10 +13,46 @@ namespace MCFH
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
+            // 1. Cấu hình DbContext sử dụng DI
+            builder.Services.AddDbContext<McfhDbContext>(options =>
+                options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));
+
+            // 2. Kích hoạt xác thực bằng JWT Bearer
+            var jwtKey = builder.Configuration["Jwt:Key"]!;
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                    ValidAudience = builder.Configuration["Jwt:Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+                };
+            });
+
+            // 3. Cấu hình CORS - Cho phép Frontend (React/Vite) gọi API
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()   // Cho phép mọi tên miền (Ví dụ: localhost:5173)
+                          .AllowAnyMethod()   // Cho phép mọi phương thức (GET, POST, PUT, DELETE...)
+                          .AllowAnyHeader();  // Cho phép gửi mọi loại Header (kể cả Token)
+                });
+            });
 
             builder.Services.AddControllers()
                 .AddXmlSerializerFormatters()
                 .AddXmlDataContractSerializerFormatters();
+                
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -27,7 +68,11 @@ namespace MCFH
 
             app.UseHttpsRedirection();
 
-            app.UseAuthorization();
+            // QUAN TRỌNG: UseCors phải nằm TRƯỚC UseAuthentication và UseAuthorization
+            app.UseCors("AllowAll");
+
+            app.UseAuthentication(); // Xác thực danh tính
+            app.UseAuthorization();  // Kiểm tra phân quyền
 
             app.MapControllers();
 
