@@ -1,5 +1,4 @@
-﻿
-using MCFH.Models;
+﻿using MCFH.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -39,17 +38,26 @@ namespace MCFH
                 };
             });
 
+            // 3. Cấu hình CORS - Cho phép Frontend (React/Vite) gọi API
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()   // Cho phép mọi tên miền (Ví dụ: localhost:5173)
+                          .AllowAnyMethod()   // Cho phép mọi phương thức (GET, POST, PUT, DELETE...)
+                          .AllowAnyHeader();  // Cho phép gửi mọi loại Header (kể cả Token)
+                });
+            });
+
             builder.Services.AddControllers()
                 .AddXmlSerializerFormatters()
                 .AddXmlDataContractSerializerFormatters();
+                
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
-
-            app.UseAuthentication(); // Xác thực danh tính
-            app.UseAuthorization();  // Kiểm tra phân quyền
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
@@ -60,7 +68,11 @@ namespace MCFH
 
             app.UseHttpsRedirection();
 
-            app.UseAuthorization();
+            // QUAN TRỌNG: UseCors phải nằm TRƯỚC UseAuthentication và UseAuthorization
+            app.UseCors("AllowAll");
+
+            app.UseAuthentication(); // Xác thực danh tính
+            app.UseAuthorization();  // Kiểm tra phân quyền
 
             app.MapControllers();
 
