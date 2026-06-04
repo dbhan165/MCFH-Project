@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
+using MCFH.Services;
+
 namespace MCFH
 {
     public class Program
@@ -16,6 +18,7 @@ namespace MCFH
             // 1. Cấu hình DbContext sử dụng DI
             builder.Services.AddDbContext<McfhDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));
+            builder.Services.AddTransient<IEmailService, EmailService>();
 
             // 2. Kích hoạt xác thực bằng JWT Bearer
             var jwtKey = builder.Configuration["Jwt:Key"]!;

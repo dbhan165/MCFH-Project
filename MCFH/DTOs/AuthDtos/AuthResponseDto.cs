@@ -1,4 +1,4 @@
-﻿namespace MCFHBackend.DTOs
+﻿namespace MCFHBackend.DTOs.AuthDtos
 {
     public class AuthResponseDto
 {
