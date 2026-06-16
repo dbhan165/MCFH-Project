@@ -39,7 +39,8 @@ const Login = () => {
         localStorage.setItem('userRole', userData.role);
         localStorage.setItem('fullName', userData.fullName);
         
-        navigate('/create-campaign'); 
+        // CẬP NHẬT KIẾN TRÚC MỚI: Đăng nhập xong phải đưa về sảnh Chọn Tổ Chức (Workspaces)
+        navigate('/workspaces'); 
 
       } else if (mode === 'register') {
         const response = await authApi.register(fullName, email, phone, password);
@@ -217,17 +218,16 @@ const Login = () => {
                   setIsLoading(true);
                   setErrorMessage('');
                   
-                  // credentialResponse.credential chính là chuỗi idToken từ Google
                   const response = await authApi.googleLogin(credentialResponse.credential!);
                   const userData = response.data;
                   
-                  // Lưu token và thông tin người dùng
                   localStorage.setItem('accessToken', userData.token);
                   localStorage.setItem('userRole', userData.role);
                   localStorage.setItem('fullName', userData.fullName);
                   
-                  // Chuyển vào trang bên trong
-                  navigate('/create-campaign');
+                  // CẬP NHẬT KIẾN TRÚC MỚI: Login bằng Google xong cũng đưa về sảnh Workspaces
+                  navigate('/workspaces');
+                  
                 } catch (error: any) {
                   if (error.response && error.response.data) {
                     setErrorMessage(error.response.data.message);
