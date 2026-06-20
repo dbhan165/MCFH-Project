@@ -444,3 +444,6 @@ appsettings.Production.json
 dist/
 build/
 .next/
+
+# Facebook session cookie — KHÔNG commit, chứa thông tin đăng nhập nhạy cảm
+**/fb_cookie.json
