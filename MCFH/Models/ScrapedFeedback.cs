@@ -29,6 +29,10 @@ public partial class ScrapedFeedback
 
     public DateTime? ScrapedAt { get; set; }
 
+    public string? CommentsFileUrl { get; set; }
+
+    public int? CommentsCount { get; set; }
+
     public virtual AiAnalysis? AiAnalysis { get; set; }
 
     public virtual DataSource Source { get; set; } = null!;

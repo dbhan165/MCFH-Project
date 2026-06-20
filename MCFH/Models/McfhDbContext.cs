@@ -90,6 +90,7 @@ public partial class McfhDbContext : DbContext
             entity.HasIndex(e => e.FeedbackId, "UQ_Analysis_Feedback").IsUnique();
 
             entity.Property(e => e.AnalysisId).HasColumnName("analysis_id");
+            entity.Property(e => e.AgreementRate).HasColumnName("agreement_rate");
             entity.Property(e => e.ConfidenceScore).HasColumnName("confidence_score");
             entity.Property(e => e.FeedbackId).HasColumnName("feedback_id");
             entity.Property(e => e.IsCrisisAlert)
@@ -602,6 +603,10 @@ public partial class McfhDbContext : DbContext
             entity.Property(e => e.AuthorName)
                 .HasMaxLength(255)
                 .HasColumnName("author_name");
+            entity.Property(e => e.CommentsCount)
+                .HasDefaultValue(0)
+                .HasColumnName("comments_count");
+            entity.Property(e => e.CommentsFileUrl).HasColumnName("comments_file_url");
             entity.Property(e => e.Content).HasColumnName("content");
             entity.Property(e => e.DeletedAt)
                 .HasColumnType("datetime")
