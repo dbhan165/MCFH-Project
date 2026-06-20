@@ -79,11 +79,7 @@ public class FacebookGroupScraper
     private async Task<GroupPost?> OpenPostAndScrapeAsync(IPage page, string posinset)
     {
         var postEl = await page.QuerySelectorAsync($"div[aria-posinset='{posinset}']");
-        if (postEl == null)
-        {
-            Console.WriteLine($"[FB Group] Không tìm thấy posinset={posinset}");
-            return null;
-        }
+        if (postEl == null) return null;
 
         var textEl = await postEl.QuerySelectorAsync("div[data-ad-rendering-role='story_message']");
         var text = textEl != null ? await textEl.InnerTextAsync() : "";
@@ -99,28 +95,54 @@ public class FacebookGroupScraper
 
         var post = new GroupPost { Author = author, Text = text };
 
-        var timestampLink = await postEl.QuerySelectorAsync("a[href*='/posts/']");
+        // Tìm link timestamp bằng CẤU TRÚC (không quan tâm href) — link role='link' nằm trong vùng header chứa profile_name
+        var headerEl = await postEl.QuerySelectorAsync("div[data-ad-rendering-role='profile_name']");
+        IElementHandle? timestampLink = null;
+
+        if (headerEl != null)
+        {
+            // Timestamp thường là link role='link' NGAY SAU phần tên tác giả, trong cùng khối header
+            var parentOfHeader = await headerEl.EvaluateHandleAsync("el => el.closest('div')?.parentElement");
+            var candidateLinks = await postEl.QuerySelectorAllAsync("a[role='link']");
+
+            
+            foreach (var link in candidateLinks)
+            {
+                var href = await link.GetAttributeAsync("href");
+                if (href != null && (href.Contains("/user/") || href.Contains("/stories/"))) continue;
+
+                timestampLink = link;
+                break;
+            }
+        }
+
         if (timestampLink == null)
         {
-            Console.WriteLine($"[FB Group] posinset={posinset} không có timestamp link, giữ post không URL/comment");
+            Console.WriteLine($"[FB Group] posinset={posinset} không tìm được timestamp link, giữ post không URL/comment");
             return post;
         }
 
         var urlBeforeClick = page.Url;
         await timestampLink.ClickAsync();
-        await page.WaitForTimeoutAsync(2000);
+        await page.WaitForTimeoutAsync(2500);
 
+        
         var urlAfterClick = page.Url;
-
-        // Kiểm tra click có thành công không — nếu vẫn ở trang search (bị redirect lỗi) thì fallback
-        if (urlAfterClick.Contains("/search/") || urlAfterClick == urlBeforeClick)
+        if (urlAfterClick == urlBeforeClick
+            || urlAfterClick.Contains("/search/")
+            || urlAfterClick.Contains("/stories/"))
         {
-            Console.WriteLine($"[FB Group] posinset={posinset} click bị lỗi/redirect về search, giữ post không URL/comment");
+            Console.WriteLine($"[FB Group] posinset={posinset} click sai đích, back lại trang search");
+            if (urlAfterClick != urlBeforeClick)
+            {
+                await page.GoBackAsync();
+                await page.WaitForTimeoutAsync(2000);
+            }
             return post;
         }
 
         post.PostUrl = urlAfterClick;
-        Console.WriteLine($"[FB Group] Mở modal posinset={posinset}, URL = {post.PostUrl}");
+        Console.WriteLine($"[FB Group] posinset={posinset} mở thành công, URL = {post.PostUrl}");
 
         // Scroll trong modal để load comment
         await page.Mouse.MoveAsync(950, 500);
