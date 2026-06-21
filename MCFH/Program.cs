@@ -1,10 +1,10 @@
 ﻿using MCFH.Models;
-using MCFH.Services;
-using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+
+using MCFH.Services;
 
 namespace MCFH
 {
@@ -59,8 +59,6 @@ namespace MCFH
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-
-            builder.Services.AddScoped<ScrapeByKeywordService>();
 
             var app = builder.Build();
 
