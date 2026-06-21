@@ -63,6 +63,8 @@ public partial class McfhDbContext : DbContext
 
     public virtual DbSet<Workspace> Workspaces { get; set; }
 
+    public virtual DbSet<WorkspaceActivityLog> WorkspaceActivityLogs { get; set; }
+
     public virtual DbSet<WorkspaceCredit> WorkspaceCredits { get; set; }
 
     public virtual DbSet<WorkspaceInvitation> WorkspaceInvitations { get; set; }
@@ -78,7 +80,8 @@ public partial class McfhDbContext : DbContext
             var config = new ConfigurationBuilder().AddJsonFile("appsettings.json").Build();
             optionsBuilder.UseSqlServer(config.GetConnectionString("MyCnn"));
         }
-    } 
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AiAnalysis>(entity =>
@@ -915,6 +918,44 @@ public partial class McfhDbContext : DbContext
                 .HasForeignKey(d => d.OwnerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Workspace_Owner");
+        });
+
+        modelBuilder.Entity<WorkspaceActivityLog>(entity =>
+        {
+            entity.HasKey(e => e.LogId).HasName("PK_WorkspaceActivityLog");
+
+            entity.ToTable("WORKSPACE_ACTIVITY_LOGS");
+
+            entity.Property(e => e.LogId).HasColumnName("log_id");
+            entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.ActionType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("action_type");
+            entity.Property(e => e.TargetType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("target_type");
+            entity.Property(e => e.TargetId).HasColumnName("target_id");
+            entity.Property(e => e.TargetName)
+                .HasMaxLength(255)
+                .HasColumnName("target_name");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("created_at");
+
+            entity.HasOne(d => d.Workspace).WithMany()
+                .HasForeignKey(d => d.WorkspaceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ActivityLog_Workspace");
+
+            entity.HasOne(d => d.User).WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ActivityLog_User");
         });
 
         modelBuilder.Entity<WorkspaceCredit>(entity =>
