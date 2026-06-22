@@ -13,7 +13,7 @@ import Pricing from './pages/Pricing';
 import Workspaces from './pages/Workspaces';
 import WorkspaceSettings from './pages/WorkspaceSettings';
 import Projects from './pages/Projects';
-import CreateWorkspace from './pages/CreateWorkspace'; // <--- Thêm mới
+import CreateWorkspace from './pages/CreateWorkspace';
 import CreateProject from './pages/CreateProject';
 import Members from './pages/Members';
 import Profile from './pages/Profile';
@@ -46,9 +46,11 @@ function App() {
         <Route element={<DashboardLayout />}>
           <Route path="/workspaces" element={<Workspaces />} />
           <Route path="/workspace-settings" element={<WorkspaceSettings />} />
-          {/* Cập nhật đường dẫn động theo từng không gian làm việc */}
           <Route path="/workspace/:workspaceId/projects" element={<Projects />} />
-          <Route path="/members" element={<Members />} />
+          
+          {/* ĐÃ FIX: Đồng bộ đường dẫn Members để nhận ID của Workspace */}
+          <Route path="/workspace/:workspaceId/members" element={<Members />} />
+          
           <Route path="/profile" element={<Profile />} />
           <Route path="/subscription" element={<Subscription />} />
         </Route>
@@ -56,7 +58,7 @@ function App() {
         {/* ========================================================
             3. KHU VỰC TÁCH BIỆT DIỆN TÍCH RỘNG (Không sidebar hệ thống)
             ======================================================== */}
-        <Route path="/create-workspace" element={<CreateWorkspace />} /> {/* <--- Thêm mới */}
+        <Route path="/create-workspace" element={<CreateWorkspace />} />
         <Route path="/create-project" element={<CreateProject />} />
         
         {/* ========================================================
