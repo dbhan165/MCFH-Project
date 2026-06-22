@@ -1,94 +1,130 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
-// Import Layouts quản lý khung giao diện
-import DashboardLayout from './layouts/DashboardLayout';
-import ProjectLayout from './layouts/ProjectLayout';
-
-// Import nhóm các trang hiển thị cộng đồng (Public Pages)
+// Import các trang
 import Welcome from './pages/Welcome';
 import Login from './pages/Login';
-import Pricing from './pages/Pricing';
+import Campaigns from './pages/Campaigns';
+import CreateCampaign from './pages/CreateCampaign';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import UserManagement from './pages/admin/UserManagement';
+import SubscriptionPlans from './pages/admin/SubscriptionPlans';
+import ProxyManagement from './pages/admin/ProxyManagement';
+import ScrapingMonitor from './pages/admin/ScrapingMonitor';
+import SystemSettings from './pages/admin/SystemSettings';
+import BespokeRequests from './pages/reporter/BespokeRequests';
+import ReporterPlaceholder from './pages/reporter/ReporterPlaceholder';
+import RequestDetail from './pages/reporter/RequestDetail';
+import MyPerformance from './pages/reporter/MyPerformance';
+import PipelineConfig from './pages/reporter/PipelineConfig';
+import RequestDelivery from './pages/reporter/RequestDelivery';
+import AnalystWorkspace from './pages/reporter/AnalystWorkspace';
 
-// Import nhóm các trang quản lý tổng quan Cấp độ 1 (Level 1 Pages)
-import Workspaces from './pages/Workspaces';
-import WorkspaceSettings from './pages/WorkspaceSettings';
-import Projects from './pages/Projects';
-import CreateWorkspace from './pages/CreateWorkspace';
-import CreateProject from './pages/CreateProject';
-import Members from './pages/Members';
-import Profile from './pages/Profile';
-import Subscription from './pages/Subscription';
+function AppRoutes() {
+  const location = useLocation();
+  const normalizedPath = location.pathname.replace(/\/{2,}/g, '/');
 
-// Import nhóm các trang phân tích chuyên sâu chi tiết Cấp độ 2 (Level 2 Pages)
-import ProjectOverview from './pages/ProjectOverview';
-import ProjectMentions from './pages/ProjectMentions';
-import ProjectSentiment from './pages/ProjectSentiment';
-import ProjectInfluencers from './pages/ProjectInfluencers';
-import ProjectChannel from './pages/ProjectChannel';
-import ProjectAspect from './pages/ProjectAspect';
-import ProjectReports from './pages/ProjectReports';
-import ProjectCreateBespoke from './pages/ProjectCreateBespoke';
+  if (normalizedPath !== location.pathname) {
+    return <Navigate to={normalizedPath + location.search + location.hash} replace />;
+  }
 
-function App() {
   return (
-    <Router>
       <Routes>
-        {/* ========================================================
-            1. KHU VỰC PUBLIC (Tự do truy cập công cộng)
-            ======================================================== */}
+        {/* ==========================================
+            1. KHU VỰC PUBLIC (Ai cũng vào được)
+            ========================================== */}
+        {/* Trang chủ (Landing Page) */}
         <Route path="/" element={<Welcome />} />
-        <Route path="/pricing" element={<Pricing />} />
+        
+        {/* Trang Đăng nhập */}
         <Route path="/login" element={<Login />} />
         
-        {/* ========================================================
-            2. KHU VỰC PRIVATE LEVEL 1 (Sử dụng hệ thanh điều hướng Cấp 1)
-            ======================================================== */}
-        <Route element={<DashboardLayout />}>
-          <Route path="/workspaces" element={<Workspaces />} />
-          <Route path="/workspace-settings" element={<WorkspaceSettings />} />
-          <Route path="/workspace/:workspaceId/projects" element={<Projects />} />
-          
-          {/* ĐÃ FIX: Đồng bộ đường dẫn Members để nhận ID của Workspace */}
-          <Route path="/workspace/:workspaceId/members" element={<Members />} />
-          
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/subscription" element={<Subscription />} />
-        </Route>
 
-        {/* ========================================================
-            3. KHU VỰC TÁCH BIỆT DIỆN TÍCH RỘNG (Không sidebar hệ thống)
-            ======================================================== */}
-        <Route path="/create-workspace" element={<CreateWorkspace />} />
-        <Route path="/create-project" element={<CreateProject />} />
+        {/* ==========================================
+            2. KHU VỰC PRIVATE (Không gian làm việc MCFH)
+            ========================================== */}
+        <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/create-campaign" element={<CreateCampaign />} />
+
+        {/* Admin Portal */}
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/users" element={<UserManagement />} />
+        <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
+        <Route path="/admin/proxies" element={<ProxyManagement />} />
+        <Route path="/admin/scraping" element={<ScrapingMonitor />} />
+        <Route path="/admin/settings" element={<SystemSettings />} />
+
+        {/* Reporter / Analyst Workspace */}
+        <Route path="/reporter" element={<Navigate to="/reporter/tasks" replace />} />
+        <Route path="/reporter/tasks" element={<BespokeRequests />} />
         
-        {/* ========================================================
-            4. KHU VỰC PRIVATE LEVEL 2 (Sử dụng hệ thanh điều hướng riêng của dự án)
-            ======================================================== */}
-        {/* Nhúng cả định danh Workspace vào trong tiến trình giám sát từng Project */}
-        <Route path="/workspace/:workspaceId/project/:id" element={<ProjectLayout />}>
-          <Route index element={<ProjectOverview />} />
-          <Route path="mentions" element={<ProjectMentions />} />
-          <Route path="sentiment" element={<ProjectSentiment />} />
-          <Route path="influencers" element={<ProjectInfluencers />} />
-          <Route path="channel" element={<ProjectChannel />} />
-          <Route path="aspect" element={<ProjectAspect />} />
-          <Route path="reports" element={<ProjectReports />} />
-          <Route path="create-bespoke" element={<ProjectCreateBespoke />} />
-        </Route>
+        {/* Route chi tiết yêu cầu/báo giá */}
+        <Route path="/reporter/requests/:id" element={<RequestDetail />} />
 
-        {/* ========================================================
-            5. ĐIỀU HƯỚNG AN TOÀN KHI NHẬP SAI ĐƯỜNG DẪN (404 Not Found)
-            ======================================================== */}
+        <Route
+          path="/reporter/dashboard"
+          element={
+            <ReporterPlaceholder
+              title="Dashboard"
+              description="Tổng quan hiệu suất và đơn yêu cầu của bạn."
+              activeTopNav="dashboard"
+            />
+          }
+        />
+        
+        <Route path="/reporter/performance" element={<MyPerformance />} />
+        
+        <Route
+          path="/reporter/settings"
+          element={
+            <ReporterPlaceholder
+              title="Settings"
+              description="Cấu hình tài khoản và tùy chọn làm việc."
+              activeTopNav="settings"
+            />
+          }
+        />
+        <Route
+          path="/reporter/archive"
+          element={
+            <ReporterPlaceholder
+              title="Archive"
+              description="Lưu trữ các báo cáo và đơn yêu cầu đã hoàn thành."
+              activeTopNav="archive"
+            />
+          }
+        />
+        
+        {/* 🌟 ĐÃ CHUẨN HÓA CÁC ĐƯỜNG DẪN ROUTE (KHÔNG TRÙNG NHAU) */}
+        <Route path="/reporter/pipeline/:id" element={<PipelineConfig />} />
+        <Route path="/reporter/delivery/:id" element={<RequestDelivery />} />
+        <Route path="/reporter/workspace/:id" element={<AnalystWorkspace />} />     
+
+
+        {/* ==========================================
+            3. XỬ LÝ LỖI (Bắt mọi đường dẫn sai)
+            ========================================== */}
         <Route path="*" element={
           <div className="flex flex-col items-center justify-center min-h-screen bg-[#050A15] text-white">
-            <h1 className="text-6xl font-extrabold text-[#FF7575] mb-4">404</h1>
-            <p className="text-gray-400 mb-8">Trang bạn yêu cầu hiện không tồn tại trên máy chủ MCFH.</p>
-            <a href="/" className="px-6 py-3 bg-white text-[#0A101D] font-bold rounded-lg transition-colors hover:bg-gray-200">
+            <h1 className="text-6xl font-extrabold text-[#00B4D8] mb-4">404</h1>
+            <h2 className="text-2xl font-bold mb-2">Không tìm thấy trang</h2>
+            <p className="text-gray-400 mb-8">Đường dẫn bạn nhập không tồn tại trên hệ thống.</p>
+            <a 
+              href="/" 
+              className="px-6 py-3 bg-white text-[#0A101D] font-bold rounded-lg hover:bg-gray-200 transition-colors"
+            >
               Quay lại Trang chủ
             </a>
           </div>
         } />
       </Routes>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppRoutes />
     </Router>
   );
 }
