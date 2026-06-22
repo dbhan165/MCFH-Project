@@ -1,7 +1,6 @@
 import { ArrowRight, PlayCircle } from 'lucide-react';
 import wellcome from '../assets/wellcome.png';
 import { Link } from 'react-router-dom';
-
 const Welcome = () => {
   return (
     // Wrapper chính với màu nền Navy tối và pattern lưới (grid) chìm
@@ -27,17 +26,16 @@ const Welcome = () => {
             <a href="#product" className="text-white border-b-2 border-[#FF7575] pb-1">Product</a>
             <a href="#ai-solutions" className="hover:text-white transition-colors pb-1">AI Solutions</a>
             <a href="#bespoke" className="hover:text-white transition-colors pb-1">Bespoke Reports</a>
-            {/* Đã cập nhật thẻ <a> thành <Link> để điều hướng tới route /pricing */}
-            <Link to="/pricing" className="hover:text-white transition-colors pb-1">Pricing</Link>
+            <a href="#pricing" className="hover:text-white transition-colors pb-1">Pricing</a>
           </nav>
 
           {/* Auth Actions */}
           <div className="flex items-center gap-6">
-            <Link to="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
-              Login
+          <Link to="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            Login
             </Link>
             <button className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-colors">
-              Start Free Trial
+              START FREE TRIAL
             </button>
           </div>
         </div>
@@ -52,7 +50,7 @@ const Welcome = () => {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 border border-[#FF7575]/30 bg-[#FF7575]/5 rounded-sm px-3 py-1 text-xs tracking-wider text-gray-200">
               <span className="w-1.5 h-1.5 rounded-full bg-[#FF7575]"></span>
-              New Feature: Real-Time NSR Tracking
+              NEW FEATURE: REAL-TIME NSR TRACKING
             </div>
 
             {/* Headline */}
@@ -75,7 +73,7 @@ const Welcome = () => {
                 Khởi tạo Workspace ngay <ArrowRight size={18} />
               </button>
               <button className="text-gray-300 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
-                <PlayCircle size={20} /> Xem demo sản phẩm
+                <PlayCircle size={20} /> Xem Demo Sản Phẩm
               </button>
             </div>
 
@@ -102,7 +100,7 @@ const Welcome = () => {
               
               {/* Nút Live Processing nổi trên ảnh */}
               <div className="absolute top-4 right-4 z-20 border border-white/20 px-3 py-1.5 rounded text-xs tracking-wider text-gray-200 bg-black/50 backdrop-blur-md">
-                Live Processing
+                LIVE PROCESSING
               </div>
               
               {/* Hình ảnh Demo */}

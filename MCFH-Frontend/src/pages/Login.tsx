@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, CheckCircle2, AlertCircle, User, Phone, ArrowLeft } from 'lucide-react';
-import { GoogleLogin } from '@react-oauth/google'; // Import thư viện Google
+import { Mail, Lock, CheckCircle2, AlertCircle, User, Phone, ArrowLeft } from 'lucide-react'; // Thêm icon ArrowLeft
 import { authApi } from '../api/authApi';
 import loginImage from '../assets/login.png';
 
+// Định nghĩa 3 trạng thái màn hình
 type AuthMode = 'login' | 'register' | 'forgot';
 
 const Login = () => {
+  // 1. State quản lý chế độ hiển thị form
   const [mode, setMode] = useState<AuthMode>('login');
 
+  // 2. State dữ liệu
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -17,13 +19,11 @@ const Login = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState(''); 
+  const [successMessage, setSuccessMessage] = useState(''); // Để hiển thị báo thành công khi quên pass
   
   const navigate = useNavigate();
 
-  // ==========================================
-  // XỬ LÝ SUBMIT (LOGIN / REGISTER / FORGOT)
-  // ==========================================
+  // 3. Hàm xử lý Submit chung cho cả 3 form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -34,23 +34,29 @@ const Login = () => {
       if (mode === 'login') {
         const response = await authApi.login(email, password);
         const userData = response.data;
-        
         localStorage.setItem('accessToken', userData.token);
         localStorage.setItem('userRole', userData.role);
         localStorage.setItem('fullName', userData.fullName);
-        
-        // CẬP NHẬT KIẾN TRÚC MỚI: Đăng nhập xong phải đưa về sảnh Chọn Tổ Chức (Workspaces)
-        navigate('/workspaces'); 
+        navigate('/create-campaign'); 
 
       } else if (mode === 'register') {
         const response = await authApi.register(fullName, email, phone, password);
-        alert(response.data.message || "Đăng ký thành công! Vui lòng kiểm tra email để lấy mã xác thực.");
+        alert(response.data.message || "Đăng ký thành công! Vui lòng kiểm tra email.");
         setMode('login');
         setPassword(''); 
 
       } else if (mode === 'forgot') {
-        const response = await authApi.forgotPassword(email);
-        setSuccessMessage(response.data.message || "Hệ thống đã gửi link khôi phục. Vui lòng kiểm tra hộp thư!");
+        // LUỒNG QUÊN MẬT KHẨU (Tạm thời mock up, chờ BE có API thì gọi vào đây)
+        /* const response = await authApi.forgotPassword(email);
+        setSuccessMessage("Hệ thống đã gửi link khôi phục. Vui lòng kiểm tra hộp thư!");
+        */
+        
+        // Code chạy tạm khi chưa có Backend
+        setTimeout(() => {
+          setSuccessMessage(`Đã gửi hướng dẫn khôi phục mật khẩu tới email: ${email}`);
+          setIsLoading(false);
+        }, 1500);
+        return; // Dừng lại ở đây vì đây là code giả lập
       }
     } catch (error: any) {
       if (error.response && error.response.data) {
@@ -91,6 +97,7 @@ const Login = () => {
       <div className="w-full lg:w-7/12 bg-white flex items-center justify-center p-8 sm:p-12 overflow-y-auto">
         <div className="w-full max-w-md space-y-8 my-auto">
           
+          {/* Header động thay đổi theo Mode */}
           <div>
             <h1 className="text-[#0A101D] text-4xl font-extrabold tracking-tight mb-4">MCFH</h1>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -105,6 +112,7 @@ const Login = () => {
             </p>
           </div>
 
+          {/* Cảnh báo lỗi */}
           {errorMessage && (
             <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-3 text-sm font-medium border border-red-100 animate-pulse">
               <AlertCircle className="w-5 h-5 shrink-0" />
@@ -112,6 +120,7 @@ const Login = () => {
             </div>
           )}
 
+          {/* Cảnh báo thành công (Dành riêng cho Quên mật khẩu) */}
           {successMessage && (
             <div className="bg-green-50 text-green-700 p-4 rounded-lg flex items-center gap-3 text-sm font-medium border border-green-100 animate-pulse">
               <CheckCircle2 className="w-5 h-5 shrink-0" />
@@ -121,6 +130,7 @@ const Login = () => {
 
           <form className="space-y-5" onSubmit={handleSubmit}>
             
+            {/* TRƯỜNG ĐĂNG KÝ: Họ tên & SĐT */}
             {mode === 'register' && (
               <>
                 <div className="space-y-2 animate-fade-in-down">
@@ -140,6 +150,7 @@ const Login = () => {
               </>
             )}
 
+            {/* TRƯỜNG CHUNG: Email (Luôn xuất hiện ở cả 3 chế độ) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-gray-700 tracking-wider uppercase">Email Doanh Nghiệp</label>
               <div className="relative">
@@ -148,6 +159,7 @@ const Login = () => {
               </div>
             </div>
 
+            {/* TRƯỜNG MẬT KHẨU: Ẩn đi khi ở chế độ 'forgot' */}
             {mode !== 'forgot' && (
               <div className="space-y-2 animate-fade-in-down">
                 <label className="text-xs font-bold text-gray-700 tracking-wider uppercase">Mật Khẩu</label>
@@ -158,6 +170,7 @@ const Login = () => {
               </div>
             )}
 
+            {/* Các nút bấm phụ dưới form đăng nhập */}
             {mode === 'login' && (
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer group">
@@ -170,6 +183,7 @@ const Login = () => {
               </div>
             )}
 
+            {/* Nút Submit chính */}
             <button type="submit" disabled={isLoading} className="w-full bg-[#0A101D] hover:bg-[#151B2B] disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-4 rounded-lg transition-colors shadow-lg shadow-gray-900/20 flex justify-center items-center mt-2">
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -185,6 +199,7 @@ const Login = () => {
             </button>
           </form>
 
+          {/* Nút Chuyển Mode (Điều hướng phụ) */}
           <div className="text-center mt-6">
             {mode === 'forgot' ? (
               <button type="button" onClick={() => { setMode('login'); setErrorMessage(''); setSuccessMessage(''); }} className="flex items-center justify-center gap-2 text-sm font-bold text-gray-600 hover:text-[#0A101D] transition-colors mx-auto">
@@ -208,47 +223,15 @@ const Login = () => {
             <div className="grow border-t border-gray-200"></div>
           </div>
 
-          {/* ==========================================
-              NÚT ĐĂNG NHẬP GOOGLE CHÍNH THỨC
-              ========================================== */}
-          <div className="w-full flex justify-center mt-2">
-            <GoogleLogin
-              onSuccess={async (credentialResponse) => {
-                try {
-                  setIsLoading(true);
-                  setErrorMessage('');
-                  
-                  const response = await authApi.googleLogin(credentialResponse.credential!);
-                  const userData = response.data;
-                  
-                  localStorage.setItem('accessToken', userData.token);
-                  localStorage.setItem('userRole', userData.role);
-                  localStorage.setItem('fullName', userData.fullName);
-                  
-                  // CẬP NHẬT KIẾN TRÚC MỚI: Login bằng Google xong cũng đưa về sảnh Workspaces
-                  navigate('/workspaces');
-                  
-                } catch (error: any) {
-                  if (error.response && error.response.data) {
-                    setErrorMessage(error.response.data.message);
-                  } else {
-                    setErrorMessage("Xác thực với hệ thống Google thất bại.");
-                  }
-                } finally {
-                  setIsLoading(false);
-                }
-              }}
-              onError={() => {
-                setErrorMessage("Cửa sổ đăng nhập Google bị đóng hoặc xảy ra lỗi mạng.");
-              }}
-              useOneTap
-              theme="outline"
-              size="large"
-              width="100%"
-              text="continue_with"
-            />
-          </div>
-
+          <button type="button" className="w-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-3.5 rounded-lg flex items-center justify-center gap-3 transition-colors shadow-sm">
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Google SSO
+          </button>
         </div>
       </div>
     </div>
