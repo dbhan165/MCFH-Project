@@ -36,43 +36,47 @@ public class ScrapeByKeywordService
         var keyword = project.SearchQuery;
         result.Keyword = keyword;
 
-        var sources = await _db.DataSources
-            .Where(s => s.ProjectId == projectId && s.Status == "active")
-            .ToListAsync();
-
-        foreach (var source in sources)
+        if (project.EnableFacebook == true)
         {
-            switch (source.Platform)
+            var fbSources = await _db.FbSources
+                .Where(s => s.Status == "active")
+                .ToListAsync();
+
+            foreach (var source in fbSources)
             {
-                case "facebook":
-                    await ScrapeFacebookGroupAsync(source, keyword, result);
-                    break;
-                case "youtube":
-                    await ScrapeYouTubeAsync(source, keyword, result);
-                    break;
-                case "tiktok":
-                    await ScrapeTikTokAsync(keyword, result);
-                    break;
+                await ScrapeFacebookGroupAsync(source, projectId, keyword, result);
             }
+        }
+
+        if (project.EnableYoutube == true)
+        {
+            await ScrapeYouTubeAsync(projectId, keyword, result);
+        }
+
+        if (project.EnableTiktok == true)
+        {
+            await ScrapeTikTokAsync(keyword, result);  // TikTok chưa lưu DB, không cần projectId ở đây
         }
 
         return result;
     }
 
-    private async Task ScrapeFacebookGroupAsync(DataSource source, string keyword, ScrapeByKeywordResult result)
+    // Trong ScrapeFacebookGroupAsync — sửa signature nhận thêm projectId
+    private async Task ScrapeFacebookGroupAsync(FbSource source, int projectId, string keyword, ScrapeByKeywordResult result)
     {
         try
         {
             var encodedKeyword = Uri.EscapeDataString(keyword);
-            var searchUrl = $"{source.TargetUrl!.TrimEnd('/')}/search/?q={encodedKeyword}";
+            var searchUrl = $"{source.GroupUrl.TrimEnd('/')}/search/?q={encodedKeyword}";
 
             var scraper = new FacebookGroupScraper();
             var posts = await scraper.ScrapeAsync(searchUrl, maxPosts: 5);
 
             foreach (var post in posts)
             {
-                // Đã bỏ tham số sourceId tại đây
                 var feedbackId = await SaveFeedbackAsync(
+                    projectId: projectId,
+                    platform: "facebook",
                     content: post.Text,
                     authorName: post.Author,
                     originalUrl: post.PostUrl,
@@ -91,11 +95,12 @@ public class ScrapeByKeywordService
         }
         catch (Exception ex)
         {
-            result.Errors.Add($"Facebook ({source.TargetUrl}): {ex.Message}");
+            result.Errors.Add($"Facebook ({source.GroupUrl}): {ex.Message}");
         }
     }
 
-    private async Task ScrapeYouTubeAsync(DataSource source, string keyword, ScrapeByKeywordResult result)
+    // Trong ScrapeYouTubeAsync — sửa signature nhận thêm projectId
+    private async Task ScrapeYouTubeAsync(int projectId, string keyword, ScrapeByKeywordResult result)
     {
         try
         {
@@ -111,13 +116,14 @@ public class ScrapeByKeywordService
 
                 var commentTexts = scrapeResult.Comments.Select(c => c.Text).ToList();
 
-                // Đã bỏ tham số sourceId tại đây
                 var feedbackId = await SaveFeedbackAsync(
-                    content: $"YouTube video: {url}",
+                    projectId: projectId,
+                    platform: "youtube",
+                    content: scrapeResult.Title ?? $"YouTube video: {url}",  // fallback nếu lấy title lỗi
                     authorName: null,
                     originalUrl: url,
                     comments: commentTexts
-                );
+);
 
                 result.YouTube.Add(new PlatformPostResult
                 {
@@ -150,11 +156,13 @@ public class ScrapeByKeywordService
 
     // Đã cập nhật signature loại bỏ hoàn toàn int sourceId và gán SourceId = null trực tiếp
     private async Task<int> SaveFeedbackAsync(
-        string content, string? authorName, string originalUrl, List<string> comments)
+    int projectId, string platform, string content, string? authorName, string originalUrl, List<string> comments)
     {
         var feedback = new ScrapedFeedback
         {
-            SourceId = null, // Không gắn DATA_SOURCES
+            SourceId = null,
+            ProjectId = projectId,
+            Platform = platform,
             Content = content,
             AuthorName = authorName,
             OriginalUrl = originalUrl,

@@ -1,5 +1,6 @@
 ﻿using Microsoft.Playwright;
 using MCFH.Models.Scraping;
+using System.Web;
 
 namespace MCFH.Services.Scraping;
 
@@ -10,6 +11,13 @@ public class YouTubeScraper
     public YouTubeScraper(ILogger<YouTubeScraper> logger)
     {
         _logger = logger;
+    }
+
+    private static string GetVideoId(string url)
+    {
+        var uri = new Uri(url);
+        var query = HttpUtility.ParseQueryString(uri.Query);
+        return query["v"] ?? "";
     }
 
     public async Task<ScrapeResult> ScrapeCommentsAsync(string videoUrl, int maxComments = 50)
@@ -23,16 +31,18 @@ public class YouTubeScraper
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(new()
             {
-                Headless = true,
+                Headless = false,
+                SlowMo = 500,
                 Args = new[] { "--no-sandbox" }
             });
 
             var page = await browser.NewPageAsync();
             var originalUrl = videoUrl;
+            var originalVideoId = GetVideoId(originalUrl);
 
             page.FrameNavigated += (_, e) =>
             {
-                if (e.Url != originalUrl && e.Url.Contains("youtube.com/watch"))
+                if (e.Url.Contains("youtube.com/watch") && GetVideoId(e.Url) != originalVideoId)
                 {
                     _logger.LogWarning("YouTube cố chuyển sang video khác, chặn lại...");
                     page.GotoAsync(originalUrl);
@@ -44,7 +54,37 @@ public class YouTubeScraper
             await page.GotoAsync(videoUrl, new() { WaitUntil = WaitUntilState.NetworkIdle });
             await page.WaitForTimeoutAsync(2000);
 
-            await page.EvaluateAsync("const v = document.querySelector('video'); if(v){ v.pause(); v.autoplay=false; v.onended=null; }");
+            // Chờ qua hết quảng cáo (có skip thì skip ngay, không có thì chờ tự hết)
+            for (int i = 0; i < 30; i++) // tối đa ~30s đợi ad, tránh treo vô hạn nếu có lỗi khác
+            {
+                var isAdShowing = await page.EvalOnSelectorAsync<bool>(
+                    ".html5-video-player",
+                    "el => el.classList.contains('ad-showing')"
+                );
+
+                if (!isAdShowing) break;
+
+                var skipButton = page.Locator(".ytp-ad-skip-button, .ytp-skip-ad-button");
+                if (await skipButton.IsVisibleAsync())
+                {
+                    await skipButton.ClickAsync();
+                }
+
+                await page.WaitForTimeoutAsync(1000);
+            }
+
+            var rawTitle = await page.TitleAsync();
+            result.Title = rawTitle.Replace(" - YouTube", "").Trim();
+
+            await page.EvaluateAsync(@"
+                const v = document.querySelector('video');
+                if (v) {
+                    v.currentTime = 0;
+                    v.pause();
+                    v.autoplay = false;
+                    v.onended = null;
+                }
+            ");
             await page.EvaluateAsync("localStorage.setItem('yt-player-autonav-val', 'false')");
 
             await page.EvaluateAsync("window.scrollTo(0, 600)");
