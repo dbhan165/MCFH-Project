@@ -76,6 +76,16 @@ public class YouTubeScraper
             var rawTitle = await page.TitleAsync();
             result.Title = rawTitle.Replace(" - YouTube", "").Trim();
 
+            try
+            {
+                var channelName = await page.Locator("ytd-channel-name yt-formatted-string a").First.InnerTextAsync();
+                result.Author = channelName.Trim();
+            }
+            catch
+            {
+                _logger.LogWarning("Không lấy được tên channel cho {Url}", videoUrl);
+            }
+
             await page.EvaluateAsync(@"
                 const v = document.querySelector('video');
                 if (v) {

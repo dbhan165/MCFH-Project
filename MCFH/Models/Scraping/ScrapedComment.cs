@@ -12,6 +12,7 @@ public class ScrapeResult
 {
     public bool Success { get; set; }
     public string? Title { get; set; }
+    public string? Author { get; set; }
     public int TotalScraped { get; set; }
     public string? ErrorMessage { get; set; }
     public List<ScrapedComment> Comments { get; set; } = new();
