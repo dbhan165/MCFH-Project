@@ -665,6 +665,17 @@ public partial class McfhDbContext : DbContext
                         j.IndexerProperty<int>("FeedbackId").HasColumnName("feedback_id");
                         j.IndexerProperty<int>("TagId").HasColumnName("tag_id");
                     });
+
+            entity.Property(e => e.ProjectId).HasColumnName("project_id");
+            entity.Property(e => e.Platform)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("platform");
+
+            entity.HasOne(d => d.Project).WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Feedback_Project");
         });
 
         modelBuilder.Entity<ScrapingJob>(entity =>

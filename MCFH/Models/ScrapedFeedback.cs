@@ -38,4 +38,9 @@ public partial class ScrapedFeedback
     public virtual DataSource? Source { get; set; }
 
     public virtual ICollection<Tag> Tags { get; set; } = new List<Tag>();
+
+    public int? ProjectId { get; set; }
+    public string? Platform { get; set; }
+
+    public virtual Project? Project { get; set; }  // Navigation property mới
 }
