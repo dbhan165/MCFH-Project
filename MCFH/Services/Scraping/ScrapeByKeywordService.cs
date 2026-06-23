@@ -120,7 +120,7 @@ public class ScrapeByKeywordService
                     projectId: projectId,
                     platform: "youtube",
                     content: scrapeResult.Title ?? $"YouTube video: {url}",  // fallback nếu lấy title lỗi
-                    authorName: null,
+                    authorName: scrapeResult.Author,
                     originalUrl: url,
                     comments: commentTexts
 );
@@ -128,6 +128,8 @@ public class ScrapeByKeywordService
                 result.YouTube.Add(new PlatformPostResult
                 {
                     FeedbackId = feedbackId,
+                    Author = scrapeResult.Author,
+                    Text = scrapeResult.Title,
                     Url = url,
                     CommentsCount = commentTexts.Count
                 });
