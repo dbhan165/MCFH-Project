@@ -40,4 +40,12 @@ public partial class Project
     public virtual ICollection<Tag> Tags { get; set; } = new List<Tag>();
 
     public virtual Workspace Workspace { get; set; } = null!;
+
+    public bool? EnableFacebook { get; set; }
+
+    public bool? EnableTiktok { get; set; }
+
+    public bool? EnableYoutube { get; set; }
+
+    public bool? EnableMaps { get; set; }
 }

@@ -7,7 +7,7 @@ public partial class ScrapedFeedback
 {
     public int FeedbackId { get; set; }
 
-    public int SourceId { get; set; }
+    public int? SourceId { get; set; }
 
     public string Content { get; set; } = null!;
 
@@ -29,9 +29,18 @@ public partial class ScrapedFeedback
 
     public DateTime? ScrapedAt { get; set; }
 
+    public string? CommentsFileUrl { get; set; }
+
+    public int? CommentsCount { get; set; }
+
     public virtual AiAnalysis? AiAnalysis { get; set; }
 
-    public virtual DataSource Source { get; set; } = null!;
+    public virtual DataSource? Source { get; set; }
 
     public virtual ICollection<Tag> Tags { get; set; } = new List<Tag>();
+
+    public int? ProjectId { get; set; }
+    public string? Platform { get; set; }
+
+    public virtual Project? Project { get; set; }  // Navigation property mới
 }
