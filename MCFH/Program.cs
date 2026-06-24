@@ -1,10 +1,10 @@
 ﻿using MCFH.Models;
+using MCFH.Services;
+using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-
-using MCFH.Services;
 
 namespace MCFH
 {
@@ -88,6 +88,8 @@ namespace MCFH
             // ── Đăng ký Services (Dependency Injection) ──
             builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
             builder.Services.AddScoped<IProjectService, ProjectService>();
+
+            builder.Services.AddScoped<ScrapeByKeywordService>();
 
             var app = builder.Build();
 

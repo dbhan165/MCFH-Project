@@ -73,6 +73,8 @@ public partial class McfhDbContext : DbContext
 
     public virtual DbSet<WorkspaceRole> WorkspaceRoles { get; set; }
 
+    public virtual DbSet<FbSource> FbSources { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -93,6 +95,7 @@ public partial class McfhDbContext : DbContext
             entity.HasIndex(e => e.FeedbackId, "UQ_Analysis_Feedback").IsUnique();
 
             entity.Property(e => e.AnalysisId).HasColumnName("analysis_id");
+            entity.Property(e => e.AgreementRate).HasColumnName("agreement_rate");
             entity.Property(e => e.ConfidenceScore).HasColumnName("confidence_score");
             entity.Property(e => e.FeedbackId).HasColumnName("feedback_id");
             entity.Property(e => e.IsCrisisAlert)
@@ -542,6 +545,13 @@ public partial class McfhDbContext : DbContext
 
             entity.ToTable("PROJECTS");
 
+            //
+            entity.Property(e => e.EnableFacebook).HasColumnName("enable_facebook");
+            entity.Property(e => e.EnableTiktok).HasColumnName("enable_tiktok");
+            entity.Property(e => e.EnableYoutube).HasColumnName("enable_youtube");
+            entity.Property(e => e.EnableMaps).HasColumnName("enable_maps");
+            //
+
             entity.Property(e => e.ProjectId).HasColumnName("project_id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
@@ -605,6 +615,10 @@ public partial class McfhDbContext : DbContext
             entity.Property(e => e.AuthorName)
                 .HasMaxLength(255)
                 .HasColumnName("author_name");
+            entity.Property(e => e.CommentsCount)
+                .HasDefaultValue(0)
+                .HasColumnName("comments_count");
+            entity.Property(e => e.CommentsFileUrl).HasColumnName("comments_file_url");
             entity.Property(e => e.Content).HasColumnName("content");
             entity.Property(e => e.DeletedAt)
                 .HasColumnType("datetime")
@@ -654,6 +668,17 @@ public partial class McfhDbContext : DbContext
                         j.IndexerProperty<int>("FeedbackId").HasColumnName("feedback_id");
                         j.IndexerProperty<int>("TagId").HasColumnName("tag_id");
                     });
+
+            entity.Property(e => e.ProjectId).HasColumnName("project_id");
+            entity.Property(e => e.Platform)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("platform");
+
+            entity.HasOne(d => d.Project).WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Feedback_Project");
         });
 
         modelBuilder.Entity<ScrapingJob>(entity =>
@@ -1056,6 +1081,33 @@ public partial class McfhDbContext : DbContext
         });
 
         OnModelCreatingPartial(modelBuilder);
+
+        modelBuilder.Entity<FbSource>(entity =>
+        {
+            entity.HasKey(e => e.FbSourceId);
+            entity.ToTable("FB_SOURCES");
+
+            entity.Property(e => e.FbSourceId).HasColumnName("fb_source_id");
+            entity.Property(e => e.AddedBy).HasColumnName("added_by");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("created_at");
+            entity.Property(e => e.GroupName)
+                .HasMaxLength(255)
+                .HasColumnName("group_name");
+            entity.Property(e => e.GroupUrl).HasColumnName("group_url");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("active")
+                .HasColumnName("status");
+
+            entity.HasOne(d => d.AddedByNavigation).WithMany()
+                .HasForeignKey(d => d.AddedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_FbSource_AddedBy");
+        });
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
