@@ -19,6 +19,8 @@ public partial class AiAnalysis
 
     public DateTime? ProcessedAt { get; set; }
 
+    public double? AgreementRate { get; set; }
+
     public virtual ScrapedFeedback Feedback { get; set; } = null!;
 
     public virtual ICollection<FeedbackAspect> FeedbackAspects { get; set; } = new List<FeedbackAspect>();
