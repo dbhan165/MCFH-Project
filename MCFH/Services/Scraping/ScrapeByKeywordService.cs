@@ -80,7 +80,8 @@ public class ScrapeByKeywordService
                     content: post.Text,
                     authorName: post.Author,
                     originalUrl: post.PostUrl,
-                    comments: post.Comments
+                    comments: post.Comments,
+                    postedAt: post.PostedAt
                 );
 
                 result.Facebook.Add(new PlatformPostResult
@@ -122,7 +123,8 @@ public class ScrapeByKeywordService
                     content: scrapeResult.Title ?? $"YouTube video: {url}",  // fallback nếu lấy title lỗi
                     authorName: scrapeResult.Author,
                     originalUrl: url,
-                    comments: commentTexts
+                    comments: commentTexts,
+                    postedAt: scrapeResult.PostedAt
 );
 
                 result.YouTube.Add(new PlatformPostResult
@@ -158,7 +160,8 @@ public class ScrapeByKeywordService
 
     // Đã cập nhật signature loại bỏ hoàn toàn int sourceId và gán SourceId = null trực tiếp
     private async Task<int> SaveFeedbackAsync(
-    int projectId, string platform, string content, string? authorName, string originalUrl, List<string> comments)
+    int projectId, string platform, string content, string? authorName,
+    string originalUrl, List<string> comments, DateTime? postedAt = null)
     {
         var feedback = new ScrapedFeedback
         {
@@ -168,6 +171,7 @@ public class ScrapeByKeywordService
             Content = content,
             AuthorName = authorName,
             OriginalUrl = originalUrl,
+            PostedAt = postedAt,
             CommentsCount = comments.Count
         };
 
