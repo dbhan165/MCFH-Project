@@ -1,0 +1,3 @@
+// Optional: export cookies from browser (Cookie-Editor extension) while logged into tiktok.com
+// Save as tiktok_cookie.json next to MCFHBackend.exe (bin/Debug/net8.0/)
+// Same JSON format as fb_cookie.json

@@ -1,20 +1,18 @@
-﻿using Microsoft.Playwright;
+﻿using MCFH.Configuration;
+using Microsoft.Playwright;
 using MCFH.Models.Scraping;
 
 namespace MCFH.Services.Scraping;
 
 public class FacebookGroupScraper
 {
-    public async Task<List<GroupPost>> ScrapeAsync(string groupUrl, int maxPosts = 5)
+    public async Task<List<GroupPost>> ScrapeAsync(string groupUrl, int maxPosts, ScrapeOptions? options = null)
     {
+        options ??= new ScrapeOptions();
         var results = new List<GroupPost>();
 
         using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = false,
-            SlowMo = 500
-        });
+        await using var browser = await playwright.Chromium.LaunchAsync(PlaywrightScrapeHelper.SocialLaunch(options));
 
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
@@ -32,11 +30,11 @@ public class FacebookGroupScraper
             WaitUntil = WaitUntilState.DOMContentLoaded,
             Timeout = 30000
         });
-        await page.WaitForTimeoutAsync(3000);
+        await page.WaitForTimeoutAsync(1500);
 
         await page.Mouse.MoveAsync(640, 400);
 
-        for (int i = 0; i < 15; i++)
+        for (int i = 0; i < 8; i++)
         {
             var count = await page.QuerySelectorAllAsync("div[aria-posinset]");
             Console.WriteLine($"[FB Group] Scroll {i + 1}: {count.Count} posts trong DOM");
@@ -45,7 +43,7 @@ public class FacebookGroupScraper
                 break;
 
             await page.Mouse.WheelAsync(0, 1500);
-            await page.WaitForTimeoutAsync(2000);
+            await page.WaitForTimeoutAsync(1000);
         }
 
         var postElements = await page.QuerySelectorAllAsync("div[aria-posinset]");
@@ -62,7 +60,7 @@ public class FacebookGroupScraper
         {
             try
             {
-                var post = await OpenPostAndScrapeAsync(page, posinset);
+                var post = await OpenPostAndScrapeAsync(page, posinset, options);
                 if (post != null)
                     results.Add(post);
             }
@@ -76,7 +74,7 @@ public class FacebookGroupScraper
         return results;
     }
 
-    private async Task<GroupPost?> OpenPostAndScrapeAsync(IPage page, string posinset)
+    private async Task<GroupPost?> OpenPostAndScrapeAsync(IPage page, string posinset, ScrapeOptions options)
     {
         var postEl = await page.QuerySelectorAsync($"div[aria-posinset='{posinset}']");
         if (postEl == null) return null;
@@ -95,98 +93,65 @@ public class FacebookGroupScraper
 
         var post = new GroupPost { Author = author, Text = text };
 
-        // Tìm link timestamp bằng CẤU TRÚC (không quan tâm href) — link role='link' nằm trong vùng header chứa profile_name
-        var headerEl = await postEl.QuerySelectorAsync("div[data-ad-rendering-role='profile_name']");
+        var candidateLinks = await postEl.QuerySelectorAllAsync("a[role='link']");
         IElementHandle? timestampLink = null;
+        string? permalinkHref = null;
 
-        if (headerEl != null)
+        foreach (var link in candidateLinks)
         {
-            // Timestamp thường là link role='link' NGAY SAU phần tên tác giả, trong cùng khối header
-            var parentOfHeader = await headerEl.EvaluateHandleAsync("el => el.closest('div')?.parentElement");
-            var candidateLinks = await postEl.QuerySelectorAllAsync("a[role='link']");
+            var href = await link.GetAttributeAsync("href");
+            if (string.IsNullOrWhiteSpace(href)) continue;
+            if (IsSkippedFacebookLink(href)) continue;
 
-            
-            foreach (var link in candidateLinks)
+            if (IsFacebookPostPermalink(href))
             {
-                var href = await link.GetAttributeAsync("href");
-                if (href != null && (href.Contains("/user/") || href.Contains("/stories/"))) continue;
-
                 timestampLink = link;
+                permalinkHref = href;
                 break;
             }
+
+            timestampLink ??= link;
+            permalinkHref ??= href;
         }
 
-        if (timestampLink == null)
+        if (timestampLink == null || string.IsNullOrWhiteSpace(permalinkHref))
         {
             Console.WriteLine($"[FB Group] posinset={posinset} không tìm được timestamp link, giữ post không URL/comment");
             return post;
         }
 
+        post.PostUrl = NormalizeFacebookUrl(permalinkHref);
+
         var urlBeforeClick = page.Url;
         await timestampLink.ClickAsync();
         await page.WaitForTimeoutAsync(2500);
 
-        
         var urlAfterClick = page.Url;
-        if (urlAfterClick == urlBeforeClick
-            || urlAfterClick.Contains("/search/")
-            || urlAfterClick.Contains("/stories/"))
+        if (urlAfterClick != urlBeforeClick
+            && !urlAfterClick.Contains("/search/", StringComparison.OrdinalIgnoreCase)
+            && !urlAfterClick.Contains("/stories/", StringComparison.OrdinalIgnoreCase)
+            && IsFacebookPostPermalink(urlAfterClick))
+        {
+            post.PostUrl = NormalizeFacebookUrl(urlAfterClick);
+        }
+        else if (urlAfterClick != urlBeforeClick
+                 && (urlAfterClick.Contains("/search/", StringComparison.OrdinalIgnoreCase)
+                     || urlAfterClick.Contains("/stories/", StringComparison.OrdinalIgnoreCase)))
         {
             Console.WriteLine($"[FB Group] posinset={posinset} click sai đích, back lại trang search");
-            if (urlAfterClick != urlBeforeClick)
-            {
-                await page.GoBackAsync();
-                await page.WaitForTimeoutAsync(2000);
-            }
+            await page.GoBackAsync();
+            await page.WaitForTimeoutAsync(2000);
             return post;
         }
-
-        post.PostUrl = urlAfterClick;
         Console.WriteLine($"[FB Group] posinset={posinset} mở thành công, URL = {post.PostUrl}");
 
-        // Scroll trong modal để load comment
-        await page.Mouse.MoveAsync(950, 500);
-        int previousCount = 0;
-        int noChangeStreak = 0;
+        // Scroll + lấy comment text trong modal/post
+        var fbMax = Math.Max(options.FacebookMaxComments, options.MaxCommentsPerItem);
+        await FacebookCommentExtractor.TrySortAllCommentsAsync(page);
+        await FacebookCommentExtractor.ScrollCommentsAsync(page, fbMax);
+        post.Comments = await FacebookCommentExtractor.ExtractFromDomAsync(page, fbMax);
 
-        while (true)
-        {
-            var currentCount = await page.Locator("div[role='article'][aria-label]").CountAsync();
-            if (currentCount == previousCount)
-            {
-                noChangeStreak++;
-                if (noChangeStreak >= 3) break;
-            }
-            else
-            {
-                noChangeStreak = 0;
-            }
-            previousCount = currentCount;
-
-            await page.Mouse.WheelAsync(0, 800);
-            await page.WaitForTimeoutAsync(1500);
-        }
-
-        var commentEls = await page.Locator("div[role='article'][aria-label]").AllAsync();
-        foreach (var c in commentEls)
-        {
-            try
-            {
-                var textEls = await c.Locator("div[dir='auto']").AllAsync();
-                foreach (var t in textEls)
-                {
-                    var txt = await t.InnerTextAsync();
-                    if (!string.IsNullOrWhiteSpace(txt) && txt.Length > 3)
-                    {
-                        post.Comments.Add(txt.Trim());
-                        break;
-                    }
-                }
-            }
-            catch { }
-        }
-
-        Console.WriteLine($"[FB Group] posinset={posinset} có {post.Comments.Count} comments");
+        Console.WriteLine($"[FB Group] posinset={posinset} có {post.Comments.Count} comments text");
 
         // Đóng modal — hoặc quay lại trang search nếu bị redirect tới trang lỗi khác
         var closeBtn = await page.QuerySelectorAsync("div[aria-label='Đóng'], div[aria-label='Close']");
@@ -204,5 +169,38 @@ public class FacebookGroupScraper
         }
 
         return post;
+    }
+
+    private static bool IsSkippedFacebookLink(string href) =>
+        href.Contains("/user/", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("/stories/", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("/hashtag/", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("/friends/", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("l.facebook.com", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFacebookPostPermalink(string href) =>
+        href.Contains("/posts/", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("pfbid", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("permalink.php", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("story_fbid", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("/videos/", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("/photo/?fbid=", StringComparison.OrdinalIgnoreCase)
+        || href.Contains("/photo.php", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeFacebookUrl(string href)
+    {
+        var url = href.StartsWith('/') ? $"https://www.facebook.com{href}" : href;
+        var q = url.IndexOf('?');
+        if (q < 0) return url;
+
+        var query = url[(q + 1)..];
+        var keep = query.Split('&')
+            .Where(p => p.StartsWith("id=", StringComparison.OrdinalIgnoreCase)
+                        || p.StartsWith("story_fbid=", StringComparison.OrdinalIgnoreCase)
+                        || p.StartsWith("fbid=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var baseUrl = url[..q];
+        return keep.Count > 0 ? $"{baseUrl}?{string.Join('&', keep)}" : baseUrl;
     }
 }

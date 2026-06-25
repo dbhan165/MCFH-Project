@@ -1,176 +1,168 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, UploadCloud, FileText, CheckSquare, Square, ExternalLink, Settings } from 'lucide-react';
+import { Clock, Loader2, CheckCircle2 } from 'lucide-react';
 import ReporterLayout from '../../components/reporter/ReporterLayout';
+import { reporterApi } from '../../api/portalApi';
+import type { PortalBespokeRequest } from '../../api/portalApi';
+import { extractApiError } from '../../utils/authStorage';
+import { formatWorkspaceDate } from '../../utils/workspaceHelpers';
 
 const RequestDelivery = () => {
   const { id } = useParams<{ id: string }>();
+  const requestId = Number(id);
   const navigate = useNavigate();
-  
-  // Trạng thái cho checkbox xác nhận
-  const [checkedMetrics, setCheckedMetrics] = useState(false);
-  const [checkedFormat, setCheckedFormat] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Giả lập xử lý sự kiện up file
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+  const [request, setRequest] = useState<PortalBespokeRequest | null>(null);
+  const [analytics, setAnalytics] = useState<Awaited<ReturnType<typeof reporterApi.getAnalyticsPreview>> | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDelivering, setIsDelivering] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const load = useCallback(async () => {
+    if (!requestId || Number.isNaN(requestId)) return;
+    setIsLoading(true);
+    try {
+      const [req, preview] = await Promise.all([
+        reporterApi.getRequest(requestId),
+        reporterApi.getAnalyticsPreview(requestId).catch(() => null),
+      ]);
+      setRequest(req);
+      setAnalytics(preview);
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể tải dữ liệu.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [requestId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleDeliver = async () => {
+    setIsDelivering(true);
+    setErrorMessage('');
+    try {
+      await reporterApi.deliver(requestId);
+      setSuccessMessage('Đã nộp báo cáo chuyên sâu thành công.');
+      await load();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể nộp báo cáo.'));
+    } finally {
+      setIsDelivering(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <ReporterLayout activeTopNav="reports">
+        <div className="flex justify-center py-32">
+          <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+        </div>
+      </ReporterLayout>
+    );
+  }
+
+  if (!request) {
+    return (
+      <ReporterLayout activeTopNav="reports">
+        <p className="text-center py-20 text-red-600">{errorMessage || 'Không tìm thấy yêu cầu.'}</p>
+      </ReporterLayout>
+    );
+  }
+
+  const negPct =
+    analytics && analytics.totalMentions > 0
+      ? Math.round((analytics.negativeCount / analytics.totalMentions) * 100)
+      : 0;
+
   return (
     <ReporterLayout activeTopNav="reports">
-      {/* Breadcrumb điều hướng quay lại */}
       <div className="flex items-center gap-2 text-sm text-[#64748b] mb-3">
-        <button 
-          onClick={() => navigate('/reporter/requests')}
-          className="hover:text-[#0f172a] transition-colors cursor-pointer"
-        >
+        <button type="button" onClick={() => navigate('/reporter/tasks')} className="hover:text-[#0f172a]">
           Bảng công việc
         </button>
         <span>&gt;</span>
-        <span className="text-gray-400">Yêu cầu {id || '#REQ-1042'}</span>
-        <span>&gt;</span>
-        <span className="text-gray-400">Không gian làm việc</span>
+        <span>#{request.requestId}</span>
       </div>
 
-      {/* Header tiêu đề & Deadline */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl lg:text-2xl font-bold text-[#0f172a] flex items-center gap-3">
-            Không gian làm việc: PetCareHub
+          <h2 className="text-xl lg:text-2xl font-bold text-[#0f172a]">
+            {request.projectName ?? request.title}
           </h2>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-              ● Đang xử lý (In Progress)
-            </span>
-          </div>
+          <span className="inline-flex mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
+            {request.statusLabel}
+          </span>
         </div>
+        {request.deadline && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold border border-red-100">
+            <Clock className="w-4 h-4" />
+            Hạn: {formatWorkspaceDate(request.deadline)}
+          </div>
+        )}
+      </div>
 
-        {/* Badge Hạn chót cảnh báo */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold border border-red-100 self-start md:self-auto">
-          <Clock className="w-4 h-4" />
-          Hạn chót: 05/06/2026 (Còn 4 ngày)
+      {errorMessage && (
+        <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{errorMessage}</div>
+      )}
+      {successMessage && (
+        <div className="mb-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-3 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {successMessage}
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-6">
+        <h3 className="text-base font-bold mb-5">Tài nguyên Phân tích</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gray-50 rounded-xl p-4">
+            <span className="text-xs text-gray-500">Mentions</span>
+            <p className="text-2xl font-bold text-teal-600 mt-1">
+              {analytics?.totalMentions?.toLocaleString('vi-VN') ?? '—'}
+            </p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <span className="text-xs text-gray-500">Tiêu cực</span>
+            <p className="text-2xl font-bold text-red-500 mt-1">{analytics ? `${negPct}%` : '—'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <span className="text-xs text-gray-500">NSR</span>
+            <p className="text-2xl font-bold text-[#0f172a] mt-1">
+              {analytics ? `${analytics.nsrScore > 0 ? '+' : ''}${analytics.nsrScore.toFixed(1)}%` : '—'}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Grid Layout chứa 2 phân khu nội dung chính */}
-      <div className="space-y-6">
-        
-        {/* KHU VỰC 1: Tài nguyên Phân tích */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-          <h3 className="text-base font-bold text-[#0f172a] mb-5">Tài nguyên Phân tích</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {/* Box 1: Mentions */}
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-              <span className="text-xs text-[#64748b] font-medium">Mentions đã thu thập</span>
-              <div className="text-2xl font-bold text-teal-600 mt-1">12,450</div>
-            </div>
-
-            {/* Box 2: Tiêu cực */}
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-              <span className="text-xs text-[#64748b] font-medium">Tiêu cực</span>
-              <div className="text-2xl font-bold text-red-500 mt-1">34%</div>
-            </div>
-
-            {/* Box 3: Khía cạnh hot nhất */}
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-              <span className="text-xs text-[#64748b] font-medium">Khía cạnh hot nhất</span>
-              <div className="text-2xl font-bold text-[#0f172a] mt-1">Lỗi App</div>
-            </div>
-          </div>
-
-          {/* Các nút hành động thao tác dữ liệu */}
-          <div className="flex flex-wrap gap-3">
-            <button className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0f172a] hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors shadow-sm cursor-pointer">
-              <FileText className="w-4 h-4" />
-              Mở Công cụ Tác nghiệp & Xem Dữ liệu
-              <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-            </button>
-            <button className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 hover:bg-gray-50 text-[#0f172a] rounded-lg text-sm font-medium transition-colors cursor-pointer">
-              <Settings className="w-4 h-4 text-gray-500" />
-              Chỉnh sửa Pipeline
-            </button>
-          </div>
-        </div>
-
-        {/* KHU VỰC 2: Bàn giao File Báo cáo */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-          <h3 className="text-base font-bold text-[#0f172a] mb-5">Bàn giao File Báo cáo (Delivery)</h3>
-          
-          {/* Vùng Dropzone Kéo thả file */}
-          <div className="relative border-2 border-dashed border-sky-200 bg-sky-50/30 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-sky-50/50 transition-colors mb-6 group">
-            <input 
-              type="file" 
-              accept=".pdf" 
-              onChange={handleFileChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
-            />
-            <div className="w-12 h-12 rounded-full bg-sky-50 flex items-center justify-center text-sky-500 mb-3 group-hover:scale-110 transition-transform">
-              <UploadCloud className="w-6 h-6" />
-            </div>
-            {selectedFile ? (
-              <div>
-                <p className="text-sm font-semibold text-teal-600">{selectedFile.name}</p>
-                <p className="text-xs text-gray-400 mt-1">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-[#0f172a]">
-                  Kéo thả file PDF Kompa-style vào đây hoặc <span className="text-teal-600 underline">Click để chọn file</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1.5">Định dạng hỗ trợ: .PDF, tối đa 50MB</p>
-              </>
-            )}
-          </div>
-
-          {/* Cụm Checkbox quy chuẩn kiểm duyệt đầu ra */}
-          <div className="space-y-3 mb-6">
-            <label 
-              className="flex items-start gap-3 text-sm text-[#0f172a] cursor-pointer select-none"
-              onClick={() => setCheckedMetrics(!checkedMetrics)}
-            >
-              {checkedMetrics ? (
-                <CheckSquare className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
-              ) : (
-                <Square className="w-5 h-5 text-gray-300 shrink-0 mt-0.5" />
-              )}
-              <span>Tôi xác nhận báo cáo đã bám sát Custom Metrics của khách hàng.</span>
-            </label>
-
-            <label 
-              className="flex items-start gap-3 text-sm text-[#0f172a] cursor-pointer select-none"
-              onClick={() => setCheckedFormat(!checkedFormat)}
-            >
-              {checkedFormat ? (
-                <CheckSquare className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
-              ) : (
-                <Square className="w-5 h-5 text-gray-300 shrink-0 mt-0.5" />
-              )}
-              <span>Đã rà soát lỗi chính tả và format.</span>
-            </label>
-          </div>
-
-          {/* Button Submit Hoàn thành */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <h3 className="text-base font-bold mb-4">Nộp báo cáo chuyên sâu</h3>
+        <p className="text-sm text-gray-500 mb-6">
+          Hệ thống sẽ tự động biên soạn báo cáo HTML từ dữ liệu analytics của dự án.
+        </p>
+        {request.hasDeliverable ? (
           <button
             type="button"
-            disabled={!selectedFile || !checkedMetrics || !checkedFormat}
-            className={`w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm ${
-              selectedFile && checkedMetrics && checkedFormat
-                ? 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
+            onClick={() => reporterApi.download(requestId)}
+            className="px-6 py-3 bg-teal-600 text-white rounded-lg font-semibold text-sm"
           >
-            Nộp Báo cáo & Hoàn thành Đơn hàng
+            Tải báo cáo đã nộp
           </button>
-        </div>
-
+        ) : (
+          <button
+            type="button"
+            disabled={isDelivering || request.status === 'completed'}
+            onClick={handleDeliver}
+            className="px-6 py-3 bg-[#00667e] hover:bg-[#005367] disabled:opacity-50 text-white rounded-lg font-semibold text-sm inline-flex items-center gap-2"
+          >
+            {isDelivering && <Loader2 className="w-4 h-4 animate-spin" />}
+            Nộp báo cáo (tự động tạo HTML)
+          </button>
+        )}
       </div>
     </ReporterLayout>
   );
 };
 
-// ĐẢM BẢO TÁCH RIÊNG DÒNG EXPORT DEFAULT NÀY RA CUỐI FILE
 export default RequestDelivery;

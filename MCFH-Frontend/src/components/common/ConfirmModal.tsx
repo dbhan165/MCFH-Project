@@ -76,7 +76,7 @@ const ConfirmModal = ({
             {/* Nội dung */}
             <div className="mt-1">
               <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
+              <p className="text-sm text-gray-400 leading-relaxed whitespace-pre-line">
                 {message}
               </p>
             </div>

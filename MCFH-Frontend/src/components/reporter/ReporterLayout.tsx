@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ClipboardList,
   LineChart,
@@ -7,7 +8,11 @@ import {
   Plus,
   Search,
   Calendar,
+  LogOut,
 } from 'lucide-react';
+import ConfirmModal from '../common/ConfirmModal';
+import { clearAuthSession } from '../../utils/authStorage';
+import McfhLogo from '../brand/McfhLogo';
 
 const sidebarItems = [
   { label: 'Tasks', icon: ClipboardList, href: '/reporter/tasks' },
@@ -28,6 +33,13 @@ interface ReporterLayoutProps {
 
 const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  const executeLogout = () => {
+    clearAuthSession();
+    navigate('/login');
+  };
 
   const isTopNavActive = (href: string, key: string) => {
     if (activeTopNav) {
@@ -41,7 +53,15 @@ const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutPr
   return (
     <div className="min-h-screen flex bg-[#f8fafc] text-[#0f172a] font-sans">
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div className="px-5 py-6 border-b border-gray-100">
+        <div className="px-5 py-5 border-b border-gray-100">
+          <McfhLogo
+            linkTo="/reporter/tasks"
+            size={32}
+            textClassName="text-[#0f172a] text-lg"
+            subtitle="Reporter Portal"
+            subtitleClassName="text-[10px] text-[#64748b] font-medium uppercase tracking-wider"
+            className="mb-4"
+          />
           <div className="flex items-center gap-3">
             <img
               src="https://i.pravatar.cc/150?img=33"
@@ -75,10 +95,21 @@ const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutPr
           })}
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
-          <button className="w-full flex items-center justify-center gap-2 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
+        <div className="p-4 border-t border-gray-100 space-y-2">
+          <button
+            type="button"
+            className="w-full flex items-center justify-center gap-2 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+          >
             <Plus className="w-4 h-4" />
             New Report
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsLogoutModalOpen(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-[#64748b] hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Đăng xuất
           </button>
         </div>
       </aside>
@@ -124,6 +155,17 @@ const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutPr
 
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
       </div>
+
+      <ConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={executeLogout}
+        title="Xác nhận đăng xuất"
+        message="Bạn có chắc chắn muốn đăng xuất khỏi Reporter Workspace? Bạn sẽ cần đăng nhập lại để tiếp tục."
+        confirmText="Đăng xuất"
+        cancelText="Hủy bỏ"
+        type="warning"
+      />
     </div>
   );
 };

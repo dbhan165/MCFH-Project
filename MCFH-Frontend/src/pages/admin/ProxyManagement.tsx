@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Plus,
   Globe,
@@ -8,6 +8,7 @@ import {
   Layers,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
+import { adminApi } from '../../api/portalApi';
 
 type LatencyType = 'good' | 'warning' | 'error';
 type HistoryColor = 'green' | 'orange' | 'red';
@@ -148,7 +149,33 @@ const Toggle = ({
 );
 
 const ProxyManagement = () => {
-  const [proxies, setProxies] = useState(initialProxies);
+  const [proxies, setProxies] = useState<ProxyNode[]>([]);
+
+  const loadProxies = async () => {
+    try {
+      const data = await adminApi.getProxies();
+      setProxies(
+        data.map((p) => ({
+          id: p.proxyId,
+          ip: `${p.ipAddress}:${p.port}`,
+          region: p.authUser ?? 'N/A',
+          provider: p.status ?? 'active',
+          successRate: Math.max(0, 100 - p.failCount * 5),
+          latency: p.enabled ? '—' : 'OFF',
+          latencyType: p.enabled ? 'good' : 'error',
+          history: [90, 90, 90, 90, 90, 90, 90],
+          historyColor: 'green' as HistoryColor,
+          enabled: p.enabled,
+        }))
+      );
+    } catch {
+      setProxies([]);
+    }
+  };
+
+  useEffect(() => {
+    loadProxies();
+  }, []);
 
   const toggleProxy = (id: number) => {
     setProxies((prev) =>

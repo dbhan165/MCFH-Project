@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Building2, 
@@ -14,6 +14,11 @@ import {
 } from 'lucide-react';
 
 import ConfirmModal from '../components/common/ConfirmModal';
+import { workspaceApi } from '../api/workspaceApi';
+import type { Workspace } from '../types/workspace';
+import { clearAuthSession } from '../utils/authStorage';
+import { getRoleLabel } from '../utils/workspaceHelpers';
+import McfhLogo from '../components/brand/McfhLogo';
 
 const DashboardLayout = () => {
   const location = useLocation();
@@ -23,18 +28,14 @@ const DashboardLayout = () => {
   const [activeActionMenu, setActiveActionMenu] = useState<number | null>(null);
   
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
-  const [disableWorkspaceModal, setDisableWorkspaceModal] = useState<{isOpen: boolean, workspace: any | null}>({
+  const [disableWorkspaceModal, setDisableWorkspaceModal] = useState<{ isOpen: boolean; workspace: Workspace | null }>({
     isOpen: false,
     workspace: null
   });
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [userWorkspaces, setUserWorkspaces] = useState([
-    { id: 1, name: 'Acma Agency', role: 'Owner' },
-    { id: 2, name: 'MCFH Internal', role: 'Admin' },
-    { id: 3, name: 'Startup XYZ', role: 'Member' },
-  ]);
+  const [userWorkspaces, setUserWorkspaces] = useState<Workspace[]>([]);
 
   const bottomMenuItems = [
     { path: '/profile', icon: <UserCircle size={20} />, label: 'Hồ sơ cá nhân' },
@@ -42,15 +43,38 @@ const DashboardLayout = () => {
   ];
 
   const executeLogout = () => {
-    localStorage.removeItem('accessToken');
+    clearAuthSession();
     navigate('/login');
   };
 
-  const executeDisableWorkspace = () => {
-    if (disableWorkspaceModal.workspace) {
-      console.log('Đã gọi API Vô hiệu hóa Workspace ID:', disableWorkspaceModal.workspace.id);
+  const loadWorkspaces = useCallback(async () => {
+    try {
+      const data = await workspaceApi.getMyWorkspaces();
+      setUserWorkspaces(data);
+    } catch {
+      setUserWorkspaces([]);
     }
-    setDisableWorkspaceModal({ isOpen: false, workspace: null });
+  }, []);
+
+  useEffect(() => {
+    loadWorkspaces();
+  }, [loadWorkspaces]);
+
+  const executeDisableWorkspace = async () => {
+    const ws = disableWorkspaceModal.workspace;
+    if (!ws) return;
+
+    try {
+      await workspaceApi.delete(ws.workspaceId);
+      await loadWorkspaces();
+      if (location.pathname.includes(`/workspace/${ws.workspaceId}`)) {
+        navigate('/workspaces');
+      }
+    } catch (error) {
+      console.error('Không thể xóa workspace:', error);
+    } finally {
+      setDisableWorkspaceModal({ isOpen: false, workspace: null });
+    }
   };
 
   useEffect(() => {
@@ -69,13 +93,8 @@ const DashboardLayout = () => {
       
       <aside className="w-64 bg-[#0A101D] border-r border-white/5 flex flex-col shrink-0 h-full relative z-30">
         
-        <div className="h-20 shrink-0 flex items-center px-8 border-b border-white/5">
-          <Link to="/workspaces" className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#FF7575] to-orange-500 rounded-lg flex items-center justify-center font-bold text-white shadow-[0_0_15px_rgba(255,117,117,0.3)]">
-              M
-            </div>
-            <span className="font-extrabold text-xl tracking-wider text-white">MCFH</span>
-          </Link>
+        <div className="h-20 shrink-0 flex items-center px-6 border-b border-white/5">
+          <McfhLogo linkTo="/workspaces" size={34} textClassName="text-white text-xl" />
         </div>
 
         <div className="p-4 flex-1 flex flex-col gap-4 overflow-y-auto">
@@ -128,11 +147,10 @@ const DashboardLayout = () => {
                   <div className="h-px w-full bg-white/5 my-1"></div>
 
                   <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                    {userWorkspaces.map(ws => (
-                      <div key={ws.id} className="relative flex items-center justify-between px-1.5 py-1 rounded-lg group hover:bg-white/5 transition-all">
-                        
+                    {userWorkspaces.map((ws) => (
+                      <div key={ws.workspaceId} className="relative flex items-center justify-between px-1.5 py-1 rounded-lg group hover:bg-white/5 transition-all">
                         <Link
-                          to={`/workspace/${ws.id}/projects`}
+                          to={`/workspace/${ws.workspaceId}/projects`}
                           onClick={() => setIsWorkspaceMenuOpen(false)}
                           className="flex items-center gap-3 p-1.5 flex-1 overflow-hidden"
                         >
@@ -140,39 +158,38 @@ const DashboardLayout = () => {
                             {ws.name.charAt(0)}
                           </div>
                           <div className="flex flex-col overflow-hidden">
-                             <span className="font-semibold text-gray-300 group-hover:text-white truncate text-sm">{ws.name}</span>
-                             <span className="text-[10px] text-gray-500 uppercase tracking-wider">{ws.role}</span>
+                            <span className="font-semibold text-gray-300 group-hover:text-white truncate text-sm">{ws.name}</span>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">{getRoleLabel(ws.myRole)}</span>
                           </div>
                         </Link>
 
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setActiveActionMenu(activeActionMenu === ws.id ? null : ws.id);
-                          }}
-                          className="p-1.5 text-gray-500 hover:text-white hover:bg-white/10 rounded-md opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
-                        >
-                          <MoreVertical size={16} />
-                        </button>
+                        {ws.myRole === 'Owner' && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setActiveActionMenu(activeActionMenu === ws.workspaceId ? null : ws.workspaceId);
+                            }}
+                            className="p-1.5 text-gray-500 hover:text-white hover:bg-white/10 rounded-md opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                        )}
 
-                        {activeActionMenu === ws.id && (
+                        {activeActionMenu === ws.workspaceId && (
                           <div className="absolute right-8 top-8 w-40 bg-[#1A2235] border border-white/10 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
-                            
-                            {/* NÚT CẬP NHẬT: Đã được sửa để chuyển hướng sang trang Settings */}
-                            <button 
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setIsWorkspaceMenuOpen(false);
-                                // Chuyển trang và đính kèm dữ liệu workspace hiện tại sang trang kia
-                                navigate('/workspace-settings', { state: { workspace: ws } });
+                                navigate(`/workspace/${ws.workspaceId}/settings`);
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
                             >
-                              <Settings size={14} /> Cập nhật
+                              <Settings size={14} /> Cài đặt
                             </button>
 
-                            <button 
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDisableWorkspaceModal({ isOpen: true, workspace: ws });
@@ -181,7 +198,7 @@ const DashboardLayout = () => {
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors"
                             >
-                              <PowerOff size={14} /> Vô hiệu hóa
+                              <PowerOff size={14} /> Xóa workspace
                             </button>
                           </div>
                         )}
@@ -260,9 +277,9 @@ const DashboardLayout = () => {
         isOpen={disableWorkspaceModal.isOpen}
         onClose={() => setDisableWorkspaceModal({ isOpen: false, workspace: null })}
         onConfirm={executeDisableWorkspace}
-        title="Vô hiệu hóa Tổ chức?"
-        message={`Bạn có chắc chắn muốn vô hiệu hóa không gian làm việc "${disableWorkspaceModal.workspace?.name}"? Các thành viên sẽ tạm thời mất quyền truy cập vào các dự án thuộc tổ chức này.`}
-        confirmText="Vô hiệu hóa"
+        title="Xóa Workspace?"
+        message={`Bạn có chắc muốn xóa "${disableWorkspaceModal.workspace?.name}"? Các thành viên sẽ mất quyền truy cập vào workspace này.`}
+        confirmText="Xóa workspace"
         cancelText="Hủy bỏ"
         type="danger"
       />

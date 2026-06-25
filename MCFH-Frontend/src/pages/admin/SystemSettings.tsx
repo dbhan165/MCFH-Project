@@ -1,4 +1,4 @@
-import { useState, type ElementType } from 'react';
+import { useEffect, useState, type ElementType } from 'react';
 import {
   Plug,
   CreditCard,
@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
+import { adminApi, geminiApi } from '../../api/portalApi';
 
 type SettingsTab = 'api' | 'payment' | 'notifications' | 'thresholds';
 
@@ -26,9 +27,9 @@ const settingsCategories: SettingsCategory[] = [
 ];
 
 const modelOptions = [
-  'Gemini 1.5 Flash (Optimized Speed)',
-  'Gemini 1.5 Pro (High Accuracy)',
-  'Gemini 2.0 Flash (Latest)',
+  'Gemini 2.5 Flash (Recommended)',
+  'Gemini 2.0 Flash',
+  'Gemini 2.0 Flash Lite',
 ];
 
 const SystemSettings = () => {
@@ -37,6 +38,51 @@ const SystemSettings = () => {
   const [apiKey, setApiKey] = useState('sk-gemini-xxxxxxxxxxxxxxxxxxxx');
   const [defaultModel, setDefaultModel] = useState(modelOptions[0]);
   const [dailyLimit, setDailyLimit] = useState('50,00');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [isTestingGemini, setIsTestingGemini] = useState(false);
+  const [geminiTestMessage, setGeminiTestMessage] = useState('');
+
+  useEffect(() => {
+    adminApi.getSettings().then((settings) => {
+      const gemini = settings.find((s) => s.settingKey === 'GEMINI_API_KEY');
+      if (gemini?.settingValue) setApiKey(gemini.settingValue);
+    }).catch(() => undefined);
+  }, []);
+
+  const handleTestGemini = async () => {
+    setIsTestingGemini(true);
+    setGeminiTestMessage('');
+    try {
+      const result = await geminiApi.test();
+      const detail = result.sampleSummary
+        ? ` Sentiment mẫu: ${result.sampleSentiment ?? '—'}. Tóm tắt: ${result.sampleSummary}`
+        : '';
+      setGeminiTestMessage(`${result.message}${detail}`);
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      setGeminiTestMessage(apiErr.response?.data?.message ?? 'Không thể kết nối Gemini — kiểm tra API key và restart backend.');
+    } finally {
+      setIsTestingGemini(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      await adminApi.updateSettings({
+        GEMINI_API_KEY: apiKey,
+        VNPAY_TMN_CODE: null,
+        VNPAY_SECRET_KEY: null,
+      });
+      setSaveMessage('Đã lưu cấu hình vào database.');
+    } catch {
+      setSaveMessage('Không thể lưu cấu hình.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <AdminLayout
@@ -92,6 +138,7 @@ const SystemSettings = () => {
                 className="space-y-6"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  handleSaveSettings();
                 }}
               >
                 <div>
@@ -149,15 +196,30 @@ const SystemSettings = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4">
+                <div className="flex flex-wrap justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleTestGemini}
+                    disabled={isTestingGemini}
+                    className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    {isTestingGemini ? 'Đang test Gemini...' : 'Test Gemini AI'}
+                  </button>
                   <button
                     type="submit"
-                    className="px-6 py-3 bg-[#ef4444] hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                    disabled={isSaving}
+                    className="px-6 py-3 bg-[#ef4444] hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
                   >
-                    Save API Configuration
+                    {isSaving ? 'Đang lưu...' : 'Save API Configuration'}
                   </button>
                 </div>
               </form>
+              {geminiTestMessage && (
+                <p className={`mt-4 text-sm ${geminiTestMessage.includes('hoạt động') ? 'text-emerald-600' : 'text-amber-700'}`}>
+                  {geminiTestMessage}
+                </p>
+              )}
+              {saveMessage && <p className="mt-4 text-sm text-emerald-600">{saveMessage}</p>}
             </>
           )}
 

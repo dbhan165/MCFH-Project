@@ -1,17 +1,54 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useParams, useLocation } from 'react-router-dom';
 import { 
   BarChart2, PieChart, LayoutDashboard, Share2, MessageCircle, 
   Bell, Download, FileText, FileSpreadsheet, 
-  ArrowLeft, Calendar, GitCompareArrows, Users
+  ArrowLeft, Calendar, GitCompareArrows, Users, Loader2
 } from 'lucide-react';
+import McfhLogo from '../components/brand/McfhLogo';
+import { projectApi } from '../api/projectApi';
 
 const ProjectLayout = () => {
-  // CẬP NHẬT: Lấy cả id của dự án (id) VÀ id của tổ chức (workspaceId) từ URL
   const { workspaceId, id } = useParams();
+  const wid = Number(workspaceId);
+  const projectId = Number(id);
   const location = useLocation();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [projectKeyword, setProjectKeyword] = useState<string | null>(null);
+  const [isLoadingProject, setIsLoadingProject] = useState(true);
+
+  useEffect(() => {
+    if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) {
+      setIsLoadingProject(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingProject(true);
+
+    projectApi
+      .getById(wid, projectId)
+      .then((project) => {
+        if (cancelled) return;
+        setProjectName(project.name);
+        setProjectKeyword(project.searchQuery);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjectName('');
+          setProjectKeyword(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingProject(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [wid, projectId]);
 
   // Khai báo menu và nối đường dẫn chính xác (Khớp 100% với App.tsx)
   const menuItems = [
@@ -29,17 +66,32 @@ const ProjectLayout = () => {
       
       {/* ================= SIDEBAR ================= */}
       <aside className="w-full md:w-72 bg-[#0A101D] border-r border-white/5 flex flex-col shrink-0 h-full">
-        <div className="h-20 flex items-center px-6 border-b border-white/5 shrink-0">
-          {/* CẬP NHẬT: Nút Back giờ trỏ về đúng danh sách dự án của Workspace hiện tại */}
-          <Link to={`/workspace/${workspaceId}/projects`} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-semibold">
-            <ArrowLeft size={18} /> Quay lại Hệ thống
+        <div className="h-20 flex items-center justify-between px-6 border-b border-white/5 shrink-0 gap-3">
+          <Link to={`/workspace/${workspaceId}/projects`} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-semibold min-w-0">
+            <ArrowLeft size={18} className="shrink-0" />
+            <span className="truncate">Quay lại Hệ thống</span>
           </Link>
+          <McfhLogo linkTo="/workspaces" size={28} showText={false} className="shrink-0 opacity-80 hover:opacity-100 transition-opacity" />
         </div>
         
         <div className="p-6 flex-1 overflow-y-auto">
           <div className="mb-6">
             <div className="text-xs font-bold text-[#00B4D8] uppercase tracking-wider mb-2">Đang phân tích</div>
-            <h2 className="text-xl font-bold leading-tight">Dự án #{id || 'PetCareHub'}</h2>
+            {isLoadingProject ? (
+              <div className="flex items-center gap-2 text-gray-400">
+                <Loader2 size={18} className="animate-spin" />
+                <span className="text-sm">Đang tải dự án...</span>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold leading-tight line-clamp-2">
+                  {projectName || `Dự án #${id}`}
+                </h2>
+                {projectKeyword ? (
+                  <p className="text-xs text-gray-500 mt-1.5 truncate">Từ khóa: {projectKeyword}</p>
+                ) : null}
+              </>
+            )}
           </div>
 
           <p className="text-xs font-bold text-gray-500 mb-4 tracking-wider uppercase">Phân tích chuyên sâu</p>

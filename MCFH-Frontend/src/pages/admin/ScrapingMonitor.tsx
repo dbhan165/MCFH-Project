@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import {
   BarChart,
@@ -11,6 +12,7 @@ import {
   Cell,
 } from 'recharts';
 import AdminLayout from '../../components/admin/AdminLayout';
+import { adminApi } from '../../api/portalApi';
 
 type JobStatus = 'Running' | 'COMPLETED' | 'FAILED';
 type BarType = 'normal' | 'peak' | 'api';
@@ -68,39 +70,6 @@ const SourceIcon = ({ bg, label }: { bg: string; label: string }) => (
   </span>
 );
 
-const crawlJobs: CrawlJob[] = [
-  {
-    id: 'CRAWL-9821',
-    sourceName: 'Facebook',
-    sourceUrl: 'facebook.com/market',
-    sourceIcon: <SourceIcon bg="bg-blue-600" label="f" />,
-    startTime: 'Today, 09:12 AM',
-    duration: '01h 42m',
-    nodesScanned: 12402,
-    status: 'Running',
-  },
-  {
-    id: 'CRAWL-9815',
-    sourceName: 'TikTok',
-    sourceUrl: 'tiktok.com/trends',
-    sourceIcon: <SourceIcon bg="bg-black" label="♪" />,
-    startTime: 'Today, 08:30 AM',
-    duration: '02h 24m',
-    nodesScanned: 45110,
-    status: 'COMPLETED',
-  },
-  {
-    id: 'CRAWL-9809',
-    sourceName: 'Reuters',
-    sourceUrl: 'reuters.com/news',
-    sourceIcon: <SourceIcon bg="bg-orange-600" label="W" />,
-    startTime: 'Today, 07:15 AM',
-    duration: '00h 12m',
-    nodesScanned: 840,
-    status: 'FAILED',
-  },
-];
-
 const jobStatusStyles: Record<JobStatus, string> = {
   Running: 'bg-blue-50 text-blue-600 border-blue-100',
   COMPLETED: 'bg-green-50 text-green-600 border-green-100',
@@ -108,6 +77,32 @@ const jobStatusStyles: Record<JobStatus, string> = {
 };
 
 const ScrapingMonitor = () => {
+  const [crawlJobs, setCrawlJobs] = useState<CrawlJob[]>([]);
+
+  useEffect(() => {
+    adminApi
+      .getScrapingJobs()
+      .then((jobs) =>
+        setCrawlJobs(
+          jobs.map((j) => ({
+            id: j.jobId,
+            sourceName: j.projectName ?? `Project #${j.projectId}`,
+            sourceUrl: j.proxyIp ?? '—',
+            sourceIcon: <span className="text-xs font-bold">JOB</span>,
+            startTime: j.startedAt ?? '—',
+            duration: j.finishedAt ? 'done' : 'running',
+            nodesScanned: j.totalScraped,
+            status: (j.status?.toUpperCase() === 'FAILED'
+              ? 'FAILED'
+              : j.status?.toUpperCase() === 'COMPLETED'
+                ? 'COMPLETED'
+                : 'Running') as JobStatus,
+          }))
+        )
+      )
+      .catch(() => setCrawlJobs([]));
+  }, []);
+
   return (
     <AdminLayout searchPlaceholder="Search crawlers or job IDs...">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-8">

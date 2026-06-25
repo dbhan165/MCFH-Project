@@ -1,4 +1,5 @@
-﻿using MCFH.Models;
+﻿using MCFH.Configuration;
+using MCFH.Models;
 using MCFH.Services;
 using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -53,6 +54,10 @@ namespace MCFH
             });
 
             builder.Services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                })
                 .AddXmlSerializerFormatters()
                 .AddXmlDataContractSerializerFormatters();
 
@@ -88,8 +93,21 @@ namespace MCFH
             // ── Đăng ký Services (Dependency Injection) ──
             builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
             builder.Services.AddScoped<IProjectService, ProjectService>();
+            builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
+            builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
+            builder.Services.AddHttpClient<IGeminiSentimentService, GeminiSentimentService>();
+            builder.Services.AddScoped<AiAnalysisService>();
+            builder.Services.AddScoped<ProjectAnalyticsService>();
+            builder.Services.AddScoped<ProjectReportService>();
+            builder.Services.AddScoped<BespokeReportService>();
+            builder.Services.AddScoped<AdminPortalService>();
+            builder.Services.AddScoped<ReporterPortalService>();
+            builder.Services.AddScoped<SubscriptionService>();
+            builder.Services.AddScoped<MentionFilterService>();
 
             builder.Services.AddScoped<ScrapeByKeywordService>();
+            builder.Services.AddSingleton<ScrapeJobStore>();
+            builder.Services.AddSingleton<ScrapeJobRunner>();
 
             var app = builder.Build();
 
