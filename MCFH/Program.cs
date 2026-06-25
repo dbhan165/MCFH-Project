@@ -1,4 +1,5 @@
 ﻿using Hangfire;
+using MCFH.Configuration;
 using MCFH.Models;
 using MCFH.Services;
 using MCFH.Services.Scraping;
@@ -85,7 +86,13 @@ namespace MCFH
             builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
             builder.Services.AddScoped<IProjectService, ProjectService>();
 
+            builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
+            builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
+            builder.Services.AddHttpClient<IGeminiSentimentService, GeminiSentimentService>();
+            builder.Services.AddScoped<AiAnalysisService>();
             builder.Services.AddScoped<ScrapeByKeywordService>();
+            builder.Services.AddSingleton<ScrapeJobStore>();
+            builder.Services.AddSingleton<ScrapeJobRunner>();
 
             // 4. Cấu hình Hangfire — dùng chung connection string "MyCnn"
             builder.Services.AddHangfire(config => config

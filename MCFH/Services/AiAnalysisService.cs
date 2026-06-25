@@ -1,0 +1,318 @@
+using MCFH.DTOs.ProjectDtos;
+using MCFH.Models;
+using MCFH.Models.Scraping;
+using MCFH.Services.Scraping;
+using Microsoft.EntityFrameworkCore;
+
+namespace MCFH.Services;
+
+public class AiAnalysisService
+{
+    private readonly McfhDbContext _context;
+    private readonly IGeminiSentimentService _geminiSentimentService;
+    private readonly ILogger<AiAnalysisService> _logger;
+
+    private static readonly string[] PositiveWords =
+    {
+        "tốt", "hay", "thích", "tuyệt", "xuất sắc", "hài lòng", "yêu", "great", "good", "love", "excellent", "amazing"
+    };
+
+    private static readonly string[] NegativeWords =
+    {
+        "tệ", "xấu", "kém", "ghét", "thất vọng", "lỗi", "hỏng", "bad", "hate", "terrible", "awful", "worst"
+    };
+
+    public AiAnalysisService(
+        McfhDbContext context,
+        IGeminiSentimentService geminiSentimentService,
+        ILogger<AiAnalysisService> logger)
+    {
+        _context = context;
+        _geminiSentimentService = geminiSentimentService;
+        _logger = logger;
+    }
+
+    public async Task<AnalyzeProjectResultDto?> AnalyzeProjectAsync(
+        int workspaceId, int projectId, int userId, bool force = true)
+    {
+        var isMember = await _context.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId);
+
+        if (!isMember) return null;
+
+        var projectExists = await _context.Projects
+            .AnyAsync(p => p.ProjectId == projectId && p.WorkspaceId == workspaceId && p.IsDeleted != true);
+
+        if (!projectExists) return null;
+
+        return await AnalyzePendingFeedbacksAsync(projectId, force);
+    }
+
+    public async Task<AnalyzeProjectResultDto> AnalyzePendingFeedbacksAsync(int projectId, bool force = true)
+    {
+        var feedbacks = await _context.ScrapedFeedbacks
+            .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
+            .Include(f => f.AiAnalysis)
+            .ToListAsync();
+
+        if (feedbacks.Count == 0)
+        {
+            return new AnalyzeProjectResultDto
+            {
+                ProjectId = projectId,
+                Message = "Chưa có mention nào. Hãy cào dữ liệu trước."
+            };
+        }
+
+        var pendingCount = feedbacks.Count(f => f.AiAnalysis == null);
+
+        // Đã phân tích hết → tự động chạy lại để cập nhật tóm tắt + comment
+        if (!force && pendingCount == 0)
+            force = true;
+
+        if (force)
+            await ClearExistingAnalysesAsync(feedbacks);
+
+        var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
+        var analyzed = 0;
+        var geminiCount = 0;
+
+        foreach (var feedback in pending)
+        {
+            try
+            {
+                var comments = await EnsureCommentsAsync(feedback);
+                var analysis = await AnalyzeFeedbackAsync(feedback, comments);
+
+                if (string.IsNullOrWhiteSpace(analysis.Summary))
+                    analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
+
+                await CommentBundleStorage.SaveAiSummaryAsync(
+                    feedback.FeedbackId,
+                    analysis.Summary,
+                    feedback.CommentsFileUrl);
+
+                if (comments.Count > 0)
+                    feedback.CommentsCount = comments.Count;
+
+                feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
+
+                _context.AiAnalyses.Add(new AiAnalysis
+                {
+                    FeedbackId = feedback.FeedbackId,
+                    MainSentiment = analysis.Sentiment,
+                    ConfidenceScore = analysis.Confidence,
+                    IsCrisisAlert = analysis.IsCrisisAlert,
+                    ProcessedAt = DateTime.Now
+                });
+
+                analyzed++;
+                if (analysis.UsedGemini) geminiCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Phân tích thất bại feedback {FeedbackId}", feedback.FeedbackId);
+            }
+        }
+
+        if (analyzed > 0)
+            await _context.SaveChangesAsync();
+
+        var engine = geminiCount > 0 ? "Gemini" : "rule-based";
+        return new AnalyzeProjectResultDto
+        {
+            ProjectId = projectId,
+            AnalyzedCount = analyzed,
+            SkippedCount = feedbacks.Count - analyzed,
+            TotalFeedbacks = feedbacks.Count,
+            Message = analyzed > 0
+                ? $"Đã phân tích {analyzed}/{feedbacks.Count} bài (caption + bình luận) bằng {engine}."
+                : "Không phân tích được bài nào — kiểm tra dữ liệu đã cào hoặc log server."
+        };
+    }
+
+    public async Task<AnalyzeProjectResultDto?> AnalyzeSingleFeedbackAsync(
+        int workspaceId, int projectId, int userId, int feedbackId)
+    {
+        var isMember = await _context.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId);
+        if (!isMember) return null;
+
+        var projectExists = await _context.Projects
+            .AnyAsync(p => p.ProjectId == projectId && p.WorkspaceId == workspaceId && p.IsDeleted != true);
+        if (!projectExists) return null;
+
+        var feedback = await _context.ScrapedFeedbacks
+            .Include(f => f.AiAnalysis)
+            .FirstOrDefaultAsync(f =>
+                f.FeedbackId == feedbackId &&
+                f.ProjectId == projectId &&
+                f.IsDeleted != true);
+
+        if (feedback == null) return null;
+
+        await ClearExistingAnalysesAsync(new List<ScrapedFeedback> { feedback });
+
+        try
+        {
+            var comments = await EnsureCommentsAsync(feedback);
+            var analysis = await AnalyzeFeedbackAsync(feedback, comments);
+
+            if (string.IsNullOrWhiteSpace(analysis.Summary))
+                analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
+
+            await CommentBundleStorage.SaveAiSummaryAsync(
+                feedback.FeedbackId,
+                analysis.Summary,
+                feedback.CommentsFileUrl);
+
+            if (comments.Count > 0)
+                feedback.CommentsCount = comments.Count;
+
+            feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
+
+            _context.AiAnalyses.Add(new AiAnalysis
+            {
+                FeedbackId = feedback.FeedbackId,
+                MainSentiment = analysis.Sentiment,
+                ConfidenceScore = analysis.Confidence,
+                IsCrisisAlert = analysis.IsCrisisAlert,
+                ProcessedAt = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+
+            var engine = analysis.UsedGemini ? "Gemini" : "rule-based";
+            return new AnalyzeProjectResultDto
+            {
+                ProjectId = projectId,
+                AnalyzedCount = 1,
+                SkippedCount = 0,
+                TotalFeedbacks = 1,
+                Message = $"Đã phân tích lại mention bằng {engine}."
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Phân tích thất bại feedback {FeedbackId}", feedbackId);
+            return new AnalyzeProjectResultDto
+            {
+                ProjectId = projectId,
+                AnalyzedCount = 0,
+                SkippedCount = 1,
+                TotalFeedbacks = 1,
+                Message = "Không phân tích được mention này — kiểm tra dữ liệu hoặc log server."
+            };
+        }
+    }
+
+    private async Task ClearExistingAnalysesAsync(List<ScrapedFeedback> feedbacks)
+    {
+        var analyses = feedbacks.Where(f => f.AiAnalysis != null).Select(f => f.AiAnalysis!).ToList();
+        if (analyses.Count == 0) return;
+
+        var analysisIds = analyses.Select(a => a.AnalysisId).ToList();
+        var aspects = await _context.FeedbackAspects
+            .Where(a => analysisIds.Contains(a.AnalysisId))
+            .ToListAsync();
+
+        if (aspects.Count > 0)
+            _context.FeedbackAspects.RemoveRange(aspects);
+
+        _context.AiAnalyses.RemoveRange(analyses);
+        await _context.SaveChangesAsync();
+
+        foreach (var f in feedbacks)
+            f.AiAnalysis = null;
+    }
+
+    private async Task<SentimentAnalysisResult> AnalyzeFeedbackAsync(
+        ScrapedFeedback feedback,
+        List<string> comments)
+    {
+        var combinedText = CommentBundleStorage.BuildCombinedAnalysisText(feedback.Content, comments);
+
+        if (_geminiSentimentService.IsConfigured)
+        {
+            var geminiResult = await _geminiSentimentService.AnalyzeAsync(
+                feedback.Platform ?? "unknown",
+                feedback.AuthorName,
+                feedback.Content,
+                comments,
+                combinedText);
+
+            if (geminiResult != null && !string.IsNullOrWhiteSpace(geminiResult.Summary))
+                return geminiResult;
+        }
+
+        return AnalyzeWithRules(combinedText, comments.Count);
+    }
+
+    private static SentimentAnalysisResult AnalyzeWithRules(string? combinedText, int commentCount = 0)
+    {
+        var sentiment = DetectSentiment(combinedText);
+        return new SentimentAnalysisResult
+        {
+            Sentiment = sentiment,
+            Confidence = sentiment == "neutral" ? 0.55 : 0.82,
+            IsCrisisAlert = sentiment == "negative",
+            Summary = BuildFallbackSummary(combinedText, commentCount, sentiment),
+            UsedGemini = false
+        };
+    }
+
+    private static string BuildFallbackSummary(string? content, int commentCount, string sentiment)
+    {
+        var sentimentVi = FormatSentimentVi(sentiment);
+        if (commentCount > 0)
+            return $"Phân tích từ {commentCount} bình luận đã gom: cộng đồng chủ yếu {sentimentVi}. " +
+                   $"Nội dung bài và phản hồi người xem cho thấy thái độ {sentimentVi}.";
+
+        var preview = string.IsNullOrWhiteSpace(content)
+            ? "nội dung bài"
+            : (content.Length > 120 ? content[..120] + "..." : content);
+        return $"Phân tích từ nội dung bài ({preview}): thái độ chủ đạo {sentimentVi}.";
+    }
+
+    private static string FormatSentimentVi(string sentiment) =>
+        sentiment switch
+        {
+            "positive" => "tích cực",
+            "negative" => "tiêu cực",
+            _ => "trung lập"
+        };
+
+    private async Task<List<string>> EnsureCommentsAsync(ScrapedFeedback feedback)
+    {
+        var bundle = await CommentBundleStorage.LoadAsync(feedback.FeedbackId, feedback.CommentsFileUrl);
+        if (bundle.Comments.Count > 0)
+            return bundle.Comments;
+
+        // Phân tích AI không mở browser — comment thiếu thì cào lại từ project, không refetch ở đây
+        var expected = feedback.CommentsCount ?? 0;
+        if (expected > 0)
+        {
+            _logger.LogWarning(
+                "Feedback {FeedbackId}: DB ghi {Count} comment nhưng file trống — bỏ qua refetch khi phân tích.",
+                feedback.FeedbackId,
+                expected);
+        }
+
+        return bundle.Comments;
+    }
+
+    private static string DetectSentiment(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return "neutral";
+
+        var lower = content.ToLowerInvariant();
+        var hasPositive = PositiveWords.Any(word => lower.Contains(word));
+        var hasNegative = NegativeWords.Any(word => lower.Contains(word));
+
+        if (hasPositive && !hasNegative) return "positive";
+        if (hasNegative && !hasPositive) return "negative";
+        if (hasNegative) return "negative";
+        if (hasPositive) return "positive";
+        return "neutral";
+    }
+}
