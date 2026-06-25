@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MCFH.Services.Scraping;
 
+/// <summary>Hangfire — quét định kỳ mọi project active, dùng chung pipeline ScrapeByKeywordService.</summary>
 public class ScrapingJobService
 {
     private readonly McfhDbContext _db;
@@ -24,45 +25,26 @@ public class ScrapingJobService
         Console.WriteLine($"[Hangfire] Bắt đầu quét {projects.Count} project active");
 
         foreach (var project in projects)
-        {
             await RunSingleProjectAsync(project.ProjectId);
-        }
 
         Console.WriteLine($"[Hangfire] Hoàn tất quét {projects.Count} project");
     }
 
     private async Task RunSingleProjectAsync(int projectId)
     {
-        var jobId = Guid.NewGuid().ToString();
+        var jobId = Guid.NewGuid().ToString("N");
 
-        var job = new ScrapingJob
-        {
-            JobId = jobId,
-            ProjectId = projectId,
-            Status = "running",
-            StartedAt = DateTime.Now
-        };
-        _db.ScrapingJobs.Add(job);
-        await _db.SaveChangesAsync();
+        await ScrapingJobPersistence.CreateRunningAsync(_db, jobId, projectId);
 
         try
         {
             var result = await _scrapeService.ScrapeAsync(projectId);
-
-            var totalScraped = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count;
-
-            job.Status = result.Errors.Count > 0 ? "completed_with_errors" : "completed";
-            job.TotalScraped = totalScraped;
-            job.ErrorLog = result.Errors.Count > 0 ? string.Join("; ", result.Errors) : null;
-            job.FinishedAt = DateTime.Now;
+            var status = ScrapingJobPersistence.MapHangfireStatus(result);
+            await ScrapingJobPersistence.FinalizeAsync(_db, jobId, status, result);
         }
         catch (Exception ex)
         {
-            job.Status = "failed";
-            job.ErrorLog = ex.Message;
-            job.FinishedAt = DateTime.Now;
+            await ScrapingJobPersistence.FinalizeAsync(_db, jobId, "failed", errorLog: ex.Message);
         }
-
-        await _db.SaveChangesAsync();
     }
 }
