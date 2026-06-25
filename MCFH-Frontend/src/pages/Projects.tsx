@@ -1,14 +1,23 @@
 import { useState } from 'react';
-import { Search, Plus, Bell, ArrowRight, EyeOff, Play, Pause, MoreVertical, Building2 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { 
+  Search, Plus, Bell, ArrowRight, EyeOff, Play, Pause, 
+  MoreVertical, Building2, UserPlus, Calendar, User 
+} from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+
+// Nhúng Common Modal vào
+import ConfirmModal from '../components/common/ConfirmModal';
 
 const Projects = () => {
   const { workspaceId } = useParams();
+  const navigate = useNavigate();
 
   const [projectList, setProjectList] = useState([
     {
       id: 1,
       title: 'Giám sát phản hồi PetCareHub',
+      createdAt: '10/05/2026',
+      owner: 'DB Han',
       status: 'Active',
       statusText: 'Đang quét (Real-time)',
       statusColor: 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20',
@@ -24,6 +33,8 @@ const Projects = () => {
     {
       id: 2,
       title: 'Khủng hoảng truyền thông Lô hàng lỗi',
+      createdAt: '20/06/2026',
+      owner: 'Acma Agency',
       status: 'Active',
       statusText: 'Mức độ nghiêm trọng cao',
       statusColor: 'bg-[#FF7575]/10 text-[#FF7575] border-[#FF7575]/20',
@@ -39,6 +50,8 @@ const Projects = () => {
     {
       id: 3,
       title: 'Theo dõi Đối thủ cạnh tranh Q2',
+      createdAt: '01/04/2026',
+      owner: 'System Auto',
       status: 'Disabled',
       statusText: 'Đã tạm dừng',
       statusColor: 'bg-white/10 text-gray-400 border-white/5',
@@ -55,21 +68,38 @@ const Projects = () => {
 
   const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
 
-  const toggleDisableProject = (id: number) => {
-    setProjectList(prev => prev.map(proj => {
-      if (proj.id === id) {
-        const isDisabled = proj.status === 'Disabled';
-        return {
-          ...proj,
-          status: isDisabled ? 'Active' : 'Disabled',
-          statusText: isDisabled ? 'Đang quét (Real-time)' : 'Đã tạm dừng',
-          statusColor: isDisabled ? 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20' : 'bg-white/10 text-gray-400 border-white/5',
-          dotColor: isDisabled ? 'bg-[#00B4D8]' : 'bg-gray-500'
-        };
-      }
-      return proj;
-    }));
-    setActiveMenuId(null);
+  // State quản lý Modal Xác nhận
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    projectId: number | null;
+    projectName: string;
+    action: 'disable' | 'enable' | null;
+  }>({
+    isOpen: false,
+    projectId: null,
+    projectName: '',
+    action: null
+  });
+
+  // Hàm kích hoạt/vô hiệu hóa thực sự (chỉ chạy khi bấm Đồng ý trên Modal)
+  const executeToggleStatus = () => {
+    if (confirmModal.projectId !== null) {
+      setProjectList(prev => prev.map(proj => {
+        if (proj.id === confirmModal.projectId) {
+          const isDisabled = proj.status === 'Disabled';
+          return {
+            ...proj,
+            status: isDisabled ? 'Active' : 'Disabled',
+            statusText: isDisabled ? 'Đang quét (Real-time)' : 'Đã tạm dừng',
+            statusColor: isDisabled ? 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20' : 'bg-white/10 text-gray-400 border-white/5',
+            dotColor: isDisabled ? 'bg-[#00B4D8]' : 'bg-gray-500'
+          };
+        }
+        return proj;
+      }));
+    }
+    // Đóng modal sau khi chạy xong
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
   };
 
   return (
@@ -79,7 +109,6 @@ const Projects = () => {
         <div className="text-gray-300 font-medium tracking-wide">Quản lý Dự án</div>
         
         <div className="flex items-center gap-6">
-          {/* ĐÃ FIX: Biến thành một box tĩnh báo hiệu không gian làm việc hiện hành */}
           <div className="flex items-center gap-2 bg-[#151B2B] border border-white/5 px-4 py-2 rounded-lg text-sm text-gray-400 select-none">
             <Building2 size={16} className="text-[#FF7575]" />
             Đang hiển thị tại: <span className="font-semibold text-white">Workspace #{workspaceId}</span>
@@ -90,8 +119,12 @@ const Projects = () => {
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-[#0A101D] bg-[#FF7575] rounded-full"></span>
           </button>
 
-          <Link to={`/workspace/${workspaceId}/project/1/reports`} className="hidden sm:block bg-[#FF7575]/10 hover:bg-[#FF7575]/20 text-[#FF7575] border border-[#FF7575]/20 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
-            Bespoke Hub
+          <Link 
+            to={`/workspace/${workspaceId}/members`}
+            className="hidden sm:flex items-center gap-2 bg-[#151B2B] hover:bg-[#1A2235] text-gray-300 hover:text-white border border-white/10 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm"
+          >
+            <UserPlus size={16} />
+            Mời thành viên
           </Link>
         </div>
       </header>
@@ -134,20 +167,44 @@ const Projects = () => {
             {projectList.map((project) => (
               <div 
                 key={project.id} 
-                className={`bg-[#151B2B] border border-white/5 rounded-2xl p-6 flex flex-col transition-all group relative ${project.status === 'Disabled' ? 'opacity-60' : project.hoverBorder}`}
+                onClick={() => {
+                  if (project.status !== 'Disabled') {
+                    navigate(`/workspace/${workspaceId}/project/${project.id}`);
+                  }
+                }}
+                className={`bg-[#151B2B] border border-white/5 rounded-2xl p-6 flex flex-col transition-all group relative ${
+                  project.status === 'Disabled' 
+                  ? 'opacity-60 cursor-not-allowed' 
+                  : `cursor-pointer ${project.hoverBorder}`
+                }`}
               >
-                <div className="absolute top-6 right-6">
+                <div className="absolute top-6 right-6 z-20">
                   <button 
-                    onClick={() => setActiveMenuId(activeMenuId === project.id ? null : project.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMenuId(activeMenuId === project.id ? null : project.id);
+                    }}
                     className="p-1.5 rounded-lg bg-[#0A101D] border border-white/5 text-gray-400 hover:text-white transition-colors"
                   >
                     <MoreVertical size={16} />
                   </button>
 
                   {activeMenuId === project.id && (
-                    <div className="absolute right-0 mt-2 w-48 bg-[#0A101D] border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 z-30 animate-in fade-in slide-in-from-top-2">
+                    <div 
+                      onClick={(e) => e.stopPropagation()} 
+                      className="absolute right-0 mt-2 w-48 bg-[#0A101D] border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 z-30 animate-in fade-in slide-in-from-top-2"
+                    >
                       <button 
-                        onClick={() => toggleDisableProject(project.id)}
+                        onClick={() => {
+                          const isDisabling = project.status !== 'Disabled';
+                          setConfirmModal({
+                            isOpen: true,
+                            projectId: project.id,
+                            projectName: project.title,
+                            action: isDisabling ? 'disable' : 'enable'
+                          });
+                          setActiveMenuId(null);
+                        }}
                         className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
                       >
                         {project.status === 'Disabled' ? (
@@ -167,13 +224,25 @@ const Projects = () => {
                   )}
                 </div>
 
-                <h3 className={`text-2xl font-bold mb-4 pr-6 leading-snug transition-colors ${project.status === 'Disabled' ? 'text-gray-500 line-through' : 'group-hover:text-[#FF7575]'}`}>
+                <h3 className={`text-2xl font-bold mb-3 pr-6 leading-snug transition-colors ${project.status === 'Disabled' ? 'text-gray-500 line-through' : 'group-hover:text-[#FF7575]'}`}>
                   {project.title}
                 </h3>
 
-                <div className={`inline-flex items-center gap-2 border px-3 py-1.5 rounded-md text-xs font-semibold w-fit mb-8 ${project.statusColor}`}>
+                <div className={`inline-flex items-center gap-2 border px-3 py-1.5 rounded-md text-xs font-semibold w-fit mb-4 ${project.statusColor}`}>
                   <span className={`w-2 h-2 rounded-full ${project.dotColor} ${project.status !== 'Disabled' ? 'animate-pulse' : ''}`}></span>
                   {project.statusText}
+                </div>
+
+                {/* CREATION DATE & OWNER */}
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
+                    <Calendar size={12} className="text-gray-500" />
+                    {project.createdAt}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
+                    <User size={12} className="text-gray-500" />
+                    {project.owner}
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 mb-6">
@@ -201,22 +270,38 @@ const Projects = () => {
                   </div>
                 </div>
 
-                <Link 
-                  to={`/workspace/${workspaceId}/project/${project.id}`} 
+                <div 
                   className={`w-full py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all border ${
                     project.status === 'Disabled' 
-                    ? 'bg-transparent text-gray-600 border-white/5 cursor-not-allowed pointer-events-none' 
-                    : 'bg-[#0A101D] hover:bg-white/5 text-gray-300 hover:text-white border-white/5 hover:border-white/10'
+                    ? 'bg-transparent text-gray-600 border-white/5 cursor-not-allowed' 
+                    : 'bg-[#0A101D] group-hover:bg-white/5 text-gray-400 group-hover:text-white border-white/5 group-hover:border-white/10'
                   }`}
                 >
                   Vào Dashboard Phân tích <ArrowRight className="w-4 h-4" />
-                </Link>
+                </div>
               </div>
             ))}
 
           </div>
         </div>
       </div>
+
+      {/* Đặt Common Modal ở ngoài cùng */}
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={executeToggleStatus}
+        title={confirmModal.action === 'disable' ? 'Vô hiệu hóa Dự án?' : 'Kích hoạt lại Dự án?'}
+        message={
+          confirmModal.action === 'disable' 
+          ? `Bạn có chắc chắn muốn vô hiệu hóa "${confirmModal.projectName}"? Hệ thống sẽ tạm dừng quét và thu thập dữ liệu thảo luận mới cho dự án này.`
+          : `Kích hoạt lại "${confirmModal.projectName}"? Hệ thống sẽ tiếp tục thu thập dữ liệu theo tiến trình.`
+        }
+        confirmText={confirmModal.action === 'disable' ? 'Vô hiệu hóa' : 'Kích hoạt'}
+        cancelText="Hủy bỏ"
+        type={confirmModal.action === 'disable' ? 'warning' : 'danger'}
+      />
+
     </div>
   );
 };

@@ -1,17 +1,13 @@
 import { useState } from 'react';
-import { Users, Hash, Map, FileUp, Link as LinkIcon, Check } from 'lucide-react';
+import { Users, Hash, Map, FileUp, Link as LinkIcon, Check, MonitorPlay, Globe } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-// LƯU Ý: Nếu bạn có KeywordStep.tsx, hãy giữ nguyên dòng import dưới đây.
-// Nếu không có, bạn có thể thay thế nó bằng một div đơn giản.
 import KeywordStep from './KeywordStep'; 
 
 const CreateProject = () => {
   const navigate = useNavigate();
   
-  // Lấy workspaceId từ query param trên URL (VD: /create-project?wid=1)
-  // Đây là cách an toàn nhất để trang Create (vốn nằm ngoài Layout chính) biết nó đang phục vụ cho Workspace nào
   const [searchParams] = useSearchParams();
-  const workspaceId = searchParams.get('wid') || '1'; // Mặc định là 1 nếu không truyền
+  const workspaceId = searchParams.get('wid') || '1'; 
   
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,14 +15,10 @@ const CreateProject = () => {
   // ==========================================
   // STATE LƯU TRỮ DỮ LIỆU FORM
   // ==========================================
-  // Bước 1: Thông tin cơ bản (Đã bỏ Workspace Name vì giờ ta đã chọn Workspace trước rồi)
   const [campaignName, setCampaignName] = useState('');
-  
-  // Bước 2 & 3: Nguồn & Từ khóa
   const [selectedSources, setSelectedSources] = useState<string[]>(['facebook', 'tiktok']);
   const [keywords, setKeywords] = useState<string>(''); 
 
-  // Hàm xử lý chọn nguồn
   const toggleSource = (sourceId: string) => {
     if (selectedSources.includes(sourceId)) {
       setSelectedSources(selectedSources.filter(id => id !== sourceId));
@@ -43,17 +35,11 @@ const CreateProject = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
-  // Hàm xử lý khi bấm hoàn thành ở Bước 4
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // TODO: Gộp dữ liệu gọi API lên Backend
       console.log("Dữ liệu gửi đi:", { workspaceId, campaignName, selectedSources, keywords });
-      
-      // Giả lập API mất 1.5 giây để xử lý
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Thành công -> Điều hướng về lại danh sách dự án của đúng Workspace đó
       navigate(`/workspace/${workspaceId}/projects`);
     } catch (error) {
       console.error("Lỗi khi tạo chiến dịch:", error);
@@ -62,13 +48,11 @@ const CreateProject = () => {
     }
   };
 
-  // Validate Bước 1: Không cho bấm Tiếp tục nếu chưa nhập tên
   const isStep1Valid = campaignName.trim() !== '';
 
   return (
     <div className="min-h-screen bg-[#050A15] text-white font-sans flex items-center justify-center p-6 selection:bg-[#FF7575] selection:text-white relative overflow-hidden">
       
-      {/* Background Grid Pattern */}
       <div 
         className="absolute inset-0 z-0 opacity-10 pointer-events-none"
         style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }}
@@ -76,7 +60,6 @@ const CreateProject = () => {
 
       <div className="w-full max-w-5xl bg-[#0A101D] border border-white/5 rounded-2xl p-8 md:p-12 relative z-10 shadow-2xl transition-all duration-500">
         
-        {/* Header */}
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-10">Khởi tạo Dự án Giám sát</h1>
 
         {/* ========================================================
@@ -85,7 +68,6 @@ const CreateProject = () => {
         <div className="flex items-center justify-between mb-12 relative">
           <div className="absolute top-1/2 left-0 w-full h-px bg-white/10 -z-10 -translate-y-1/2"></div>
           
-          {/* Step 1: Thông tin */}
           <div className="flex items-center gap-3 bg-[#0A101D] pr-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors duration-300 ${currentStep >= 1 ? 'bg-[#FF7575]/10 border-2 border-[#FF7575] text-[#FF7575]' : 'bg-white/5 border-2 border-white/10 text-gray-500'}`}>
               {currentStep > 1 ? <Check className="w-5 h-5" /> : '1'}
@@ -93,7 +75,6 @@ const CreateProject = () => {
             <span className={`font-bold tracking-wide text-xs sm:text-sm hidden sm:block ${currentStep >= 1 ? 'text-[#FF7575]' : 'text-gray-500'}`}>THÔNG TIN</span>
           </div>
 
-          {/* Step 2: Nguồn dữ liệu */}
           <div className="flex items-center gap-3 bg-[#0A101D] px-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors duration-300 ${currentStep >= 2 ? 'bg-[#FF7575]/10 border-2 border-[#FF7575] text-[#FF7575]' : 'bg-white/5 border-2 border-white/10 text-gray-500'}`}>
               {currentStep > 2 ? <Check className="w-5 h-5" /> : '2'}
@@ -101,7 +82,6 @@ const CreateProject = () => {
             <span className={`font-bold tracking-wide text-xs sm:text-sm hidden sm:block ${currentStep >= 2 ? 'text-[#FF7575]' : 'text-gray-500'}`}>NGUỒN DỮ LIỆU</span>
           </div>
 
-          {/* Step 3: Từ khóa */}
           <div className="flex items-center gap-3 bg-[#0A101D] px-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors duration-300 ${currentStep >= 3 ? 'bg-[#FF7575]/10 border-2 border-[#FF7575] text-[#FF7575]' : 'bg-white/5 border-2 border-white/10 text-gray-500'}`}>
               {currentStep > 3 ? <Check className="w-5 h-5" /> : '3'}
@@ -109,7 +89,6 @@ const CreateProject = () => {
             <span className={`font-bold tracking-wide text-xs sm:text-sm hidden sm:block ${currentStep >= 3 ? 'text-[#FF7575]' : 'text-gray-500'}`}>BỘ TỪ KHÓA</span>
           </div>
 
-          {/* Step 4: AI */}
           <div className="flex items-center gap-3 bg-[#0A101D] pl-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors duration-300 ${currentStep >= 4 ? 'bg-[#FF7575]/10 border-2 border-[#FF7575] text-[#FF7575]' : 'bg-white/5 border-2 border-white/10 text-gray-500'}`}>
               4
@@ -130,7 +109,6 @@ const CreateProject = () => {
               <p className="text-gray-400 text-sm mb-8">Đặt tên cho Dự án giám sát dữ liệu của bạn trên hệ thống.</p>
               
               <div className="space-y-6">
-                {/* Input Tên Chiến dịch */}
                 <div className="bg-[#151B2B] border border-white/5 rounded-xl p-6">
                   <label className="block text-sm font-bold text-white mb-2">Tên Dự án (Campaign)</label>
                   <p className="text-xs text-gray-400 mb-4">Tên gọi để bạn dễ dàng phân biệt dự án này với các dự án khác trong cùng Workspace.</p>
@@ -153,49 +131,72 @@ const CreateProject = () => {
               <h2 className="text-xl font-bold mb-2">Cấu hình Nguồn thu thập (Data Sources)</h2>
               <p className="text-gray-400 text-sm mb-6">Chọn các nền tảng bạn muốn Bot Playwright của MCFH thu thập dữ liệu.</p>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                
+                {/* 1. Facebook */}
                 <button onClick={() => toggleSource('facebook')} className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${selectedSources.includes('facebook') ? 'bg-[#FF7575]/5 border-[#FF7575] shadow-[0_0_15px_rgba(255,117,117,0.1)]' : 'bg-[#151B2B] border-white/5 hover:border-white/20'}`}>
-                  <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('facebook') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
+                  <div className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('facebook') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
                     {selectedSources.includes('facebook') && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                   </div>
-                  <Users className={`w-5 h-5 ${selectedSources.includes('facebook') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
-                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('facebook') ? 'text-[#FF7575]' : 'text-gray-300'}`}>FACEBOOK FANPAGES</span>
+                  <Users className={`w-5 h-5 shrink-0 ${selectedSources.includes('facebook') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
+                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('facebook') ? 'text-[#FF7575]' : 'text-gray-300'}`}>FACEBOOK</span>
                 </button>
 
+                {/* 2. TikTok */}
                 <button onClick={() => toggleSource('tiktok')} className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${selectedSources.includes('tiktok') ? 'bg-[#FF7575]/5 border-[#FF7575] shadow-[0_0_15px_rgba(255,117,117,0.1)]' : 'bg-[#151B2B] border-white/5 hover:border-white/20'}`}>
-                  <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('tiktok') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
+                  <div className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('tiktok') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
                     {selectedSources.includes('tiktok') && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                   </div>
-                  <Hash className={`w-5 h-5 ${selectedSources.includes('tiktok') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
-                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('tiktok') ? 'text-[#FF7575]' : 'text-gray-300'}`}>TIKTOK HASHTAGS</span>
+                  <Hash className={`w-5 h-5 shrink-0 ${selectedSources.includes('tiktok') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
+                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('tiktok') ? 'text-[#FF7575]' : 'text-gray-300'}`}>TIKTOK</span>
                 </button>
 
+                {/* 3. YouTube */}
+                <button onClick={() => toggleSource('youtube')} className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${selectedSources.includes('youtube') ? 'bg-[#FF7575]/5 border-[#FF7575] shadow-[0_0_15px_rgba(255,117,117,0.1)]' : 'bg-[#151B2B] border-white/5 hover:border-white/20'}`}>
+                  <div className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('youtube') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
+                    {selectedSources.includes('youtube') && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+                  </div>
+                  <MonitorPlay className={`w-5 h-5 shrink-0 ${selectedSources.includes('youtube') ? 'text-red-500' : 'text-gray-400'}`} />
+                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('youtube') ? 'text-[#FF7575]' : 'text-gray-300'}`}>YOUTUBE</span>
+                </button>
+
+                {/* 4. Google Maps */}
                 <button onClick={() => toggleSource('maps')} className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${selectedSources.includes('maps') ? 'bg-[#FF7575]/5 border-[#FF7575] shadow-[0_0_15px_rgba(255,117,117,0.1)]' : 'bg-[#151B2B] border-white/5 hover:border-white/20'}`}>
-                  <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('maps') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
+                  <div className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('maps') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
                     {selectedSources.includes('maps') && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                   </div>
-                  <Map className={`w-5 h-5 ${selectedSources.includes('maps') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
-                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('maps') ? 'text-[#FF7575]' : 'text-gray-300'}`}>GOOGLE MAPS REVIEWS</span>
+                  <Map className={`w-5 h-5 shrink-0 ${selectedSources.includes('maps') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
+                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('maps') ? 'text-[#FF7575]' : 'text-gray-300'}`}>GOOGLE MAPS</span>
                 </button>
 
+                {/* 5. Web Browser / News */}
+                <button onClick={() => toggleSource('browser')} className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${selectedSources.includes('browser') ? 'bg-[#FF7575]/5 border-[#FF7575] shadow-[0_0_15px_rgba(255,117,117,0.1)]' : 'bg-[#151B2B] border-white/5 hover:border-white/20'}`}>
+                  <div className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('browser') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
+                    {selectedSources.includes('browser') && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+                  </div>
+                  <Globe className={`w-5 h-5 shrink-0 ${selectedSources.includes('browser') ? 'text-[#00B4D8]' : 'text-gray-400'}`} />
+                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('browser') ? 'text-[#FF7575]' : 'text-gray-300'}`}>TRÌNH DUYỆT</span>
+                </button>
+
+                {/* 6. Import File */}
                 <button onClick={() => toggleSource('file')} className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${selectedSources.includes('file') ? 'bg-[#FF7575]/5 border-[#FF7575] shadow-[0_0_15px_rgba(255,117,117,0.1)]' : 'bg-[#151B2B] border-white/5 hover:border-white/20'}`}>
-                  <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('file') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
+                  <div className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition-colors ${selectedSources.includes('file') ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
                     {selectedSources.includes('file') && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                   </div>
-                  <FileUp className={`w-5 h-5 ${selectedSources.includes('file') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
-                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('file') ? 'text-[#FF7575]' : 'text-gray-300'}`}>IMPORT CUSTOM FILE</span>
+                  <FileUp className={`w-5 h-5 shrink-0 ${selectedSources.includes('file') ? 'text-[#FF7575]' : 'text-gray-400'}`} />
+                  <span className={`font-semibold text-sm tracking-wider ${selectedSources.includes('file') ? 'text-[#FF7575]' : 'text-gray-300'}`}>IMPORT FILE</span>
                 </button>
               </div>
 
-              <div className="pt-6">
-                <label className="block text-xs font-bold text-gray-500 tracking-wider uppercase mb-3">Cấu hình chi tiết</label>
+              <div className="pt-6 mt-4 border-t border-white/5">
+                <label className="block text-xs font-bold text-gray-500 tracking-wider uppercase mb-3">Cấu hình URL mục tiêu (Không bắt buộc)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <LinkIcon className="h-5 w-5 text-gray-400" />
                   </div>
                   <input 
                     type="text" 
-                    placeholder="Nhập URL Fanpage hoặc Hashtag cụ thể..." 
+                    placeholder="Nhập URL Fanpage, Kênh Youtube hoặc Website cụ thể..." 
                     className="w-full pl-12 pr-4 py-4 bg-[#151B2B] border border-white/5 text-white placeholder-gray-500 rounded-xl focus:outline-none focus:border-[#FF7575] focus:ring-1 focus:ring-[#FF7575] transition-all"
                   />
                 </div>
@@ -229,7 +230,6 @@ const CreateProject = () => {
         <div className="pt-8 flex justify-between items-center border-t border-white/5 mt-8">
           <div>
             {currentStep === 1 ? (
-               // ĐÃ FIX: Hủy bỏ sẽ đưa về đúng danh sách dự án của Workspace hiện hành
                <Link to={`/workspace/${workspaceId}/projects`} className="px-6 py-3 rounded-lg text-sm font-semibold text-gray-400 hover:bg-white/5 transition-colors">
                  Hủy bỏ
                </Link>
