@@ -7,7 +7,7 @@ public partial class ScrapingJob
 {
     public string JobId { get; set; } = null!;
 
-    public int SourceId { get; set; }
+    public int? SourceId { get; set; }
 
     public int ProjectId { get; set; }
 
@@ -27,5 +27,5 @@ public partial class ScrapingJob
 
     public virtual SystemProxy? Proxy { get; set; }
 
-    public virtual DataSource Source { get; set; } = null!;
+    public virtual DataSource? Source { get; set; }
 }
