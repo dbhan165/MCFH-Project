@@ -105,7 +105,7 @@ public class FacebookGroupScraper
             var parentOfHeader = await headerEl.EvaluateHandleAsync("el => el.closest('div')?.parentElement");
             var candidateLinks = await postEl.QuerySelectorAllAsync("a[role='link']");
 
-            
+
             foreach (var link in candidateLinks)
             {
                 var href = await link.GetAttributeAsync("href");
