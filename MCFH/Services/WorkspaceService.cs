@@ -65,6 +65,10 @@ namespace MCFH.Services
                     WorkspaceId = w.WorkspaceId,
                     Name = w.Name,
                     OwnerName = w.Owner.FullName,
+                    MyRole = w.WorkspaceMembers
+                        .Where(m => m.UserId == userId)
+                        .Select(m => m.Role.RoleName)
+                        .FirstOrDefault(),
                     MemberCount = w.WorkspaceMembers.Count,
                     ProjectCount = w.Projects.Count(p => p.IsDeleted != true),
                     CreatedAt = w.CreatedAt
@@ -83,6 +87,10 @@ namespace MCFH.Services
                     WorkspaceId = w.WorkspaceId,
                     Name = w.Name,
                     OwnerName = w.Owner.FullName,
+                    MyRole = w.WorkspaceMembers
+                        .Where(m => m.UserId == userId)
+                        .Select(m => m.Role.RoleName)
+                        .FirstOrDefault(),
                     MemberCount = w.WorkspaceMembers.Count,
                     ProjectCount = w.Projects.Count(p => p.IsDeleted != true),
                     CreatedAt = w.CreatedAt

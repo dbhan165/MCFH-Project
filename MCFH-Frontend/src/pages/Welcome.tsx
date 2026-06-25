@@ -1,6 +1,7 @@
 import { ArrowRight, PlayCircle } from 'lucide-react';
 import wellcome from '../assets/wellcome.png';
 import { Link } from 'react-router-dom';
+import McfhLogo from '../components/brand/McfhLogo';
 
 const Welcome = () => {
   return (
@@ -19,8 +20,7 @@ const Welcome = () => {
       {/* Header / Navbar */}
       <header className="relative z-10 border-b border-white/5">
         <div className="container mx-auto px-8 h-20 flex items-center justify-between">
-          {/* Logo Placeholder (Trống theo design gốc) */}
-          <div className="w-24"></div> 
+          <McfhLogo linkTo="/" size={40} textClassName="text-white text-2xl" />
           
           {/* Main Navigation */}
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-300">
@@ -36,9 +36,9 @@ const Welcome = () => {
             <Link to="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
               Login
             </Link>
-            <button className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-colors">
+            <Link to="/login" className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-colors">
               Start Free Trial
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -71,12 +71,12 @@ const Welcome = () => {
 
             {/* Call to Actions (CTA) */}
             <div className="flex items-center gap-8 pt-2">
-              <button className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-7 py-3.5 rounded text-sm font-medium flex items-center gap-2 transition-colors">
+              <Link to="/create-workspace" className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-7 py-3.5 rounded text-sm font-medium flex items-center gap-2 transition-colors">
                 Khởi tạo Workspace ngay <ArrowRight size={18} />
-              </button>
-              <button className="text-gray-300 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
+              </Link>
+              <Link to="/pricing" className="text-gray-300 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
                 <PlayCircle size={20} /> Xem demo sản phẩm
-              </button>
+              </Link>
             </div>
 
             {/* Statistics */}
@@ -121,8 +121,8 @@ const Welcome = () => {
       <footer className="relative z-10 border-t border-white/5 bg-[#080D18]">
         <div className="container mx-auto px-8 py-10 flex flex-col md:flex-row justify-between items-end gap-6 text-sm text-[#9BA1B0]">
           <div className="space-y-4">
-            <div className="text-[#FF7575] text-3xl font-bold tracking-tighter">MCFH</div>
-            <div>© 2024 MCFH Kinetic Systems. All rights reserved.</div>
+            <McfhLogo size={36} textClassName="text-[#FF7575] text-2xl" />
+            <div>© 2026 MCFH. All rights reserved.</div>
           </div>
           <div className="flex gap-8">
             <a href="#privacy" className="hover:text-white transition-colors">Privacy Policy</a>

@@ -64,6 +64,10 @@ namespace MCFH.Services
                     Description = p.Description,
                     SearchQuery = p.SearchQuery,
                     DataSourceCount = p.DataSources.Count,
+                    EnableFacebook = p.EnableFacebook == true,
+                    EnableYoutube = p.EnableYoutube == true,
+                    EnableTiktok = p.EnableTiktok == true,
+                    EnableMaps = p.EnableMaps == true,
                     CreatedAt = p.CreatedAt
                 })
                 .ToListAsync();
@@ -87,6 +91,10 @@ namespace MCFH.Services
                     Description = p.Description,
                     SearchQuery = p.SearchQuery,
                     DataSourceCount = p.DataSources.Count,
+                    EnableFacebook = p.EnableFacebook == true,
+                    EnableYoutube = p.EnableYoutube == true,
+                    EnableTiktok = p.EnableTiktok == true,
+                    EnableMaps = p.EnableMaps == true,
                     CreatedAt = p.CreatedAt
                 })
                 .FirstOrDefaultAsync();
@@ -104,11 +112,35 @@ namespace MCFH.Services
                 Name = dto.Name,
                 Description = dto.Description,
                 SearchQuery = dto.SearchQuery,
+                EnableFacebook = dto.EnableFacebook,
+                EnableYoutube = dto.EnableYoutube,
+                EnableTiktok = dto.EnableTiktok,
+                EnableMaps = dto.EnableMaps,
                 CreatedAt = DateTime.Now
             };
 
             _context.Projects.Add(project);
             await _context.SaveChangesAsync();
+
+            foreach (var source in dto.DataSources)
+            {
+                if (string.IsNullOrWhiteSpace(source.Platform)) continue;
+
+                _context.DataSources.Add(new DataSource
+                {
+                    ProjectId = project.ProjectId,
+                    Platform = source.Platform.ToLowerInvariant(),
+                    SourceType = string.IsNullOrWhiteSpace(source.TargetUrl) ? "keyword" : "url",
+                    TargetUrl = string.IsNullOrWhiteSpace(source.TargetUrl) ? null : source.TargetUrl.Trim(),
+                    SearchQuery = dto.SearchQuery,
+                    Status = "active"
+                });
+            }
+
+            if (dto.DataSources.Count > 0)
+            {
+                await _context.SaveChangesAsync();
+            }
 
             await LogActivityAsync(workspaceId, userId,
                 actionType: "CREATE_PROJECT",

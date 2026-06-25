@@ -11,6 +11,7 @@ import {
     ArrowRight
   } from 'lucide-react';
   import { Link } from 'react-router-dom';
+  import McfhLogo from '../components/brand/McfhLogo';
   
   const Campaigns = () => {
     return (
@@ -20,14 +21,7 @@ import {
         <aside className="w-64 bg-[#0A101D] border-r border-white/5 flex flex-col shrink-0 z-20">
           {/* Logo Area */}
           <div className="h-20 flex items-center px-6 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <div className="flex flex-wrap gap-1 w-6 h-6">
-                <div className="w-2.5 h-2.5 bg-white rounded-sm"></div>
-                <div className="w-2.5 h-2.5 bg-[#FF7575] rounded-sm"></div>
-                <div className="w-2.5 h-2.5 bg-white/50 rounded-sm"></div>
-              </div>
-              <span className="text-xl font-bold tracking-wider">MCFH</span>
-            </div>
+            <McfhLogo linkTo="/workspaces" size={32} textClassName="text-white text-xl" />
           </div>
   
           {/* Menu Navigation */}

@@ -53,6 +53,8 @@ namespace MCFH.Controllers
                 existingUser.PasswordHash = passwordHash;
                 existingUser.FullName = model.FullName;
                 existingUser.Phone = model.Phone;
+                existingUser.IsVerified = false;
+                existingUser.VerifiedAt = null;
                 existingUser.CreatedAt = DateTime.Now; // Reset lại thời gian tạo
 
                 _context.Users.Update(existingUser);
@@ -354,38 +356,117 @@ namespace MCFH.Controllers
                 return BadRequest(new { message = "Tài khoản này được đăng ký thông qua Google. Vui lòng đăng nhập bằng Google." });
             }
 
-            // 3. Kiểm tra tính chính xác của mật khẩu
+            // 3. Kiểm tra tài khoản đã có mật khẩu chưa
+            if (string.IsNullOrEmpty(user.PasswordHash))
+            {
+                return BadRequest(new { message = "Tài khoản chưa thiết lập mật khẩu. Vui lòng đăng ký lại hoặc đăng nhập bằng Google." });
+            }
+
+            // 4. Kiểm tra tính chính xác của mật khẩu
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash);
             if (!isPasswordValid)
             {
                 return Unauthorized(new { message = "Tài khoản hoặc mật khẩu không chính xác." });
             }
 
-            // 4. Kiểm tra tài khoản có bị khóa (Banned) hay không
+            // 5. Kiểm tra tài khoản đã xác thực email chưa
+            if (user.IsVerified != true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tài khoản chưa được xác thực. Vui lòng kiểm tra email và nhập mã OTP để kích hoạt." });
+            }
+
+            // 6. Kiểm tra tài khoản có bị khóa (Banned) hay không
             if (user.IsBanned == true)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tài khoản của bạn đã bị khóa bởi hệ thống quản trị." });
             }
 
-            // 5. Tạo JWT Token nếu mọi thứ hợp lệ
+            // 7. Tạo JWT Token nếu mọi thứ hợp lệ
             string token = GenerateJwtToken(user);
 
-            // 6. Trả dữ liệu sạch về cho Frontend lưu trữ tại LocalStorage/Redux
-            var response = new AuthResponseDto
-            {
-                Token = token,
-                UserId = user.UserId,
-                Email = user.Email,
-                FullName = user.FullName,
-                Role = user.SystemRole
-            };
-
-            return Ok(response);
+            // 8. Trả dữ liệu sạch về cho Frontend lưu trữ tại LocalStorage/Redux
+            return Ok(BuildAuthResponse(user, token));
         }
 
         // ==========================================
-        // HÀM HỖ TRỢ TẠO JWT TOKEN
+        // PROFILE: XEM & CẬP NHẬT HỒ SƠ
         // ==========================================
+        [Authorize]
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile()
+        {
+            var userId = GetUserId();
+            if (userId == null)
+                return Unauthorized(new { message = "Vui lòng đăng nhập để xem hồ sơ." });
+
+            var user = await _context.Users.FindAsync(userId.Value);
+            if (user == null)
+                return NotFound(new { message = "Tài khoản không tồn tại." });
+
+            return Ok(BuildProfileResponse(user));
+        }
+
+        [Authorize]
+        [HttpPut("profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto model)
+        {
+            if (model == null)
+                return BadRequest(new { message = "Dữ liệu cập nhật không hợp lệ." });
+
+            if (string.IsNullOrWhiteSpace(model.FullName))
+                return BadRequest(new { message = "Họ và tên không được để trống." });
+
+            var userId = GetUserId();
+            if (userId == null)
+                return Unauthorized(new { message = "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại." });
+
+            var user = await _context.Users.FindAsync(userId.Value);
+            if (user == null)
+                return NotFound(new { message = "Tài khoản không tồn tại." });
+
+            user.FullName = model.FullName.Trim();
+            user.Phone = string.IsNullOrWhiteSpace(model.Phone) ? null : model.Phone.Trim();
+
+            if (user.AuthProvider != "google" && !string.IsNullOrWhiteSpace(model.AvatarUrl))
+                user.AvatarUrl = model.AvatarUrl.Trim();
+
+            await _context.SaveChangesAsync();
+
+            return Ok(BuildProfileResponse(user));
+        }
+
+        // ==========================================
+        // HÀM HỖ TRỢ
+        // ==========================================
+        private int? GetUserId()
+        {
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return claim != null ? int.Parse(claim) : null;
+        }
+
+        private static AuthResponseDto BuildAuthResponse(User user, string token) => new()
+        {
+            Token = token,
+            UserId = user.UserId,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            AvatarUrl = user.AvatarUrl,
+            AuthProvider = user.AuthProvider,
+            Role = user.SystemRole
+        };
+
+        private static ProfileResponseDto BuildProfileResponse(User user) => new()
+        {
+            UserId = user.UserId,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            AvatarUrl = user.AvatarUrl,
+            AuthProvider = user.AuthProvider,
+            Role = user.SystemRole
+        };
+
         private string GenerateJwtToken(User user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
@@ -447,17 +528,20 @@ namespace MCFH.Controllers
                         return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tài khoản của bạn đã bị khóa bởi hệ thống quản trị." });
                     }
 
+                    // Đồng bộ avatar & tên từ Google mỗi lần đăng nhập
+                    if (!string.IsNullOrEmpty(avatarUrl))
+                        user.AvatarUrl = avatarUrl;
+                    if (!string.IsNullOrEmpty(fullName))
+                        user.FullName = fullName;
+
                     // TRƯỜNG HỢP 4: Email đã đăng ký bằng Form thủ công trước đó (local), giờ chọn Login Google lần đầu
                     if (user.AuthProvider == "local" && string.IsNullOrEmpty(user.GoogleId))
                     {
-                        // Thực hiện liên kết tài khoản (Link Account) tự động để tăng trải nghiệm người dùng
                         user.GoogleId = googleId;
-                        if (string.IsNullOrEmpty(user.AvatarUrl)) user.AvatarUrl = avatarUrl; // Cập nhật avatar nếu trống
-
                         _context.Users.Update(user);
-                        await _context.SaveChangesAsync();
                     }
-                    // TRƯỜNG HỢP 3: Tài khoản Google cũ quay lại đăng nhập -> Không cần làm gì thêm, lấy dữ liệu ra dùng
+
+                    await _context.SaveChangesAsync();
                 }
                 else
                 {
@@ -483,17 +567,7 @@ namespace MCFH.Controllers
 
                 // BƯỚC CUỐI: Cấp JWT Token nội bộ của hệ thống MCFH để Frontend sử dụng cho các API sau
                 string systemToken = GenerateJwtToken(user);
-
-                var response = new AuthResponseDto
-                {
-                    Token = systemToken,
-                    UserId = user.UserId,
-                    Email = user.Email,
-                    FullName = user.FullName,
-                    Role = user.SystemRole
-                };
-
-                return Ok(response);
+                return Ok(BuildAuthResponse(user, systemToken));
             }
             catch (InvalidJwtException)
             {
@@ -557,7 +631,8 @@ namespace MCFH.Controllers
             string displayName = string.IsNullOrWhiteSpace(user.FullName) ? "Thành viên MCFH" : user.FullName;
 
             string emailSubject = "MCFH Hub - Yêu cầu đặt lại mật khẩu tài khoản";
-            string resetLink = $"http://localhost:3000/reset-password?token={resetToken}"; // Đường dẫn FrontEnd React sau này
+            string frontendBase = _config["Frontend:BaseUrl"] ?? "http://localhost:5173";
+            string resetLink = $"{frontendBase.TrimEnd('/')}/reset-password?token={resetToken}";
 
             // Sử dụng giao diện mẫu Card-Layout chuyên nghiệp đồng bộ với hệ thống Email thông báo
             string emailBody = $@"
@@ -663,19 +738,15 @@ namespace MCFH.Controllers
                 return BadRequest(new { message = "Mật khẩu mới và mật khẩu xác nhận không trùng khớp." });
             }
 
-            // 1. Lấy thông tin UserId ra từ các Claims nằm trong JWT Token của người dùng đang gọi API
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                              ?? User.FindFirst("userId")?.Value; // Tùy thuộc vào tên claim bạn đặt ở hàm GenerateJwtToken
-
-            if (string.IsNullOrEmpty(userIdClaim))
+            // 1. Lấy thông tin UserId từ JWT Token
+            var userId = GetUserId();
+            if (userId == null)
             {
                 return Unauthorized(new { message = "Vui lòng đăng nhập để thực hiện tính năng này." });
             }
 
-            int userId = int.Parse(userIdClaim);
-
             // 2. Lấy thông tin user trong database ra đối chiếu
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users.FindAsync(userId.Value);
             if (user == null)
             {
                 return NotFound(new { message = "Tài khoản không tồn tại." });

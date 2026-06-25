@@ -13,6 +13,8 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import ReporterLayout from '../../components/reporter/ReporterLayout';
+import { reporterApi } from '../../api/portalApi';
+import { extractApiError } from '../../utils/authStorage';
 
 interface ScrapingTarget {
   id: string;
@@ -38,6 +40,8 @@ export default function PipelineConfig() {
   const [threshold, setThreshold] = useState<number>(30);
   const [filterTeencode, setFilterTeencode] = useState<boolean>(true);
   const [isActivated, setIsActivated] = useState<boolean>(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Hàm thêm nguồn cào mới
   const addTarget = () => {
@@ -72,9 +76,20 @@ export default function PipelineConfig() {
   };
 
   // Kích hoạt tiến trình
-  const handleActivate = () => {
-    setIsActivated(true);
-    alert(`Đã lưu cấu hình và kích hoạt thành công cho đơn hàng #${id}!`);
+  const handleActivate = async () => {
+    if (!id) return;
+    const requestId = Number(id);
+    setIsBusy(true);
+    setErrorMessage('');
+    try {
+      await reporterApi.startWork(requestId);
+      setIsActivated(true);
+      navigate(`/reporter/workspace/${requestId}`);
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể kích hoạt pipeline.'));
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   return (

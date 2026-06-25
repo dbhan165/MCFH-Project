@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -14,6 +15,9 @@ import {
   Radio,
   HelpCircle,
 } from 'lucide-react';
+import ConfirmModal from '../common/ConfirmModal';
+import { clearAuthSession } from '../../utils/authStorage';
+import McfhLogo from '../brand/McfhLogo';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -38,13 +42,25 @@ const AdminLayout = ({
   adminRole,
 }: AdminLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  const executeLogout = () => {
+    clearAuthSession();
+    navigate('/login');
+  };
 
   return (
     <div className="min-h-screen flex bg-[#f9fafb] text-[#111827] font-sans">
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
         <div className="px-6 py-6 border-b border-gray-100">
-          <h1 className="text-xl font-bold tracking-tight">MCFH</h1>
-          <p className="text-sm text-[#6b7280] mt-0.5">Admin Portal</p>
+          <McfhLogo
+            linkTo="/admin/dashboard"
+            size={34}
+            textClassName="text-[#111827] text-xl"
+            subtitle="Admin Portal"
+            subtitleClassName="text-xs text-[#6b7280] font-medium"
+          />
         </div>
 
         <nav className="flex-1 py-4 px-3 space-y-1">
@@ -75,13 +91,14 @@ const AdminLayout = ({
             <User className="w-5 h-5" />
             Profile
           </Link>
-          <Link
-            to="/login"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] transition-colors"
+          <button
+            type="button"
+            onClick={() => setIsLogoutModalOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-red-50 hover:text-[#ef4444] transition-colors"
           >
             <LogOut className="w-5 h-5" />
-            Sign Out
-          </Link>
+            Đăng xuất
+          </button>
         </div>
       </aside>
 
@@ -131,6 +148,17 @@ const AdminLayout = ({
 
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
       </div>
+
+      <ConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={executeLogout}
+        title="Xác nhận đăng xuất"
+        message="Bạn có chắc chắn muốn đăng xuất khỏi Admin Portal? Bạn sẽ cần đăng nhập lại để tiếp tục."
+        confirmText="Đăng xuất"
+        cancelText="Hủy bỏ"
+        type="warning"
+      />
     </div>
   );
 };
