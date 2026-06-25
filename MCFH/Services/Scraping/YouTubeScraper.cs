@@ -85,6 +85,18 @@ public class YouTubeScraper
             {
                 _logger.LogWarning("Không lấy được tên channel cho {Url}", videoUrl);
             }
+            try
+            {
+                var publishedAtStr = await page.GetAttributeAsync("meta[itemprop='datePublished']", "content");
+                if (DateTime.TryParse(publishedAtStr, out var publishedAt))
+                {
+                    result.PostedAt = publishedAt;
+                }
+            }
+            catch
+            {
+                _logger.LogWarning("Không lấy được ngày đăng cho {Url}", videoUrl);
+            }
 
             await page.EvaluateAsync(@"
                 const v = document.querySelector('video');
