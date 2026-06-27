@@ -24,4 +24,13 @@
         public string? Description { get; set; }
         public string? SearchQuery { get; set; }
     }
+
+    public class AnalyzeProjectResultDto
+    {
+        public int ProjectId { get; set; }
+        public int AnalyzedCount { get; set; }
+        public int SkippedCount { get; set; }
+        public int TotalFeedbacks { get; set; }
+        public string Message { get; set; } = null!;
+    }
 }
