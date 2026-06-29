@@ -7,7 +7,7 @@ namespace MCFH.Services.Scraping;
 
 public static class TikTokStealthHelper
 {
-    public static BrowserTypeLaunchOptions CreateLaunchOptions(bool headless)
+    public static BrowserTypeLaunchOptions CreateLaunchOptions(bool headless, Proxy? proxy = null)
     {
         var args = new List<string>
         {
@@ -26,7 +26,8 @@ public static class TikTokStealthHelper
         return new BrowserTypeLaunchOptions
         {
             Headless = headless,
-            Args = args.ToArray()
+            Args = args.ToArray(),
+            Proxy = proxy
         };
     }
 

@@ -17,7 +17,11 @@ public class ScrapeByKeywordService
     private readonly McfhDbContext _db;
     private readonly AiAnalysisService _aiAnalysisService;
     private readonly ScrapeOptions _scrapeOptions;
+    private readonly ProxyRotationService _proxyRotation;
+    private readonly ProxyOptions _proxyOptions;
     private ScrapeOptions _activeOptions = null!;
+    private SystemProxy? _activeProxy;
+    private string? _scrapeJobId;
     private readonly SemaphoreSlim _saveLock = new(1, 1);
     private ConcurrentDictionary<string, byte>? _scrapedKeys;
     private int _skippedCount;
@@ -25,23 +29,30 @@ public class ScrapeByKeywordService
     public ScrapeByKeywordService(
         McfhDbContext db,
         AiAnalysisService aiAnalysisService,
-        IOptions<ScrapeOptions> scrapeOptions)
+        IOptions<ScrapeOptions> scrapeOptions,
+        ProxyRotationService proxyRotation,
+        IOptions<ProxyOptions> proxyOptions)
     {
         _db = db;
         _aiAnalysisService = aiAnalysisService;
         _scrapeOptions = scrapeOptions.Value;
+        _proxyRotation = proxyRotation;
+        _proxyOptions = proxyOptions.Value;
     }
 
     public async Task<ScrapeByKeywordResult> ScrapeAsync(
         int projectId,
         ScrapeJobProgress? progress = null,
         ScrapeTimeFilter? timeFilter = null,
-        bool fastDemo = false)
+        bool fastDemo = false,
+        string? scrapeJobId = null)
     {
         var result = new ScrapeByKeywordResult();
         timeFilter ??= new ScrapeTimeFilter();
         _activeOptions = ResolveOptions(fastDemo);
         var allowUnknownDates = _activeOptions.FastDemoMode;
+        _scrapeJobId = scrapeJobId;
+        _activeProxy = null;
 
         var project = await _db.Projects.FindAsync(projectId);
         if (project == null)
@@ -56,24 +67,28 @@ public class ScrapeByKeywordService
             return result;
         }
 
-        var keyword = project.SearchQuery;
-        result.Keyword = keyword;
-
-        progress?.InitPlatforms(
-            project.EnableFacebook == true,
-            project.EnableYoutube == true,
-            project.EnableTiktok == true);
-        progress?.SetPhase("scraping", _activeOptions.FastDemoMode
-            ? $"Chế độ demo nhanh — cào «{keyword}»..."
-            : timeFilter.IsActive
-                ? $"Đang cào từ khóa «{keyword}» (trong {timeFilter.PostedSinceDays} ngày gần đây)..."
-                : $"Đang cào từ khóa «{keyword}»...");
-
-        _scrapedKeys = await LoadExistingScrapeKeysAsync(projectId);
-        _skippedCount = 0;
-
         try
         {
+            await EnsureProxyAsync(rotate: false);
+            if (_activeProxy != null)
+                progress?.SetPhase("scraping", $"Proxy {_activeProxy.IpAddress} — chuẩn bị cào...");
+
+            var keyword = project.SearchQuery;
+            result.Keyword = keyword;
+
+            progress?.InitPlatforms(
+                project.EnableFacebook == true,
+                project.EnableYoutube == true,
+                project.EnableTiktok == true);
+            progress?.SetPhase("scraping", _activeOptions.FastDemoMode
+                ? $"Chế độ demo nhanh — cào «{keyword}»..."
+                : timeFilter.IsActive
+                    ? $"Đang cào từ khóa «{keyword}» (trong {timeFilter.PostedSinceDays} ngày gần đây)..."
+                    : $"Đang cào từ khóa «{keyword}»...");
+
+            _scrapedKeys = await LoadExistingScrapeKeysAsync(projectId);
+            _skippedCount = 0;
+
             var parallelTasks = new List<Task>();
 
             if (project.EnableFacebook == true)
@@ -104,17 +119,53 @@ public class ScrapeByKeywordService
                 return await FinalizeResultAsync(projectId, result, progress, cancelled: true);
 
             if (project.EnableTiktok == true && !(_activeOptions.FastDemoMode && _activeOptions.FastDemoRunTikTokParallel))
+            {
+                await EnsureProxyAsync(rotate: _proxyOptions.RotatePerPlatform);
                 await RunTikTokAsync(projectId, keyword, result, progress, timeFilter, allowUnknownDates);
+            }
 
             return await FinalizeResultAsync(projectId, result, progress, progress?.IsCancellationRequested == true);
         }
         finally
         {
+            if (_activeProxy != null)
+            {
+                var total = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count;
+                if (total > 0)
+                    await _proxyRotation.RecordSuccessAsync(_activeProxy.ProxyId);
+                else if (result.Errors.Count > 0 || !string.IsNullOrWhiteSpace(result.ErrorMessage))
+                    await _proxyRotation.RecordFailureAsync(_activeProxy.ProxyId);
+            }
+
+            _activeProxy = null;
+            _scrapeJobId = null;
             _scrapedKeys = null;
             _skippedCount = 0;
             _activeOptions = _scrapeOptions;
         }
     }
+
+    private async Task EnsureProxyAsync(bool rotate)
+    {
+        if (!_proxyRotation.IsEnabled)
+            return;
+
+        if (rotate && _activeProxy != null)
+        {
+            _activeProxy = await _proxyRotation.RotateAsync(_activeProxy, _scrapeJobId, markCurrentAsFailed: false);
+            return;
+        }
+
+        if (_activeProxy != null)
+            return;
+
+        _activeProxy = await _proxyRotation.AcquireNextAsync();
+        if (_activeProxy != null && !string.IsNullOrWhiteSpace(_scrapeJobId))
+            await _proxyRotation.AssignToJobAsync(_scrapeJobId, _activeProxy.ProxyId);
+    }
+
+    private Proxy? CurrentPlaywrightProxy() =>
+        ProxyRotationService.ToPlaywrightProxy(_activeProxy);
 
     private ScrapeOptions ResolveOptions(bool fastDemoRequest)
     {
@@ -264,12 +315,12 @@ public class ScrapeByKeywordService
                 var feedUrl = FacebookUrlHelper.BuildFeedUrl(groupUrl);
 
                 var scraper = new FacebookGroupScraper();
-                var posts = await scraper.ScrapeAsync(searchUrl, poolSize, _activeOptions);
+                var posts = await scraper.ScrapeAsync(searchUrl, poolSize, _activeOptions, proxy: CurrentPlaywrightProxy());
 
                 if (posts.Count == 0 && !string.Equals(searchUrl, feedUrl, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine($"[Facebook] Search rỗng — thử feed group: {feedUrl}");
-                    posts = await scraper.ScrapeAsync(feedUrl, poolSize, _activeOptions);
+                    posts = await scraper.ScrapeAsync(feedUrl, poolSize, _activeOptions, proxy: CurrentPlaywrightProxy());
                 }
 
                 foreach (var post in posts)
@@ -309,7 +360,8 @@ public class ScrapeByKeywordService
                         && !string.IsNullOrWhiteSpace(post.PostUrl))
                     {
                         var fbCommentScraper = new FacebookCommentScraper();
-                        var extra = await fbCommentScraper.ScrapePostCommentsAsync(post.PostUrl!, _activeOptions);
+                        var extra = await fbCommentScraper.ScrapePostCommentsAsync(
+                            post.PostUrl!, _activeOptions, CurrentPlaywrightProxy());
                         commentTexts = CommentTextHelper.FilterFacebook(commentTexts.Concat(extra), fbMax);
                     }
 
@@ -371,7 +423,7 @@ public class ScrapeByKeywordService
         {
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(
-                PlaywrightScrapeHelper.YouTubeLaunch(_activeOptions));
+                PlaywrightScrapeHelper.YouTubeLaunch(_activeOptions, CurrentPlaywrightProxy()));
 
             var searchScraper = new YouTubeSearchScraper();
             var urls = await searchScraper.SearchAsync(
@@ -556,7 +608,7 @@ public class ScrapeByKeywordService
         {
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(
-                TikTokStealthHelper.CreateLaunchOptions(headless));
+                TikTokStealthHelper.CreateLaunchOptions(headless, CurrentPlaywrightProxy()));
 
             context = await TikTokStealthHelper.CreateContextAsync(browser);
 

@@ -6,7 +6,8 @@ namespace MCFH.Services.Scraping;
 
 public class FacebookGroupScraper
 {
-    public async Task<List<GroupPost>> ScrapeAsync(string groupUrl, int maxPosts, ScrapeOptions? options = null, bool feedOnly = false)
+    public async Task<List<GroupPost>> ScrapeAsync(
+        string groupUrl, int maxPosts, ScrapeOptions? options = null, bool feedOnly = false, Proxy? proxy = null)
     {
         options ??= new ScrapeOptions();
         var fast = options.FastDemoMode;
@@ -14,7 +15,8 @@ public class FacebookGroupScraper
         var results = new List<GroupPost>();
 
         using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(PlaywrightScrapeHelper.SocialLaunch(options));
+        await using var browser = await playwright.Chromium.LaunchAsync(
+            PlaywrightScrapeHelper.SocialLaunch(options, proxy));
 
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {

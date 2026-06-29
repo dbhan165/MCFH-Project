@@ -11,10 +11,10 @@ const axiosClient = axios.create({
 
 // Bạn có thể thêm Interceptors ở đây sau này (ví dụ: tự động đính kèm Token khi gửi request)
 axiosClient.interceptors.request.use((config) => {
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //     config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
 });
 

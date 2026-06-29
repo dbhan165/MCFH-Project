@@ -38,7 +38,7 @@ public class ScrapingJobService
 
         try
         {
-            var result = await _scrapeService.ScrapeAsync(projectId);
+            var result = await _scrapeService.ScrapeAsync(projectId, scrapeJobId: jobId);
             var status = ScrapingJobPersistence.MapHangfireStatus(result);
             await ScrapingJobPersistence.FinalizeAsync(_db, jobId, status, result);
         }
