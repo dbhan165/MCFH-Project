@@ -65,7 +65,7 @@ public class ScrapeJobRunner
             using var scope = _scopeFactory.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<ScrapeByKeywordService>();
             var result = await service.ScrapeAsync(
-                projectId, progress, ScrapeTimeFilter.FromDays(postedSinceDays), fastDemo);
+                projectId, progress, ScrapeTimeFilter.FromDays(postedSinceDays), fastDemo, jobId);
 
             if (state.IsCancellationRequested)
                 state.CompleteCancelled(result);
