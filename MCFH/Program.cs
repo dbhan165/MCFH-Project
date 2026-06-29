@@ -123,11 +123,12 @@ namespace MCFH
 
             app.MapControllers();
 
-            // 5. Đăng ký Recurring Job — chạy mỗi 15 phút (UC-76)
+            // 5. Scheduler UC-76: tick thường xuyên, mỗi project cào khi đủ PerProjectScrapeIntervalMinutes từ started_at
+            var scrapeSchedulerCron = builder.Configuration["Scraping:HangfireSchedulerCron"] ?? "*/1 * * * *";
             RecurringJob.AddOrUpdate<ScrapingJobService>(
-                "scrape-all-projects",
-                service => service.RunAllProjectsAsync(),
-                "*/15 * * * *"
+                "scrape-due-projects",
+                service => service.RunDueProjectsAsync(),
+                scrapeSchedulerCron
             );
 
             app.Run();
