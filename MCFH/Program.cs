@@ -88,9 +88,12 @@ namespace MCFH
 
             builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
             builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
+            builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
             builder.Services.AddHttpClient<IGeminiSentimentService, GeminiSentimentService>();
             builder.Services.AddScoped<AiAnalysisService>();
             builder.Services.AddScoped<ScrapeByKeywordService>();
+            builder.Services.AddScoped<ProxyRotationService>();
+            builder.Services.AddScoped<ProxyAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();
             builder.Services.AddSingleton<ScrapeJobRunner>();
 

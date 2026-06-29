@@ -5,13 +5,13 @@ namespace MCFH.Services.Scraping;
 
 public static class PlaywrightScrapeHelper
 {
-  public static BrowserTypeLaunchOptions YouTubeLaunch(ScrapeOptions options) =>
-      CreateHeadlessLaunch(options.YouTubeHeadless);
+  public static BrowserTypeLaunchOptions YouTubeLaunch(ScrapeOptions options, Proxy? proxy = null) =>
+      CreateHeadlessLaunch(options.YouTubeHeadless, proxy);
 
-  public static BrowserTypeLaunchOptions SocialLaunch(ScrapeOptions options) =>
-      CreateHeadlessLaunch(options.SocialHeadless);
+  public static BrowserTypeLaunchOptions SocialLaunch(ScrapeOptions options, Proxy? proxy = null) =>
+      CreateHeadlessLaunch(options.SocialHeadless, proxy);
 
-  public static BrowserTypeLaunchOptions CreateHeadlessLaunch(bool headless)
+  public static BrowserTypeLaunchOptions CreateHeadlessLaunch(bool headless, Proxy? proxy = null)
   {
     var args = new List<string>
     {
@@ -28,7 +28,8 @@ public static class PlaywrightScrapeHelper
     return new BrowserTypeLaunchOptions
     {
       Headless = headless,
-      Args = args.ToArray()
+      Args = args.ToArray(),
+      Proxy = proxy
     };
   }
 
