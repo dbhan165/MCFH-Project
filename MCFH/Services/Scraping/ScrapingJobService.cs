@@ -1,33 +1,65 @@
-﻿using MCFH.Models;
+﻿using Hangfire;
+using MCFH.Configuration;
+using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace MCFH.Services.Scraping;
 
-/// <summary>Hangfire — quét định kỳ mọi project active, dùng chung pipeline ScrapeByKeywordService.</summary>
+/// <summary>
+/// Hangfire — lên lịch cào theo từng project (UC-76).
+/// Căn cứ SCRAPING_JOBS.started_at: mỗi project cách lần bắt đầu trước ≥ PerProjectScrapeIntervalMinutes.
+/// </summary>
 public class ScrapingJobService
 {
     private readonly McfhDbContext _db;
     private readonly ScrapeByKeywordService _scrapeService;
+    private readonly ScrapeOptions _scrapeOptions;
 
-    public ScrapingJobService(McfhDbContext db, ScrapeByKeywordService scrapeService)
+    public ScrapingJobService(
+        McfhDbContext db,
+        ScrapeByKeywordService scrapeService,
+        IOptions<ScrapeOptions> scrapeOptions)
     {
         _db = db;
         _scrapeService = scrapeService;
+        _scrapeOptions = scrapeOptions.Value;
     }
 
-    public async Task RunAllProjectsAsync()
+    /// <summary>
+    /// Tick scheduler (cron thường mỗi phút): chỉ chạy project đã đến hạn, không quét tuần tự cả pool.
+    /// </summary>
+    [DisableConcurrentExecution(timeoutInSeconds: 60 * 30)]
+    public async Task RunDueProjectsAsync()
     {
-        var projects = await _db.Projects
+        var interval = _scrapeOptions.PerProjectScrapeIntervalMinutes;
+        var stale = _scrapeOptions.StaleRunningJobMinutes;
+
+        var projectIds = await _db.Projects
             .Where(p => p.IsDeleted != true
-                && (p.EnableFacebook == true || p.EnableYoutube == true || p.EnableTiktok == true))
+                        && (p.EnableFacebook == true || p.EnableYoutube == true || p.EnableTiktok == true))
+            .Select(p => p.ProjectId)
             .ToListAsync();
 
-        Console.WriteLine($"[Hangfire] Bắt đầu quét {projects.Count} project active");
+        var dueIds = new List<int>();
+        foreach (var projectId in projectIds)
+        {
+            if (await ScrapingJobPersistence.IsProjectDueForScrapeAsync(_db, projectId, interval, stale))
+                dueIds.Add(projectId);
+        }
 
-        foreach (var project in projects)
-            await RunSingleProjectAsync(project.ProjectId);
+        if (dueIds.Count == 0)
+        {
+            Console.WriteLine($"[Hangfire] Scheduler: 0/{projectIds.Count} project đến hạn (interval {interval} phút từ started_at).");
+            return;
+        }
 
-        Console.WriteLine($"[Hangfire] Hoàn tất quét {projects.Count} project");
+        Console.WriteLine($"[Hangfire] Scheduler: {dueIds.Count}/{projectIds.Count} project đến hạn — bắt đầu cào.");
+
+        foreach (var projectId in dueIds)
+            await RunSingleProjectAsync(projectId);
+
+        Console.WriteLine($"[Hangfire] Scheduler: hoàn tất {dueIds.Count} project.");
     }
 
     private async Task RunSingleProjectAsync(int projectId)
