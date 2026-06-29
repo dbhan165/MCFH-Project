@@ -5,7 +5,7 @@ namespace MCFH.Services.Scraping;
 
 public class FacebookCommentScraper
 {
-    public async Task<List<string>> ScrapePostCommentsAsync(string postUrl, ScrapeOptions options)
+    public async Task<List<string>> ScrapePostCommentsAsync(string postUrl, ScrapeOptions options, Proxy? proxy = null)
     {
         var max = Math.Max(options.MaxCommentsPerItem, 40);
 
@@ -13,7 +13,7 @@ public class FacebookCommentScraper
         {
             using var playwright = await Playwright.CreateAsync();
             await using var browser = await playwright.Chromium.LaunchAsync(
-                PlaywrightScrapeHelper.SocialLaunch(options));
+                PlaywrightScrapeHelper.SocialLaunch(options, proxy));
 
             var context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
