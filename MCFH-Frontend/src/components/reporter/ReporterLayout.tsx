@@ -23,7 +23,7 @@ const topNavItems = [
 
 interface ReporterLayoutProps {
   children: ReactNode;
-  activeTopNav?: 'dashboard' | 'reports' | 'archive';
+  activeTopNav?: 'dashboard' | 'reports' | 'archive' | 'settings' | 'performance';
 }
 
 const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutProps) => {

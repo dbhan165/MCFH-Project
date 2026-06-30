@@ -1,25 +1,27 @@
 import { useState } from 'react';
-import { Building2, ArrowLeft, CheckCircle2, Users } from 'lucide-react';
+import { Building2, ArrowLeft, CheckCircle2, Users, AlertCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { workspaceApi } from '../api/workspaceApi';
 
 const CreateWorkspace = () => {
   const navigate = useNavigate();
   const [workspaceName, setWorkspaceName] = useState('');
   const [industry, setIndustry] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!workspaceName.trim()) return;
 
     setIsSubmitting(true);
+    setErrorMessage('');
     try {
-      // Giả lập API lưu trữ dữ liệu
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      // Khởi tạo xong, đưa người dùng vào thẳng không gian mới (Giả lập ID = 4)
-      navigate('/workspace/4/projects');
-    } catch (error) {
-      console.error("Lỗi khi tạo workspace:", error);
+      const workspace = await workspaceApi.create(workspaceName.trim());
+      navigate(`/workspace/${workspace.workspaceId}/projects`);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      setErrorMessage(err.response?.data?.message ?? 'Lỗi khi tạo workspace.');
     } finally {
       setIsSubmitting(false);
     }
@@ -53,6 +55,13 @@ const CreateWorkspace = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+
+          {errorMessage && (
+            <div className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300 text-sm">
+              <AlertCircle size={18} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
           
           <div className="space-y-6 bg-[#151B2B] p-8 rounded-2xl border border-white/5">
             {/* Tên Workspace */}

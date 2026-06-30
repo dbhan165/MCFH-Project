@@ -1,4 +1,4 @@
-import type { ElementType } from 'react';
+import { useEffect, useState, type ElementType } from 'react';
 import {
   Play,
   Wallet,
@@ -11,6 +11,7 @@ import {
   Download,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
+import { adminApi } from '../../api/portalApi';
 
 type PlanStatus = 'Active' | 'Popular';
 
@@ -87,6 +88,31 @@ const statusStyles: Record<PlanStatus, string> = {
 };
 
 const SubscriptionPlans = () => {
+  const [plansData, setPlansData] = useState(plans);
+
+  useEffect(() => {
+    adminApi
+      .getSubscriptionPlans()
+      .then((apiPlans) => {
+        if (apiPlans.length === 0) return;
+        setPlansData(
+          apiPlans.map((p, index) => ({
+            id: p.planId,
+            name: p.name,
+            icon: index === 0 ? Zap : index === 1 ? Crown : Building2,
+            iconBg: index === 1 ? 'bg-red-50' : 'bg-blue-50',
+            iconColor: index === 1 ? 'text-[#ef4444]' : 'text-blue-500',
+            monthlyPrice: p.priceLabel,
+            creditLimit: p.aiCreditLimit.toLocaleString('vi-VN'),
+            activeSubscribers: p.activeSubscribers,
+            status: (index === 1 ? 'Popular' : 'Active') as PlanStatus,
+            lastUpdated: new Date().toLocaleDateString('vi-VN'),
+          }))
+        );
+      })
+      .catch(() => undefined);
+  }, []);
+
   return (
     <AdminLayout searchPlaceholder="Search systems or users...">
       <div className="mb-8">
@@ -167,7 +193,7 @@ const SubscriptionPlans = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {plans.map((plan) => (
+              {plansData.map((plan) => (
                 <tr key={plan.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">

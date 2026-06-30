@@ -447,3 +447,5 @@ build/
 
 # Facebook session cookie — KHÔNG commit, chứa thông tin đăng nhập nhạy cảm
 **/fb_cookie.json
+**/tiktok_cookie.json
+MCFH/cookies/

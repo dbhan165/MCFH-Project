@@ -36,9 +36,9 @@ const Welcome = () => {
             <Link to="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
               Login
             </Link>
-            <button className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-colors">
+            <Link to="/login" className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-colors">
               Start Free Trial
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -71,12 +71,12 @@ const Welcome = () => {
 
             {/* Call to Actions (CTA) */}
             <div className="flex items-center gap-8 pt-2">
-              <button className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-7 py-3.5 rounded text-sm font-medium flex items-center gap-2 transition-colors">
+              <Link to="/create-workspace" className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-7 py-3.5 rounded text-sm font-medium flex items-center gap-2 transition-colors">
                 Khởi tạo Workspace ngay <ArrowRight size={18} />
-              </button>
-              <button className="text-gray-300 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
+              </Link>
+              <Link to="/pricing" className="text-gray-300 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
                 <PlayCircle size={20} /> Xem demo sản phẩm
-              </button>
+              </Link>
             </div>
 
             {/* Statistics */}
