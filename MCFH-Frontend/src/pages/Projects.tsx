@@ -1,307 +1,756 @@
-import { useState } from 'react';
-import { 
-  Search, Plus, Bell, ArrowRight, EyeOff, Play, Pause, 
-  MoreVertical, Building2, UserPlus, Calendar, User 
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Search,
+  Plus,
+  ArrowRight,
+  Building2,
+  UserPlus,
+  Loader2,
+  AlertCircle,
+  MoreVertical,
+  LayoutDashboard,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  Pencil,
+  FolderKanban,
+  Radio,
+  Hash,
+  ChevronLeft,
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { projectApi, scrapeApi } from '../api/projectApi';
+import { scrapeOrderApi, type ScrapeOrder } from '../api/scrapeOrderApi';
+import { workspaceApi } from '../api/workspaceApi';
+import type { Project, ScrapeJobStatus } from '../types/project';
+import { extractApiError } from '../utils/authStorage';
+import { formatWorkspaceDate } from '../utils/workspaceHelpers';
+import { useAppModal } from '../contexts/AppModalContext';
+import ScrapeProgressModal from '../components/scraping/ScrapeProgressModal';
 
-// Nhúng Common Modal vào
-import ConfirmModal from '../components/common/ConfirmModal';
+const CARD_GRADIENTS = [
+  'from-[#FF7575]/15 via-transparent to-transparent',
+  'from-[#00B4D8]/15 via-transparent to-transparent',
+  'from-violet-500/15 via-transparent to-transparent',
+  'from-emerald-500/15 via-transparent to-transparent',
+];
+
+const PLATFORM_STYLES: Record<string, string> = {
+  Facebook: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  YouTube: 'bg-red-500/10 text-red-400 border-red-500/20',
+  TikTok: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+  Maps: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+};
+
+function pickGradientIndex(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return Math.abs(hash) % CARD_GRADIENTS.length;
+}
+
+function getPlatformTags(project: Project) {
+  const tags: string[] = [];
+  if (project.enableFacebook) tags.push('Facebook');
+  if (project.enableYoutube) tags.push('YouTube');
+  if (project.enableTiktok) tags.push('TikTok');
+  if (project.enableMaps) tags.push('Maps');
+  return tags;
+}
+
+const ACTIVE_ORDER_STATUSES = new Set(['paid', 'scraping', 'analyzing']);
+
+function isActiveOrder(order: ScrapeOrder) {
+  return ACTIVE_ORDER_STATUSES.has(order.status);
+}
+
+function isRecentlyCompleted(order: ScrapeOrder) {
+  if (order.status !== 'completed') return false;
+  const doneAt = order.completedAt || order.reportReadyAt;
+  if (!doneAt) return true;
+  const hours = (Date.now() - new Date(doneAt).getTime()) / (1000 * 60 * 60);
+  return hours < 24;
+}
+
+function ProjectCard({
+  project,
+  activeOrder,
+  workspaceId,
+  isMenuOpen,
+  isBusy,
+  menuRef,
+  onToggleMenu,
+  onEnter,
+  onRescrape,
+  onAnalyze,
+  onEdit,
+  onDelete,
+}: {
+  project: Project;
+  activeOrder?: ScrapeOrder | null;
+  workspaceId: string | undefined;
+  isMenuOpen: boolean;
+  isBusy: boolean;
+  menuRef: React.RefObject<HTMLDivElement | null> | undefined;
+  onToggleMenu: () => void;
+  onEnter: () => void;
+  onRescrape: () => void;
+  onAnalyze: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const gradient = CARD_GRADIENTS[pickGradientIndex(project.name)];
+  const platforms = getPlatformTags(project);
+
+  return (
+    <article
+      onClick={onEnter}
+      className="group relative overflow-hidden rounded-3xl border border-white/10 bg-[#151B2B] cursor-pointer transition-all duration-300 hover:border-[#FF7575]/35 hover:shadow-[0_16px_40px_rgba(255,117,117,0.1)] hover:-translate-y-0.5"
+    >
+      <div className={`absolute inset-0 bg-gradient-to-br ${gradient} pointer-events-none`} />
+
+      <div className="relative p-6 flex flex-col min-h-[260px]">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-11 h-11 rounded-xl bg-[#0A101D] border border-white/10 flex items-center justify-center text-[#FF7575] font-bold text-lg shrink-0 group-hover:border-[#FF7575]/30 transition-colors">
+              {project.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-white line-clamp-1 group-hover:text-[#FF7575] transition-colors">
+                {project.name}
+              </h3>
+              {project.description ? (
+                <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{project.description}</p>
+              ) : (
+                <p className="text-xs text-gray-600 mt-0.5">Dự án giám sát mạng xã hội</p>
+              )}
+            </div>
+          </div>
+
+          <div className="relative shrink-0" ref={isMenuOpen ? menuRef : undefined}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMenu();
+              }}
+              disabled={isBusy}
+              className="p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all disabled:opacity-40"
+              aria-label="Tùy chọn dự án"
+            >
+              {isBusy ? <Loader2 size={18} className="animate-spin" /> : <MoreVertical size={18} />}
+            </button>
+
+            {isMenuOpen && (
+              <div className="absolute right-0 top-10 w-52 bg-[#1A2235] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEnter();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                >
+                  <LayoutDashboard size={16} className="text-[#00B4D8]" />
+                  Vào Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRescrape();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                >
+                  <RefreshCw size={16} className="text-emerald-400" />
+                  Cào lại dữ liệu
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAnalyze();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                >
+                  <Sparkles size={16} className="text-amber-400" />
+                  Phân tích AI
+                </button>
+                <div className="h-px bg-white/5 my-1" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                >
+                  <Pencil size={16} className="text-violet-400" />
+                  Chỉnh sửa
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                >
+                  <Trash2 size={16} />
+                  Xóa dự án
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {project.searchQuery && (
+          <div className="flex items-center gap-2 text-xs text-gray-400 bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2 mb-4">
+            <Hash size={13} className="text-[#00B4D8] shrink-0" />
+            <span className="truncate font-medium text-gray-300">{project.searchQuery}</span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-1.5 mb-5">
+          {platforms.length > 0 ? (
+            platforms.map((tag) => (
+              <span
+                key={tag}
+                className={`text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-lg border ${PLATFORM_STYLES[tag] ?? 'bg-white/5 text-gray-400 border-white/10'}`}
+              >
+                {tag}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-gray-600">Chưa cấu hình nguồn</span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-5">
+          <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2">
+            <p className="text-base font-bold text-white tabular-nums">{project.dataSourceCount}</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Nguồn dữ liệu</p>
+          </div>
+          <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2">
+            <p className="text-sm font-semibold text-gray-300 leading-tight mt-0.5">
+              {formatWorkspaceDate(project.createdAt)}
+            </p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Ngày tạo</p>
+          </div>
+        </div>
+
+        {activeOrder && isActiveOrder(activeOrder) && (
+          <div
+            className="mb-4 rounded-xl bg-[#0A101D]/80 border border-[#FF7575]/20 px-3 py-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between text-xs mb-2">
+              <span className="text-[#FF7575] font-semibold">{activeOrder.statusLabel}</span>
+              <span className="text-[#00B4D8] font-bold tabular-nums">{activeOrder.progressPercent}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/5 overflow-hidden mb-2">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-700"
+                style={{ width: `${Math.min(100, Math.max(0, activeOrder.progressPercent))}%` }}
+              />
+            </div>
+            {activeOrder.statusMessage && (
+              <p className="text-[11px] text-gray-500 line-clamp-2 mb-2">{activeOrder.statusMessage}</p>
+            )}
+            <Link
+              to={`/workspace/${workspaceId}/orders/${activeOrder.orderId}`}
+              className="text-[11px] font-semibold text-[#00B4D8] hover:text-white transition-colors"
+            >
+              Xem chi tiết tiến độ →
+            </Link>
+          </div>
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-3 pt-4 border-t border-white/10">
+          {activeOrder && isActiveOrder(activeOrder) ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#FF7575]">
+              <Loader2 size={12} className="animate-spin" />
+              Đang xử lý đơn cào
+            </span>
+          ) : activeOrder && isRecentlyCompleted(activeOrder) ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Báo cáo sẵn sàng
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Đang giám sát
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF7575] group-hover:gap-2.5 transition-all">
+            Phân tích
+            <ArrowRight size={15} />
+          </span>
+        </div>
+      </div>
+    </article>
+  );
+}
 
 const Projects = () => {
   const { workspaceId } = useParams();
   const navigate = useNavigate();
+  const wid = Number(workspaceId);
+  const { confirm, alert } = useAppModal();
 
-  const [projectList, setProjectList] = useState([
-    {
-      id: 1,
-      title: 'Giám sát phản hồi PetCareHub',
-      createdAt: '10/05/2026',
-      owner: 'DB Han',
-      status: 'Active',
-      statusText: 'Đang quét (Real-time)',
-      statusColor: 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20',
-      dotColor: 'bg-[#00B4D8]',
-      totalMentions: '12,450',
-      nsr: '68',
-      nsrColor: 'text-[#00B4D8]',
-      ratioText: '80% Positive',
-      ratioColor: 'bg-[#00B4D8]',
-      ratioWidth: 'w-[80%]',
-      hoverBorder: 'hover:border-[#00B4D8]/30 hover:shadow-[#00B4D8]/5'
-    },
-    {
-      id: 2,
-      title: 'Khủng hoảng truyền thông Lô hàng lỗi',
-      createdAt: '20/06/2026',
-      owner: 'Acma Agency',
-      status: 'Active',
-      statusText: 'Mức độ nghiêm trọng cao',
-      statusColor: 'bg-[#FF7575]/10 text-[#FF7575] border-[#FF7575]/20',
-      dotColor: 'bg-[#FF7575]',
-      totalMentions: '45,000',
-      nsr: '-45',
-      nsrColor: 'text-[#FF7575]',
-      ratioText: '70% Negative',
-      ratioColor: 'bg-[#FF7575]',
-      ratioWidth: 'w-[70%]',
-      hoverBorder: 'hover:border-[#FF7575]/30 hover:shadow-[#FF7575]/5'
-    },
-    {
-      id: 3,
-      title: 'Theo dõi Đối thủ cạnh tranh Q2',
-      createdAt: '01/04/2026',
-      owner: 'System Auto',
-      status: 'Disabled',
-      statusText: 'Đã tạm dừng',
-      statusColor: 'bg-white/10 text-gray-400 border-white/5',
-      dotColor: 'bg-gray-500',
-      totalMentions: '5,200',
-      nsr: '12',
-      nsrColor: 'text-yellow-500',
-      ratioText: 'Neutral',
-      ratioColor: 'bg-yellow-500',
-      ratioWidth: 'w-[50%]',
-      hoverBorder: 'hover:border-yellow-500/30 hover:shadow-yellow-500/5'
-    }
-  ]);
-
-  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
-
-  // State quản lý Modal Xác nhận
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    projectId: number | null;
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [projectList, setProjectList] = useState<Project[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [actionProjectId, setActionProjectId] = useState<number | null>(null);
+  const [orderByProject, setOrderByProject] = useState<Record<number, ScrapeOrder>>({});
+  const [scrapeProgress, setScrapeProgress] = useState<{
+    open: boolean;
     projectName: string;
-    action: 'disable' | 'enable' | null;
-  }>({
-    isOpen: false,
-    projectId: null,
-    projectName: '',
-    action: null
-  });
+    job: ScrapeJobStatus | null;
+    jobId: string | null;
+    isCancelling: boolean;
+  }>({ open: false, projectName: '', job: null, jobId: null, isCancelling: false });
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Hàm kích hoạt/vô hiệu hóa thực sự (chỉ chạy khi bấm Đồng ý trên Modal)
-  const executeToggleStatus = () => {
-    if (confirmModal.projectId !== null) {
-      setProjectList(prev => prev.map(proj => {
-        if (proj.id === confirmModal.projectId) {
-          const isDisabled = proj.status === 'Disabled';
-          return {
-            ...proj,
-            status: isDisabled ? 'Active' : 'Disabled',
-            statusText: isDisabled ? 'Đang quét (Real-time)' : 'Đã tạm dừng',
-            statusColor: isDisabled ? 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20' : 'bg-white/10 text-gray-400 border-white/5',
-            dotColor: isDisabled ? 'bg-[#00B4D8]' : 'bg-gray-500'
-          };
-        }
-        return proj;
-      }));
+  const loadProjects = useCallback(async () => {
+    if (!wid || Number.isNaN(wid)) return;
+
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const [ws, projects] = await Promise.all([
+        workspaceApi.getById(wid),
+        projectApi.getProjects(wid),
+      ]);
+      setWorkspaceName(ws.name);
+      setProjectList(projects);
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể tải danh sách dự án.'));
+    } finally {
+      setIsLoading(false);
     }
-    // Đóng modal sau khi chạy xong
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  }, [wid]);
+
+  const loadScrapeOrders = useCallback(async () => {
+    if (!wid || Number.isNaN(wid)) return;
+    try {
+      const orders = await scrapeOrderApi.list(wid);
+      const map: Record<number, ScrapeOrder> = {};
+      for (const order of orders) {
+        const existing = map[order.projectId];
+        if (!existing || new Date(order.createdAt) > new Date(existing.createdAt)) {
+          map[order.projectId] = order;
+        }
+      }
+      setOrderByProject(map);
+    } catch {
+      /* không chặn trang nếu API đơn lỗi */
+    }
+  }, [wid]);
+
+  useEffect(() => {
+    loadProjects();
+    loadScrapeOrders();
+  }, [loadProjects, loadScrapeOrders]);
+
+  const hasActiveOrders = useMemo(
+    () => Object.values(orderByProject).some(isActiveOrder),
+    [orderByProject]
+  );
+
+  useEffect(() => {
+    if (!hasActiveOrders) return;
+
+    const tick = () => {
+      if (document.visibilityState === 'visible') loadScrapeOrders();
+    };
+    tick();
+    const timer = setInterval(tick, 8000);
+    return () => clearInterval(timer);
+  }, [hasActiveOrders, loadScrapeOrders]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return projectList;
+    return projectList.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.searchQuery?.toLowerCase().includes(q) ?? false) ||
+        (p.description?.toLowerCase().includes(q) ?? false)
+    );
+  }, [projectList, searchQuery]);
+
+  const stats = useMemo(() => {
+    const sources = projectList.reduce((sum, p) => sum + p.dataSourceCount, 0);
+    const withKeyword = projectList.filter((p) => p.searchQuery).length;
+    return { total: projectList.length, sources, withKeyword };
+  }, [projectList]);
+
+  const handleDeleteProject = async (project: Project) => {
+    const confirmed = await confirm({
+      title: 'Xóa dự án',
+      message: `Bạn có chắc muốn xóa "${project.name}"?\nDữ liệu đã cào và phân tích AI sẽ không thể khôi phục.`,
+      confirmText: 'Xóa dự án',
+      cancelText: 'Hủy bỏ',
+      type: 'danger',
+    });
+    if (!confirmed) return;
+
+    setActionProjectId(project.projectId);
+    setOpenMenuId(null);
+
+    try {
+      await projectApi.delete(wid, project.projectId);
+      setProjectList((prev) => prev.filter((p) => p.projectId !== project.projectId));
+      await alert({
+        title: 'Đã xóa dự án',
+        message: `"${project.name}" đã được xóa khỏi workspace.`,
+        type: 'success',
+      });
+    } catch (error) {
+      await alert({
+        title: 'Không thể xóa',
+        message: extractApiError(error, 'Không thể xóa dự án.'),
+        type: 'error',
+      });
+    } finally {
+      setActionProjectId(null);
+    }
+  };
+
+  const handleRescrape = async (project: Project) => {
+    setActionProjectId(project.projectId);
+    setOpenMenuId(null);
+    setErrorMessage('');
+    setScrapeProgress({ open: true, projectName: project.name, job: null, jobId: null, isCancelling: false });
+
+    try {
+      const result = await scrapeApi.byKeyword(project.projectId, (job) => {
+        setScrapeProgress((prev) => ({
+          open: true,
+          projectName: project.name,
+          job,
+          jobId: job.jobId || prev.jobId,
+          isCancelling: prev.isCancelling || job.phase === 'cancelling',
+        }));
+      });
+
+      const count =
+        (result.facebook?.length ?? 0) + (result.youTube?.length ?? 0) + (result.tikTok?.length ?? 0);
+
+      setScrapeProgress((prev) => ({ ...prev, open: false }));
+
+      if (result.cancelled) {
+        if (count > 0) {
+          await alert({
+            title: 'Đã dừng cào dữ liệu',
+            message: result.message || `Đã giữ ${count} bản ghi cho "${project.name}".`,
+            type: 'success',
+          });
+        } else {
+          await alert({
+            title: 'Đã dừng cào dữ liệu',
+            message: result.message || 'Không có bản ghi nào được lưu trước khi dừng.',
+            type: 'warning',
+          });
+        }
+        return;
+      }
+
+      if (result.errorMessage && count === 0) throw new Error(result.errorMessage);
+
+      if (count === 0 && result.message?.includes('đã cào trước')) {
+        await alert({
+          title: 'Cào lại hoàn tất',
+          message: result.message,
+          type: 'success',
+        });
+      } else if (count === 0) {
+        const detail = result.errors?.length
+          ? result.errors.join('\n')
+          : 'Không thu thập được dữ liệu. Kiểm tra Playwright, cookie Facebook và từ khóa.';
+        await alert({
+          title: 'Không có dữ liệu mới',
+          message: `Đã thu thập 0 bản ghi cho "${project.name}".\n\n${detail}`,
+          type: 'warning',
+        });
+      } else {
+        await alert({
+          title: 'Cào dữ liệu hoàn tất',
+          message: result.message || `Đã thu thập ${count} bản ghi cho "${project.name}".`,
+          type: 'success',
+        });
+
+        if (result.errors?.length) {
+          await alert({
+            title: 'Một số nguồn gặp lỗi',
+            message: result.errors.join('\n'),
+            type: 'warning',
+          });
+        }
+      }
+    } catch (error) {
+      setScrapeProgress((prev) => ({ ...prev, open: false }));
+      await alert({
+        title: 'Cào dữ liệu thất bại',
+        message: extractApiError(error, 'Không thể cào dữ liệu.'),
+        type: 'error',
+      });
+    } finally {
+      setActionProjectId(null);
+    }
+  };
+
+  const handleAnalyze = async (project: Project) => {
+    setActionProjectId(project.projectId);
+    setOpenMenuId(null);
+    setErrorMessage('');
+
+    try {
+      const result = await projectApi.analyze(wid, project.projectId, true);
+      await alert({
+        title: 'Phân tích AI',
+        message: result.message,
+        type: 'success',
+      });
+    } catch (error) {
+      await alert({
+        title: 'Phân tích thất bại',
+        message: extractApiError(error, 'Không thể phân tích AI.'),
+        type: 'error',
+      });
+    } finally {
+      setActionProjectId(null);
+    }
+  };
+
+  const enterProject = (projectId: number) => {
+    navigate(`/workspace/${workspaceId}/project/${projectId}`);
   };
 
   return (
-    <div className="flex flex-col h-full text-white bg-[#050A15]">
-      
-      <header className="h-20 bg-[#0A101D]/80 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-8 sticky top-0 z-20 shrink-0">
-        <div className="text-gray-300 font-medium tracking-wide">Quản lý Dự án</div>
-        
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 bg-[#151B2B] border border-white/5 px-4 py-2 rounded-lg text-sm text-gray-400 select-none">
-            <Building2 size={16} className="text-[#FF7575]" />
-            Đang hiển thị tại: <span className="font-semibold text-white">Workspace #{workspaceId}</span>
-          </div>
+    <div className="animate-in fade-in duration-500 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-16 space-y-8">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#141A2C] to-[#0A101D] p-8 sm:p-10">
+        <div className="absolute -top-20 -right-16 w-64 h-64 bg-[#FF7575]/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-[#00B4D8]/10 rounded-full blur-3xl pointer-events-none" />
 
-          <button className="relative text-gray-400 hover:text-white transition-colors">
-            <Bell className="w-5 h-5" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-[#0A101D] bg-[#FF7575] rounded-full"></span>
-          </button>
+        <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="space-y-4">
+            <Link
+              to="/workspaces"
+              className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={14} />
+              Quay lại workspace
+            </Link>
 
-          <Link 
-            to={`/workspace/${workspaceId}/members`}
-            className="hidden sm:flex items-center gap-2 bg-[#151B2B] hover:bg-[#1A2235] text-gray-300 hover:text-white border border-white/10 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm"
-          >
-            <UserPlus size={16} />
-            Mời thành viên
-          </Link>
-        </div>
-      </header>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400">
+              <Building2 className="w-3.5 h-3.5 text-[#FF7575]" />
+              {workspaceName || `Workspace #${workspaceId}`}
+            </div>
 
-      <div className="flex-1 p-8 md:p-10 relative z-10 overflow-y-auto">
-        
-        <div 
-          className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none"
-          style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }}
-        ></div>
-
-        <div className="relative z-10">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <h1 className="text-4xl font-bold tracking-tight leading-tight text-white">
-              Tổng quan Dự án <br /> <span className="text-gray-400 text-2xl font-normal">(Overview)</span>
-            </h1>
-            
-            <div className="flex items-center gap-4">
-              <div className="relative hidden sm:block">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input 
-                  type="text" 
-                  placeholder="Tìm kiếm dự án..." 
-                  className="w-64 bg-[#151B2B] border border-white/10 rounded-lg pl-11 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF7575]/50 focus:ring-1 focus:ring-[#FF7575]/50 transition-all shadow-inner"
-                />
-              </div>
-              
-              <Link 
-                to={`/create-project?wid=${workspaceId}`} 
-                className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all shadow-[0_4px_14px_0_rgba(255,117,117,0.39)] hover:-translate-y-0.5 shrink-0"
-              >
-                <Plus className="w-5 h-5" strokeWidth={2.5} />
-                Khởi tạo Dự án mới
-              </Link>
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">
+                Dự án Giám sát
+              </h1>
+              <p className="text-gray-400 text-sm sm:text-base max-w-xl">
+                Quản lý chiến dịch cào dữ liệu, phân tích sentiment và báo cáo trên mạng xã hội.
+              </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
-            {projectList.map((project) => (
-              <div 
-                key={project.id} 
-                onClick={() => {
-                  if (project.status !== 'Disabled') {
-                    navigate(`/workspace/${workspaceId}/project/${project.id}`);
-                  }
-                }}
-                className={`bg-[#151B2B] border border-white/5 rounded-2xl p-6 flex flex-col transition-all group relative ${
-                  project.status === 'Disabled' 
-                  ? 'opacity-60 cursor-not-allowed' 
-                  : `cursor-pointer ${project.hoverBorder}`
-                }`}
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <Link
+              to={`/workspace/${workspaceId}/members`}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold text-gray-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <UserPlus size={16} />
+              Thành viên
+            </Link>
+            <Link
+              to={`/create-project?wid=${workspaceId}`}
+              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+            >
+              <Plus size={18} />
+              Tạo dự án mới
+            </Link>
+          </div>
+        </div>
+
+        {!isLoading && projectList.length > 0 && (
+          <div className="relative grid grid-cols-3 gap-3 mt-8 pt-8 border-t border-white/5">
+            {[
+              { label: 'Dự án', value: stats.total, icon: FolderKanban, color: 'text-[#FF7575]' },
+              { label: 'Nguồn dữ liệu', value: stats.sources, icon: Radio, color: 'text-[#00B4D8]' },
+              { label: 'Có từ khóa', value: stats.withKeyword, icon: Hash, color: 'text-emerald-400' },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div
+                key={label}
+                className="rounded-2xl bg-white/[0.03] border border-white/5 px-4 py-3 flex items-center gap-3"
               >
-                <div className="absolute top-6 right-6 z-20">
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMenuId(activeMenuId === project.id ? null : project.id);
-                    }}
-                    className="p-1.5 rounded-lg bg-[#0A101D] border border-white/5 text-gray-400 hover:text-white transition-colors"
-                  >
-                    <MoreVertical size={16} />
-                  </button>
-
-                  {activeMenuId === project.id && (
-                    <div 
-                      onClick={(e) => e.stopPropagation()} 
-                      className="absolute right-0 mt-2 w-48 bg-[#0A101D] border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 z-30 animate-in fade-in slide-in-from-top-2"
-                    >
-                      <button 
-                        onClick={() => {
-                          const isDisabling = project.status !== 'Disabled';
-                          setConfirmModal({
-                            isOpen: true,
-                            projectId: project.id,
-                            projectName: project.title,
-                            action: isDisabling ? 'disable' : 'enable'
-                          });
-                          setActiveMenuId(null);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
-                      >
-                        {project.status === 'Disabled' ? (
-                          <>
-                            <Play size={14} className="text-emerald-400" /> Kích hoạt dự án
-                          </>
-                        ) : (
-                          <>
-                            <Pause size={14} className="text-[#FF7575]" /> Vô hiệu hóa (Disable)
-                          </>
-                        )}
-                      </button>
-                      <button className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-left text-gray-500 cursor-not-allowed">
-                        <EyeOff size={14} /> Ẩn khỏi dòng thời gian
-                      </button>
-                    </div>
-                  )}
+                <div className={`w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center ${color}`}>
+                  <Icon size={16} />
                 </div>
-
-                <h3 className={`text-2xl font-bold mb-3 pr-6 leading-snug transition-colors ${project.status === 'Disabled' ? 'text-gray-500 line-through' : 'group-hover:text-[#FF7575]'}`}>
-                  {project.title}
-                </h3>
-
-                <div className={`inline-flex items-center gap-2 border px-3 py-1.5 rounded-md text-xs font-semibold w-fit mb-4 ${project.statusColor}`}>
-                  <span className={`w-2 h-2 rounded-full ${project.dotColor} ${project.status !== 'Disabled' ? 'animate-pulse' : ''}`}></span>
-                  {project.statusText}
-                </div>
-
-                {/* CREATION DATE & OWNER */}
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
-                    <Calendar size={12} className="text-gray-500" />
-                    {project.createdAt}
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
-                    <User size={12} className="text-gray-500" />
-                    {project.owner}
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Tổng thảo luận</div>
-                    <div className="text-2xl font-bold">{project.status === 'Disabled' ? '---' : project.totalMentions}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Điểm NSR</div>
-                    <div className={`text-2xl font-bold ${project.status === 'Disabled' ? 'text-gray-600' : project.nsrColor}`}>{project.nsr}</div>
-                  </div>
-                </div>
-
-                <div className="mb-8 mt-auto">
-                  <div className="flex justify-between text-xs font-medium mb-2">
-                    <span className="text-gray-400 uppercase tracking-wider">Sentiment Ratio</span>
-                    <span className={project.status === 'Disabled' ? 'text-gray-600' : 'text-gray-300'}>{project.ratioText}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-[#0A101D] rounded-full overflow-hidden flex">
-                    {project.status !== 'Disabled' ? (
-                      <div className={`h-full ${project.ratioColor} ${project.ratioWidth} rounded-full shadow-[0_0_10px_rgba(255,117,117,0.3)]`}></div>
-                    ) : (
-                      <div className="h-full bg-gray-700 w-full rounded-full"></div>
-                    )}
-                  </div>
-                </div>
-
-                <div 
-                  className={`w-full py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all border ${
-                    project.status === 'Disabled' 
-                    ? 'bg-transparent text-gray-600 border-white/5 cursor-not-allowed' 
-                    : 'bg-[#0A101D] group-hover:bg-white/5 text-gray-400 group-hover:text-white border-white/5 group-hover:border-white/10'
-                  }`}
-                >
-                  Vào Dashboard Phân tích <ArrowRight className="w-4 h-4" />
+                <div>
+                  <p className="text-lg font-bold text-white tabular-nums">{value}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
                 </div>
               </div>
             ))}
-
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Đặt Common Modal ở ngoài cùng */}
-      <ConfirmModal 
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-        onConfirm={executeToggleStatus}
-        title={confirmModal.action === 'disable' ? 'Vô hiệu hóa Dự án?' : 'Kích hoạt lại Dự án?'}
-        message={
-          confirmModal.action === 'disable' 
-          ? `Bạn có chắc chắn muốn vô hiệu hóa "${confirmModal.projectName}"? Hệ thống sẽ tạm dừng quét và thu thập dữ liệu thảo luận mới cho dự án này.`
-          : `Kích hoạt lại "${confirmModal.projectName}"? Hệ thống sẽ tiếp tục thu thập dữ liệu theo tiến trình.`
-        }
-        confirmText={confirmModal.action === 'disable' ? 'Vô hiệu hóa' : 'Kích hoạt'}
-        cancelText="Hủy bỏ"
-        type={confirmModal.action === 'disable' ? 'warning' : 'danger'}
-      />
+      {errorMessage && (
+        <div className="bg-red-500/10 border border-red-500/20 text-red-300 p-4 rounded-2xl flex items-center gap-3 text-sm">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span className="flex-1">{errorMessage}</span>
+          <button
+            type="button"
+            onClick={async () => {
+              await loadProjects();
+              await loadScrapeOrders();
+            }}
+            className="inline-flex items-center gap-1.5 text-red-200 hover:text-white font-semibold text-xs"
+          >
+            <RefreshCw size={14} />
+            Thử lại
+          </button>
+        </div>
+      )}
 
+      {!isLoading && projectList.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm theo tên dự án hoặc từ khóa..."
+              className="w-full pl-11 pr-4 py-3 bg-[#151B2B] border border-white/10 rounded-2xl text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#FF7575]/40 focus:ring-1 focus:ring-[#FF7575]/20 transition-colors"
+            />
+          </div>
+          <p className="text-sm text-gray-500">
+            <span className="text-white font-semibold">{filteredProjects.length}</span> / {projectList.length} dự án
+          </p>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-32 text-gray-400 gap-4">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-[#FF7575]/20 blur-2xl animate-pulse" />
+            <Loader2 className="relative w-12 h-12 animate-spin text-[#FF7575]" />
+          </div>
+          <p className="text-sm font-medium">Đang tải dự án...</p>
+        </div>
+      ) : projectList.length === 0 && !errorMessage ? (
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#151B2B] p-12 sm:p-16 text-center">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#00B4D8]/5 to-transparent pointer-events-none" />
+          <div className="relative">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#00B4D8] to-blue-600 flex items-center justify-center mx-auto mb-6 shadow-[0_12px_40px_rgba(0,180,216,0.25)]">
+              <FolderKanban className="w-10 h-10 text-white" />
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3">Chưa có dự án nào</h3>
+            <p className="text-gray-400 mb-8 max-w-lg mx-auto leading-relaxed">
+              Tạo dự án đầu tiên để cào mentions từ Facebook, YouTube, TikTok và chạy phân tích AI sentiment.
+            </p>
+            <Link
+              to={`/create-project?wid=${workspaceId}&onboarding=1`}
+              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-8 py-3.5 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+            >
+              <Plus size={18} />
+              Khởi tạo dự án đầu tiên
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredProjects.map((project) => (
+            <ProjectCard
+              key={project.projectId}
+              project={project}
+              activeOrder={orderByProject[project.projectId]}
+              workspaceId={workspaceId}
+              isMenuOpen={openMenuId === project.projectId}
+              isBusy={actionProjectId === project.projectId}
+              menuRef={openMenuId === project.projectId ? menuRef : undefined}
+              onToggleMenu={() =>
+                setOpenMenuId(openMenuId === project.projectId ? null : project.projectId)
+              }
+              onEnter={() => {
+                setOpenMenuId(null);
+                enterProject(project.projectId);
+              }}
+              onRescrape={() => handleRescrape(project)}
+              onAnalyze={() => handleAnalyze(project)}
+              onEdit={() => {
+                setOpenMenuId(null);
+                navigate(`/workspace/${wid}/project/${project.projectId}/edit`);
+              }}
+              onDelete={() => handleDeleteProject(project)}
+            />
+          ))}
+
+          {filteredProjects.length === 0 && searchQuery && (
+            <div className="md:col-span-2 xl:col-span-3 rounded-3xl border border-white/10 bg-[#151B2B] p-12 text-center">
+              <Search className="w-10 h-10 text-gray-600 mx-auto mb-4" />
+              <p className="text-white font-semibold mb-1">Không tìm thấy dự án</p>
+              <p className="text-sm text-gray-500">Thử từ khóa khác hoặc xóa bộ lọc.</p>
+            </div>
+          )}
+
+          {!searchQuery && (
+            <Link
+              to={`/create-project?wid=${workspaceId}`}
+              className="group rounded-3xl border-2 border-dashed border-white/10 hover:border-[#FF7575]/40 bg-[#151B2B]/50 hover:bg-[#FF7575]/[0.03] p-6 flex flex-col items-center justify-center gap-4 min-h-[260px] transition-all"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-[#FF7575]/15 group-hover:border-[#FF7575]/30 transition-all">
+                <Plus size={26} className="text-gray-500 group-hover:text-[#FF7575]" />
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-gray-300 group-hover:text-white transition-colors">Tạo dự án mới</p>
+                <p className="text-xs text-gray-600 mt-1">Thêm chiến dịch giám sát</p>
+              </div>
+            </Link>
+          )}
+        </div>
+      )}
+
+      <ScrapeProgressModal
+        open={scrapeProgress.open}
+        projectName={scrapeProgress.projectName}
+        job={scrapeProgress.job}
+        isCancelling={scrapeProgress.isCancelling}
+        onCancel={
+          scrapeProgress.jobId
+            ? async () => {
+                if (!scrapeProgress.jobId || scrapeProgress.isCancelling) return;
+                setScrapeProgress((prev) => ({ ...prev, isCancelling: true }));
+                try {
+                  await scrapeApi.cancelJob(scrapeProgress.jobId);
+                } catch {
+                  setScrapeProgress((prev) => ({ ...prev, isCancelling: false }));
+                }
+              }
+            : undefined
+        }
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Loader2 } from 'lucide-react';
+﻿import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import { Plus, RefreshCw } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -11,8 +12,7 @@ import {
   Cell,
 } from 'recharts';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { adminApi } from '../../api/adminApi';
-import type { ScrapingJob } from '../../types/admin';
+import { adminApi } from '../../api/portalApi';
 
 type JobStatus = 'Running' | 'COMPLETED' | 'FAILED';
 type BarType = 'normal' | 'peak' | 'api';
@@ -22,6 +22,17 @@ interface ActiveEngine {
   name: string;
   progress: number;
   barColor: string;
+}
+
+interface CrawlJob {
+  id: string;
+  sourceName: string;
+  sourceUrl: string;
+  sourceIcon: ReactNode;
+  startTime: string;
+  duration: string;
+  nodesScanned: number;
+  status: JobStatus;
 }
 
 const activeEngines: ActiveEngine[] = [
@@ -57,44 +68,32 @@ const jobStatusStyles: Record<JobStatus, string> = {
   FAILED: 'bg-red-50 text-red-500 border-red-100',
 };
 
-const formatDuration = (startedAt?: string | null, finishedAt?: string | null) => {
-  if (!startedAt) return '—';
-  const start = new Date(startedAt).getTime();
-  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const mins = Math.max(0, Math.floor((end - start) / 60000));
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-};
-
-const normalizeStatus = (status?: string | null): JobStatus => {
-  const s = (status ?? '').toLowerCase();
-  if (s === 'running') return 'Running';
-  if (s === 'failed') return 'FAILED';
-  return 'COMPLETED';
-};
-
 const ScrapingMonitor = () => {
-  const [jobs, setJobs] = useState<ScrapingJob[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(true);
-  const [jobsError, setJobsError] = useState<string | null>(null);
-
-  const loadJobs = useCallback(async () => {
-    setJobsLoading(true);
-    setJobsError(null);
-    try {
-      const { data } = await adminApi.listScrapingJobs();
-      setJobs(data);
-    } catch {
-      setJobsError('Không tải được scraping jobs. Cần đăng nhập Admin.');
-    } finally {
-      setJobsLoading(false);
-    }
-  }, []);
+  const [crawlJobs, setCrawlJobs] = useState<CrawlJob[]>([]);
 
   useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
+    adminApi
+      .getScrapingJobs()
+      .then((jobs) =>
+        setCrawlJobs(
+          jobs.map((j) => ({
+            id: j.jobId,
+            sourceName: j.projectName ?? `Project #${j.projectId}`,
+            sourceUrl: j.proxyIp ?? '—',
+            sourceIcon: <span className="text-xs font-bold">JOB</span>,
+            startTime: j.startedAt ?? '—',
+            duration: j.finishedAt ? 'done' : 'running',
+            nodesScanned: j.totalScraped,
+            status: (j.status?.toUpperCase() === 'FAILED'
+              ? 'FAILED'
+              : j.status?.toUpperCase() === 'COMPLETED'
+                ? 'COMPLETED'
+                : 'Running') as JobStatus,
+          }))
+        )
+      )
+      .catch(() => setCrawlJobs([]));
+  }, []);
 
   return (
     <AdminLayout searchPlaceholder="Search crawlers or job IDs...">
@@ -195,22 +194,12 @@ const ScrapingMonitor = () => {
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-gray-100">
-          <h3 className="text-base font-semibold">Current Job Registry (UC-74)</h3>
-          <button
-            type="button"
-            onClick={loadJobs}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50"
-          >
-            {jobsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Refresh
+          <h3 className="text-base font-semibold">Current Job Registry</h3>
+          <button className="flex items-center gap-2 px-5 py-2.5 bg-[#ef4444] hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
+            <Plus className="w-4 h-4" />
+            NEW JOB
           </button>
         </div>
-
-        {jobsError && (
-          <div className="mx-6 mt-4 px-4 py-3 bg-red-50 border border-red-100 text-red-700 text-sm rounded-lg">
-            {jobsError}
-          </div>
-        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -220,10 +209,7 @@ const ScrapingMonitor = () => {
                   Job ID
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Project
-                </th>
-                <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Proxy IP
+                  Source
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
                   Start Time
@@ -232,57 +218,43 @@ const ScrapingMonitor = () => {
                   Duration
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Scraped
+                  Nodes Scanned
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
                   Status
                 </th>
                 <th className="text-right px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Error
+                  Action
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {!jobsLoading && jobs.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-[#6b7280]">
-                    Chưa có scraping job nào.
+              {crawlJobs.map((job) => (
+                <tr key={job.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-4 font-semibold text-[#111827]">#{job.id}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      {job.sourceIcon}
+                      <span className="text-[#6b7280]">{job.sourceUrl}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-[#6b7280]">{job.startTime}</td>
+                  <td className="px-6 py-4 text-[#111827] font-medium">{job.duration}</td>
+                  <td className="px-6 py-4 text-[#111827]">{job.nodesScanned.toLocaleString()}</td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border ${jobStatusStyles[job.status]}`}
+                    >
+                      {job.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button className="text-sm font-semibold text-[#ef4444] hover:text-red-600 transition-colors">
+                      View Logs
+                    </button>
                   </td>
                 </tr>
-              )}
-              {jobs.map((job) => {
-                const status = normalizeStatus(job.status);
-                return (
-                  <tr key={job.jobId} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 font-semibold text-[#111827] font-mono text-xs">
-                      #{job.jobId.slice(0, 8)}
-                    </td>
-                    <td className="px-6 py-4 text-[#111827]">
-                      {job.projectName ?? `Project #${job.projectId}`}
-                    </td>
-                    <td className="px-6 py-4 text-[#6b7280]">{job.proxyIp ?? 'direct'}</td>
-                    <td className="px-6 py-4 text-[#6b7280]">
-                      {job.startedAt
-                        ? new Date(job.startedAt).toLocaleString('vi-VN')
-                        : '—'}
-                    </td>
-                    <td className="px-6 py-4 text-[#111827] font-medium">
-                      {formatDuration(job.startedAt, job.finishedAt)}
-                    </td>
-                    <td className="px-6 py-4 text-[#111827]">{job.totalScraped.toLocaleString()}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border ${jobStatusStyles[status]}`}
-                      >
-                        {status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right text-xs text-red-600 max-w-[200px] truncate">
-                      {job.errorLog ?? '—'}
-                    </td>
-                  </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>

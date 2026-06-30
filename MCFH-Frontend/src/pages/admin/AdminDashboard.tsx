@@ -1,4 +1,5 @@
 import type { ElementType } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Calendar,
   Download,
@@ -22,6 +23,7 @@ import {
   Cell,
 } from 'recharts';
 import AdminLayout from '../../components/admin/AdminLayout';
+import { adminApi, type AdminDashboard as AdminDashboardData } from '../../api/portalApi';
 
 const revenueGrowthData = [
   { month: 'Jan', revenue: 82000, users: 980 },
@@ -68,6 +70,19 @@ const progressBarColors = {
 
 const AdminDashboard = () => {
   const totalSubs = subscriptionData.reduce((sum, item) => sum + item.value, 0);
+  const [stats, setStats] = useState<AdminDashboardData | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setStats(await adminApi.getDashboard());
+    } catch {
+      setStats(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <AdminLayout>
@@ -92,42 +107,40 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <MetricCard
-          icon={DollarSign}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-500"
-          label="Total Revenue"
-          value="$124,000"
-          trend="+12%"
-        />
-        <MetricCard
           icon={UserPlus}
           iconBg="bg-blue-50"
           iconColor="text-blue-500"
-          label="New Users"
-          value="1,450"
-          trend="+8%"
+          label="Tổng Users"
+          value={stats ? String(stats.totalUsers) : '—'}
         />
         <MetricCard
           icon={ShieldCheck}
           iconBg="bg-gray-50"
           iconColor="text-gray-600"
-          label="Active Subs"
-          value="320"
+          label="Reporters"
+          value={stats ? String(stats.totalReporters) : '—'}
         />
         <MetricCard
           icon={Server}
           iconBg="bg-gray-50"
           iconColor="text-gray-600"
-          label="Proxy Health"
-          value="98.5%"
+          label="Dự án"
+          value={stats ? String(stats.totalProjects) : '—'}
           valueColor="text-[#3b82f6]"
+        />
+        <MetricCard
+          icon={DollarSign}
+          iconBg="bg-blue-50"
+          iconColor="text-blue-500"
+          label="Mentions"
+          value={stats ? stats.totalMentions.toLocaleString('vi-VN') : '—'}
         />
         <MetricCard
           icon={AlertTriangle}
           iconBg="bg-red-50"
           iconColor="text-[#ef4444]"
-          label="Failed Jobs"
-          value="12"
+          label="Bespoke chờ"
+          value={stats ? String(stats.pendingBespoke) : '—'}
           valueColor="text-[#ef4444]"
         />
       </div>

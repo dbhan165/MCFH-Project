@@ -1,4 +1,4 @@
-// src/pages/reporter/PipelineConfig.tsx
+﻿// src/pages/reporter/PipelineConfig.tsx
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -7,12 +7,13 @@ import {
   Info, 
   Lightbulb, 
   X, 
-  Rocket, 
-  ArrowLeft,
+  Rocket,
   Hash,
   Link as LinkIcon
 } from 'lucide-react';
 import ReporterLayout from '../../components/reporter/ReporterLayout';
+import { reporterApi } from '../../api/portalApi';
+import { extractApiError } from '../../utils/authStorage';
 
 interface ScrapingTarget {
   id: string;
@@ -38,6 +39,8 @@ export default function PipelineConfig() {
   const [threshold, setThreshold] = useState<number>(30);
   const [filterTeencode, setFilterTeencode] = useState<boolean>(true);
   const [isActivated, setIsActivated] = useState<boolean>(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Hàm thêm nguồn cào mới
   const addTarget = () => {
@@ -72,9 +75,20 @@ export default function PipelineConfig() {
   };
 
   // Kích hoạt tiến trình
-  const handleActivate = () => {
-    setIsActivated(true);
-    alert(`Đã lưu cấu hình và kích hoạt thành công cho đơn hàng #${id}!`);
+  const handleActivate = async () => {
+    if (!id) return;
+    const requestId = Number(id);
+    setIsBusy(true);
+    setErrorMessage('');
+    try {
+      await reporterApi.startWork(requestId);
+      setIsActivated(true);
+      navigate(`/reporter/workspace/${requestId}`);
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể kích hoạt pipeline.'));
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   return (
@@ -254,17 +268,21 @@ export default function PipelineConfig() {
 
         {/* THANH ACTION TRẠNG THÁI CỐ ĐỊNH Ở DƯỚI ĐÁY */}
         <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center shadow-[0_-4px_20px_rgba(0,0,0,0.04)] z-40">
-          <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${isActivated ? "bg-green-500" : "bg-gray-400"}`}></span>
-            <span className="text-sm font-medium text-gray-500">
-              Trạng thái Pipeline: <strong className={isActivated ? "text-green-600 font-bold" : "text-gray-700 font-semibold"}>{isActivated ? "Đang hoạt động" : "Chưa kích hoạt"}</strong>
-            </span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${isActivated ? "bg-green-500" : "bg-gray-400"}`}></span>
+              <span className="text-sm font-medium text-gray-500">
+                Trạng thái Pipeline: <strong className={isActivated ? "text-green-600 font-bold" : "text-gray-700 font-semibold"}>{isActivated ? "Đang hoạt động" : "Chưa kích hoạt"}</strong>
+              </span>
+            </div>
+            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
           </div>
           <button
             onClick={handleActivate}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#008B94] hover:bg-[#00737a] text-white font-bold text-sm rounded-lg transition-colors shadow-sm border-0 cursor-pointer"
+            disabled={isBusy}
+            className="flex items-center gap-2 px-6 py-2.5 bg-[#008B94] hover:bg-[#00737a] disabled:opacity-60 text-white font-bold text-sm rounded-lg transition-colors shadow-sm border-0 cursor-pointer"
           >
-            Lưu cấu hình & Kích hoạt Bot <Rocket size={15} />
+            {isBusy ? 'Đang kích hoạt...' : 'Lưu cấu hình & Kích hoạt Bot'} <Rocket size={15} />
           </button>
         </div>
       </div>

@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, CheckCircle2, AlertCircle, User, Phone, ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { authApi } from '../api/authApi';
+import { saveAuthSession, markEmailPendingVerification, clearEmailPendingVerification, isEmailPendingVerification, extractApiError } from '../utils/authStorage';
+import { resolvePostLoginPath } from '../utils/onboardingHelpers';
 import loginImage from '../assets/login.png';
+import McfhLogo from '../components/brand/McfhLogo';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'verify-otp';
 
@@ -33,36 +36,42 @@ const Login = () => {
 
     try {
       if (mode === 'login') {
+        if (isEmailPendingVerification(email)) {
+          setErrorMessage('Tài khoản chưa được xác thực. Vui lòng nhập mã OTP để kích hoạt.');
+          setMode('verify-otp');
+          return;
+        }
+
         const response = await authApi.login(email, password);
-        const userData = response.data;
-        
-        localStorage.setItem('accessToken', userData.token);
-        localStorage.setItem('userRole', userData.role);
-        localStorage.setItem('fullName', userData.fullName);
-        
-        navigate('/workspaces'); 
+        saveAuthSession(response.data as unknown as Record<string, unknown>);
+        try {
+          navigate(await resolvePostLoginPath());
+        } catch {
+          navigate('/workspaces');
+        }
 
       } else if (mode === 'register') {
         const response = await authApi.register(fullName, email, phone, password);
+        markEmailPendingVerification(email);
         setSuccessMessage(response.data.message || "Đăng ký thành công! Vui lòng kiểm tra email để lấy mã xác thực.");
         setMode('verify-otp'); 
 
       } else if (mode === 'verify-otp') {
-        const response = await authApi.verifyEmail(email, otp); 
-        setSuccessMessage(response.data.message || "Xác thực thành công! Vui lòng đăng nhập.");
+        await authApi.verifyEmail(email, otp);
+        clearEmailPendingVerification();
+        setSuccessMessage('Xác thực thành công! Vui lòng đăng nhập để tiếp tục.');
         setMode('login');
-        setPassword('');
         setOtp('');
 
       } else if (mode === 'forgot') {
         const response = await authApi.forgotPassword(email);
         setSuccessMessage(response.data.message || "Hệ thống đã gửi link khôi phục. Vui lòng kiểm tra hộp thư!");
       }
-    } catch (error: any) {
-      if (error.response && error.response.data) {
-        setErrorMessage(error.response.data.message);
-      } else {
-        setErrorMessage('Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng!');
+    } catch (error: unknown) {
+      const message = extractApiError(error, 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend đang chạy (port 5254).');
+      setErrorMessage(message);
+      if (mode === 'login' && message.includes('chưa được xác thực')) {
+        setMode('verify-otp');
       }
     } finally {
       setIsLoading(false);
@@ -106,6 +115,10 @@ const Login = () => {
         <div className="absolute top-[-10%] left-[-20%] w-[500px] h-[500px] bg-[#00B4D8] rounded-full mix-blend-screen filter blur-[120px] opacity-20 animate-pulse-slow"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-[#3B82F6] rounded-full mix-blend-screen filter blur-[100px] opacity-20"></div>
 
+        <div className="absolute top-8 left-8 z-10">
+          <McfhLogo linkTo="/" size={36} textClassName="text-white text-xl" />
+        </div>
+
         <div className="relative z-10 grow flex items-center justify-center mb-12">
           <div className="w-full max-w-md aspect-4/5 bg-linear-to-b from-[#151B2B]/80 to-[#0A101D]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-[0_0_40px_rgba(0,180,216,0.1)] flex items-center justify-center overflow-hidden transform hover:scale-[1.02] transition-transform duration-700 ease-out">
             <img src={loginImage} alt="AI Funnel" className="w-full h-full object-cover rounded-xl filter contrast-125" />
@@ -140,10 +153,18 @@ const Login = () => {
           ========================================== */}
       <div className="w-full lg:w-7/12 bg-[#FAFAFA] flex items-center justify-center p-8 sm:p-12 overflow-y-auto relative">
         <div className="w-full max-w-[440px] space-y-8 my-auto relative z-10">
+
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-[#0A101D] transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Quay lại trang chủ
+          </Link>
           
           {/* Header kèm Animation */}
           <div key={`header-${mode}`} className="animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
-            <h1 className="text-[#0A101D] text-4xl font-extrabold tracking-tight mb-4">MCFH.</h1>
+            <McfhLogo size={44} textClassName="text-[#0A101D] text-3xl" subtitle="Social Listening" subtitleClassName="text-xs text-gray-500 font-semibold tracking-[0.2em] uppercase" className="mb-6" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               {mode === 'login' && "Đăng nhập không gian làm việc"}
               {mode === 'register' && "Tạo tài khoản mới"}
@@ -300,17 +321,14 @@ const Login = () => {
                     setIsLoading(true);
                     setErrorMessage('');
                     const response = await authApi.googleLogin(credentialResponse.credential!);
-                    const userData = response.data;
-                    localStorage.setItem('accessToken', userData.token);
-                    localStorage.setItem('userRole', userData.role);
-                    localStorage.setItem('fullName', userData.fullName);
-                    navigate('/workspaces');
-                  } catch (error: any) {
-                    if (error.response && error.response.data) {
-                      setErrorMessage(error.response.data.message);
-                    } else {
-                      setErrorMessage("Xác thực với hệ thống Google thất bại.");
+                    saveAuthSession(response.data as unknown as Record<string, unknown>);
+                    try {
+                      navigate(await resolvePostLoginPath());
+                    } catch {
+                      navigate('/workspaces');
                     }
+                  } catch (error: unknown) {
+                    setErrorMessage(extractApiError(error, 'Xác thực với hệ thống Google thất bại.'));
                   } finally {
                     setIsLoading(false);
                   }
@@ -318,10 +336,9 @@ const Login = () => {
                 onError={() => {
                   setErrorMessage("Cửa sổ đăng nhập Google bị đóng hoặc xảy ra lỗi mạng.");
                 }}
-                useOneTap
                 theme="outline"
                 size="large"
-                width="100%"
+                width={400}
                 text="continue_with"
                 shape="pill" 
               />

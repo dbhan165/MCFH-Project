@@ -3,7 +3,7 @@ import ReporterLayout from '../../components/reporter/ReporterLayout';
 interface ReporterPlaceholderProps {
   title: string;
   description: string;
-  activeTopNav?: 'dashboard' | 'reports' | 'archive';
+  activeTopNav?: 'dashboard' | 'reports' | 'archive' | 'settings' | 'performance';
 }
 
 const ReporterPlaceholder = ({

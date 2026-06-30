@@ -26,4 +26,10 @@
 		<PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.3" />
 	</ItemGroup>
 
+	<!-- Session cookies: copy ra cạnh .exe (AppContext.BaseDirectory) mỗi lần build -->
+	<ItemGroup>
+		<None Include="cookies\fb_cookie.json" CopyToOutputDirectory="PreserveNewest" Link="fb_cookie.json" />
+		<None Include="cookies\tiktok_cookie.json" CopyToOutputDirectory="PreserveNewest" Link="tiktok_cookie.json" />
+	</ItemGroup>
+
 </Project>
