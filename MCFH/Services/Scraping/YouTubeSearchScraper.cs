@@ -33,9 +33,7 @@ public class YouTubeSearchScraper
                     ? $"https://www.youtube.com/results?search_query={encodedKeyword}"
                     : $"https://www.youtube.com/results?search_query={encodedKeyword}&sp={uploadFilter}";
 
-                await page.GotoAsync(
-                    searchUrl,
-                    new() { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 30000 });
+                await NavigateSearchWithRetryAsync(page, searchUrl, options);
 
                 var scrollsNeeded = Math.Max(2, (int)Math.Ceiling(maxVideos / 4.0));
                 for (int i = 0; i < scrollsNeeded; i++)
@@ -71,6 +69,41 @@ public class YouTubeSearchScraper
             playwright?.Dispose();
         }
     }
+
+    private static async Task NavigateSearchWithRetryAsync(IPage page, string searchUrl, ScrapeOptions options)
+    {
+        var timeout = Math.Clamp(options.YouTubeNavigationTimeoutMs, 30_000, 180_000);
+        var attempts = new[]
+        {
+            (Wait: WaitUntilState.DOMContentLoaded, Timeout: timeout),
+            (Wait: WaitUntilState.Load, Timeout: Math.Min(timeout + 30_000, 180_000))
+        };
+
+        Exception? last = null;
+        foreach (var (waitUntil, attemptTimeout) in attempts)
+        {
+            try
+            {
+                await page.GotoAsync(searchUrl, new PageGotoOptions
+                {
+                    WaitUntil = waitUntil,
+                    Timeout = attemptTimeout
+                });
+                return;
+            }
+            catch (Exception ex) when (IsNavigationTimeout(ex))
+            {
+                last = ex;
+                Console.WriteLine($"[YouTube] Search timeout ({waitUntil}, {attemptTimeout}ms) — thử lại...");
+            }
+        }
+
+        throw last ?? new TimeoutException($"YouTube search timeout sau {attempts.Length} lần.");
+    }
+
+    private static bool IsNavigationTimeout(Exception ex) =>
+        ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>YouTube search upload-date filters (sp parameter).</summary>
     private static string? GetYouTubeUploadDateFilter(int? postedSinceDays) =>

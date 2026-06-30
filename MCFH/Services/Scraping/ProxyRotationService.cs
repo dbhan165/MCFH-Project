@@ -54,8 +54,10 @@ public class ProxyRotationService
             if (excludeProxyId.HasValue)
                 query = query.Where(p => p.ProxyId != excludeProxyId.Value);
 
+            // NULL last_used_at = chưa dùng → ưu tiên trước; tránh DateTime.MinValue (năm 0001, ngoài phạm vi SQL datetime).
             var proxy = await query
-                .OrderBy(p => p.LastUsedAt ?? DateTime.MinValue)
+                .OrderBy(p => p.LastUsedAt.HasValue ? 1 : 0)
+                .ThenBy(p => p.LastUsedAt)
                 .ThenBy(p => p.ProxyId)
                 .FirstOrDefaultAsync(ct);
 

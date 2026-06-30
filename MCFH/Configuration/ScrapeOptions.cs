@@ -7,11 +7,17 @@ public class ScrapeOptions
     /// <summary>YouTube chạy headless nhanh hơn, ít bị chặn hơn FB/TikTok.</summary>
     public bool YouTubeHeadless { get; set; } = true;
 
+    /// <summary>Timeout Goto YouTube (ms) — proxy/datacenter thường cần &gt;30s.</summary>
+    public int YouTubeNavigationTimeoutMs { get; set; } = 90_000;
+
     /// <summary>Facebook — headless ẩn cửa sổ khi cào nền tảng.</summary>
     public bool SocialHeadless { get; set; } = true;
 
     /// <summary>TikTok headless — ẩn Chromium, phù hợp multi-user platform.</summary>
     public bool TikTokHeadless { get; set; } = true;
+
+    /// <summary>Luôn cào headless trước; chỉ mở cửa sổ Chromium khi gặp CAPTCHA (cần TikTokAllowManualCaptcha).</summary>
+    public bool TikTokHeadedOnCaptchaOnly { get; set; } = true;
 
     /// <summary>Chỉ bật trên máy dev: hiện browser + chờ giải CAPTCHA tay.</summary>
     public bool TikTokAllowManualCaptcha { get; set; } = false;
@@ -46,6 +52,9 @@ public class ScrapeOptions
 
     /// <summary>Nếu headless không tìm được video, thử lại 1 lần với cửa sổ Chromium thật.</summary>
     public bool TikTokRetryHeadedOnFailure { get; set; } = true;
+
+    /// <summary>Nếu headless lưu được video nhưng 0 comment (CAPTCHA), thử lại headed.</summary>
+    public bool TikTokRetryHeadedWhenNoComments { get; set; } = true;
 
     /// <summary>Chế độ demo: ít bài/comment, bỏ cào sâu FB, TikTok song song, không chờ AI.</summary>
     public bool FastDemoMode { get; set; } = false;

@@ -54,15 +54,23 @@ public static class TikTokCaptchaHelper
     }
 
     /// <summary>true = tiếp tục cào; false = bị CAPTCHA chặn (chế độ nền tảng).</summary>
-    public static async Task<bool> TryContinueAsync(IPage page, ScrapeOptions options, string stage = "")
+    public static async Task<bool> TryContinueAsync(
+        IPage page,
+        ScrapeOptions options,
+        string stage = "",
+        bool? sessionHeadless = null,
+        TikTokCaptchaTracker? tracker = null)
     {
         await page.WaitForTimeoutAsync(800);
 
         if (!await IsVisibleAsync(page))
             return true;
 
+        tracker?.MarkEncountered();
+
+        var headless = sessionHeadless ?? options.TikTokHeadless;
         var manualMode = options.TikTokAllowManualCaptcha
-            && !options.TikTokHeadless
+            && !headless
             && options.TikTokCaptchaWaitSeconds > 0;
 
         if (manualMode)
