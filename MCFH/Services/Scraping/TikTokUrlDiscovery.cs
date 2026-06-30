@@ -89,6 +89,71 @@ public static class TikTokStealthHelper
             catch { }
         }
     }
+
+    /// <summary>Đóng cookie banner, popup passkey và modal chặn tương tự trước khi cào.</summary>
+    public static async Task DismissBlockingDialogsAsync(IPage page)
+    {
+        await DismissCookieBannersAsync(page);
+        await DismissPasskeyPromptAsync(page);
+    }
+
+    private static async Task DismissPasskeyPromptAsync(IPage page)
+    {
+        await page.WaitForTimeoutAsync(400);
+
+        foreach (var label in new[]
+                 {
+                     "Để sau", "Maybe later", "Not now", "Skip for now", "Later", "Bỏ qua"
+                 })
+        {
+            try
+            {
+                var btn = page.GetByRole(AriaRole.Button, new() { Name = label, Exact = true }).First;
+                await btn.WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = 300
+                });
+                await btn.ClickAsync(new LocatorClickOptions { Timeout = 3000 });
+                await page.WaitForTimeoutAsync(600);
+                Console.WriteLine($"[TikTok] Đã đóng popup passkey (nút «{label}»).");
+                return;
+            }
+            catch { }
+        }
+
+        try
+        {
+            var dismissed = await page.EvaluateAsync<bool>(@"
+                () => {
+                    const body = (document.body?.innerText || '').toLowerCase();
+                    const isPasskey = body.includes('passkey')
+                        || body.includes('pass key')
+                        || body.includes('khóa truy cập')
+                        || body.includes('đăng nhập dễ dàng');
+                    if (!isPasskey) return false;
+
+                    const laterLabels = ['để sau', 'maybe later', 'not now', 'later', 'skip', 'bỏ qua'];
+                    for (const el of document.querySelectorAll('button, [role=""button""], div[tabindex=""0""]')) {
+                        const t = (el.innerText || '').trim().toLowerCase();
+                        if (!t) continue;
+                        if (laterLabels.some(l => t === l || t.startsWith(l + ' '))) {
+                            el.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            ");
+
+            if (dismissed)
+            {
+                await page.WaitForTimeoutAsync(600);
+                Console.WriteLine("[TikTok] Đã đóng popup passkey (JS fallback).");
+            }
+        }
+        catch { }
+    }
 }
 
 public static class TikTokUrlDiscovery
@@ -120,7 +185,9 @@ public static class TikTokUrlDiscovery
         int maxVideos,
         ScrapeOptions options,
         Action<string>? onStatus = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var all = new List<string>();
 
@@ -130,20 +197,23 @@ public static class TikTokUrlDiscovery
             onStatus?.Invoke($"TikTok: đang tìm «{variant}»...");
             Console.WriteLine($"[TikTok] Discover keyword variant: '{variant}'");
 
-            all.AddRange(await SearchWithNetworkCaptureAsync(page, variant, maxVideos, options, onStatus, cancellationToken));
+            all.AddRange(await SearchWithNetworkCaptureAsync(
+                page, variant, maxVideos, options, onStatus, cancellationToken, sessionHeadless, captchaTracker));
             all = NormalizeUrls(all);
 
             if (all.Count < maxVideos)
             {
                 onStatus?.Invoke("TikTok: thử hashtag...");
-                all.AddRange(await SearchViaTagAsync(page, variant, maxVideos, options, onStatus, cancellationToken));
+                all.AddRange(await SearchViaTagAsync(
+                    page, variant, maxVideos, options, onStatus, cancellationToken, sessionHeadless, captchaTracker));
             }
             all = NormalizeUrls(all);
 
             if (all.Count < maxVideos)
             {
                 onStatus?.Invoke("TikTok: thử tìm qua Google...");
-                all.AddRange(await SearchViaGoogleAsync(page, variant, maxVideos, options, onStatus, cancellationToken));
+                all.AddRange(await SearchViaGoogleAsync(
+                    page, variant, maxVideos, options, onStatus, cancellationToken, sessionHeadless, captchaTracker));
             }
             all = NormalizeUrls(all);
 
@@ -157,7 +227,8 @@ public static class TikTokUrlDiscovery
             if (all.Count < maxVideos)
             {
                 onStatus?.Invoke("TikTok: thử cuộn trang tìm kiếm...");
-                all.AddRange(await SearchOnTikTokAsync(page, variant, maxVideos, options, onStatus, cancellationToken));
+                all.AddRange(await SearchOnTikTokAsync(
+                    page, variant, maxVideos, options, onStatus, cancellationToken, sessionHeadless, captchaTracker));
             }
             all = NormalizeUrls(all);
 
@@ -174,7 +245,9 @@ public static class TikTokUrlDiscovery
         int maxVideos,
         ScrapeOptions options,
         Action<string>? onStatus,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var capture = new TikTokNetworkCapture();
         capture.Attach(page);
@@ -199,7 +272,7 @@ public static class TikTokUrlDiscovery
                     WaitUntil = WaitUntilState.DOMContentLoaded,
                     Timeout = 35000
                 });
-                await TikTokStealthHelper.DismissCookieBannersAsync(page);
+                await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
                 await TryClickVideoTabAsync(page);
 
                 var waitMs = Math.Clamp(options.TikTokSearchWaitMs, 5000, 30000);
@@ -230,7 +303,8 @@ public static class TikTokUrlDiscovery
                     break;
                 }
 
-                if (!await TikTokCaptchaHelper.TryContinueAsync(page, options, "tìm video"))
+                if (!await TikTokCaptchaHelper.TryContinueAsync(
+                        page, options, "tìm video", sessionHeadless, captchaTracker))
                     onStatus?.Invoke("TikTok: bị CAPTCHA — thử nguồn khác...");
             }
             catch (OperationCanceledException)
@@ -252,7 +326,9 @@ public static class TikTokUrlDiscovery
         int maxVideos,
         ScrapeOptions options,
         Action<string>? onStatus,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var capture = new TikTokNetworkCapture();
         capture.Attach(page);
@@ -272,8 +348,9 @@ public static class TikTokUrlDiscovery
                     WaitUntil = WaitUntilState.DOMContentLoaded,
                     Timeout = 30000
                 });
-                await TikTokStealthHelper.DismissCookieBannersAsync(page);
-                await TikTokCaptchaHelper.TryContinueAsync(page, options, "hashtag");
+                await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
+                await TikTokCaptchaHelper.TryContinueAsync(
+                    page, options, "hashtag", sessionHeadless, captchaTracker);
 
                 for (var i = 0; i < 5; i++)
                 {
@@ -377,7 +454,9 @@ public static class TikTokUrlDiscovery
         int maxVideos,
         ScrapeOptions options,
         Action<string>? onStatus,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var encoded = Uri.EscapeDataString(keyword);
         var urls = new List<string>();
@@ -398,8 +477,9 @@ public static class TikTokUrlDiscovery
                     WaitUntil = WaitUntilState.DOMContentLoaded,
                     Timeout = 30000
                 });
-                await TikTokStealthHelper.DismissCookieBannersAsync(page);
-                if (!await TikTokCaptchaHelper.TryContinueAsync(page, options, "tìm video"))
+                await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
+                if (!await TikTokCaptchaHelper.TryContinueAsync(
+                        page, options, "tìm video", sessionHeadless, captchaTracker))
                 {
                     onStatus?.Invoke("TikTok: bị CAPTCHA — thử cách khác...");
                     Console.WriteLine("[TikTok] CAPTCHA khi tìm kiếm — thử URL search khác hoặc fallback Google.");
@@ -443,7 +523,9 @@ public static class TikTokUrlDiscovery
         int maxVideos,
         ScrapeOptions options,
         Action<string>? onStatus,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         try
         {
@@ -458,8 +540,9 @@ public static class TikTokUrlDiscovery
                 WaitUntil = WaitUntilState.DOMContentLoaded,
                 Timeout = 30000
             });
-            await TikTokStealthHelper.DismissCookieBannersAsync(page);
-            if (!await TikTokCaptchaHelper.TryContinueAsync(page, options, "Google"))
+            await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
+            if (!await TikTokCaptchaHelper.TryContinueAsync(
+                    page, options, "Google", sessionHeadless, captchaTracker))
             {
                 onStatus?.Invoke("TikTok: Google bị CAPTCHA/chặn.");
                 return new List<string>();

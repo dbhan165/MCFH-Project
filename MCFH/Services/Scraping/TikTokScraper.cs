@@ -19,7 +19,9 @@ public class TikTokScraper
         string videoUrl,
         int maxComments,
         ScrapeOptions options,
-        IBrowserContext? sharedContext = null)
+        IBrowserContext? sharedContext = null,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var result = new ScrapeResult();
         var ownsContext = sharedContext == null;
@@ -44,7 +46,7 @@ public class TikTokScraper
             var page = await context.NewPageAsync();
             try
             {
-                await ScrapeVideoOnPageAsync(page, cleanUrl, maxComments, result, options);
+                await ScrapeVideoOnPageAsync(page, cleanUrl, maxComments, result, options, sessionHeadless, captchaTracker);
             }
             finally
             {
@@ -75,13 +77,15 @@ public class TikTokScraper
         int maxVideos,
         ScrapeOptions options,
         Action<string>? onStatus = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var page = await context.NewPageAsync();
         try
         {
             return await TikTokUrlDiscovery.DiscoverAsync(
-                page, keyword, maxVideos, options, onStatus, cancellationToken);
+                page, keyword, maxVideos, options, onStatus, cancellationToken, sessionHeadless, captchaTracker);
         }
         finally
         {
@@ -123,7 +127,9 @@ public class TikTokScraper
         string videoUrl,
         int maxComments,
         ScrapeResult result,
-        ScrapeOptions options)
+        ScrapeOptions options,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
     {
         var cleanUrl = NormalizeVideoUrl(videoUrl);
         Console.WriteLine($"[TikTok] Opening video: {cleanUrl}");
@@ -138,10 +144,12 @@ public class TikTokScraper
             WaitUntil = WaitUntilState.DOMContentLoaded,
             Timeout = 60000
         });
-        await TikTokStealthHelper.DismissCookieBannersAsync(page);
+        await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
 
-        var captchaBlocked = !await TikTokCaptchaHelper.TryContinueAsync(page, options, "video");
+        var captchaBlocked = !await TikTokCaptchaHelper.TryContinueAsync(
+            page, options, "video", sessionHeadless, captchaTracker);
         await page.WaitForTimeoutAsync(2500);
+        await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
 
         await FillFromDomAsync(page, result);
         await FillFromEmbeddedJsonAsync(page, result);
@@ -151,6 +159,7 @@ public class TikTokScraper
 
         if (!captchaBlocked)
         {
+            await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
             await TryActivateCommentsTabAsync(page);
             await TryOpenCommentsAsync(page);
             await page.WaitForTimeoutAsync(1500);

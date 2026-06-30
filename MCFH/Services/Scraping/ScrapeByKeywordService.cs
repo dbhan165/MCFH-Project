@@ -421,13 +421,25 @@ public class ScrapeByKeywordService
         progress?.StartPlatform("youtube", "Đang tìm video trên YouTube...");
         try
         {
-            using var playwright = await Playwright.CreateAsync();
-            await using var browser = await playwright.Chromium.LaunchAsync(
-                PlaywrightScrapeHelper.YouTubeLaunch(_activeOptions, CurrentPlaywrightProxy()));
-
             var searchScraper = new YouTubeSearchScraper();
-            var urls = await searchScraper.SearchAsync(
-                keyword, poolSize, _activeOptions, browser, timeFilter.PostedSinceDays);
+            var useProxyForYouTube = _activeProxy != null;
+            List<string> urls;
+            try
+            {
+                urls = await RunYouTubeSearchAsync(searchScraper, keyword, poolSize, timeFilter, useProxyForYouTube);
+            }
+            catch (Exception ex) when (IsNavigationTimeout(ex) && useProxyForYouTube)
+            {
+                Console.WriteLine("[YouTube] Timeout qua proxy — thử lại không dùng proxy...");
+                progress?.UpdatePlatform("youtube", 0, "YouTube: proxy chậm, thử lại trực tiếp...");
+                useProxyForYouTube = false;
+                urls = await RunYouTubeSearchAsync(searchScraper, keyword, poolSize, timeFilter, useProxy: false);
+            }
+
+            using var playwright = await Playwright.CreateAsync();
+            var ytProxy = useProxyForYouTube ? CurrentPlaywrightProxy() : null;
+            await using var browser = await playwright.Chromium.LaunchAsync(
+                PlaywrightScrapeHelper.YouTubeLaunch(_activeOptions, ytProxy));
 
             var commentScraper = new YouTubeScraper(NullLoggerFactory.Instance.CreateLogger<YouTubeScraper>());
             var ytMaxComments = Math.Max(_activeOptions.EffectiveYouTubeMaxComments, _activeOptions.EffectiveMaxCommentsPerItem);
@@ -548,10 +560,32 @@ public class ScrapeByKeywordService
 
         try
         {
-            var saved = await RunTikTokBrowserSessionAsync(
-                projectId, keyword, result, progress, discoveryCts.Token, _activeOptions.TikTokHeadless, timeFilter, allowUnknownDates);
+            var captchaTracker = new TikTokCaptchaTracker();
+            var headedOnCaptchaOnly = _activeOptions.TikTokHeadedOnCaptchaOnly;
+            var initialHeadless = headedOnCaptchaOnly || _activeOptions.TikTokHeadless;
 
-            if (saved == 0
+            var saved = await RunTikTokBrowserSessionAsync(
+                projectId, keyword, result, progress, discoveryCts.Token,
+                initialHeadless, timeFilter, allowUnknownDates, captchaTracker);
+
+            if (headedOnCaptchaOnly)
+            {
+                if (captchaTracker.Encountered
+                    && _activeOptions.TikTokAllowManualCaptcha
+                    && _activeOptions.TikTokCaptchaWaitSeconds > 0
+                    && progress?.IsCancellationRequested != true)
+                {
+                    if (saved > 0 && result.TikTok.Sum(t => t.CommentsCount) == 0)
+                        await ClearTikTokPostsWithoutCommentsAsync(projectId, result);
+
+                    progress?.UpdatePlatform("tiktok", result.TikTok.Count,
+                        "TikTok: CAPTCHA — mở cửa sổ Chromium, vui lòng giải trong 2 phút...");
+                    saved += await RunTikTokBrowserSessionAsync(
+                        projectId, keyword, result, progress, discoveryCts.Token,
+                        headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
+                }
+            }
+            else if (saved == 0
                 && _activeOptions.TikTokHeadless
                 && _activeOptions.EffectiveTikTokRetryHeaded
                 && progress?.IsCancellationRequested != true)
@@ -559,7 +593,22 @@ public class ScrapeByKeywordService
                 progress?.UpdatePlatform("tiktok", 0,
                     "TikTok: thử lại với cửa sổ Chromium thật (không cần đăng nhập)...");
                 saved = await RunTikTokBrowserSessionAsync(
-                    projectId, keyword, result, progress, discoveryCts.Token, headless: false, timeFilter, allowUnknownDates);
+                    projectId, keyword, result, progress, discoveryCts.Token,
+                    headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
+            }
+            else if (_activeOptions.TikTokHeadless
+                     && _activeOptions.TikTokRetryHeadedWhenNoComments
+                     && _activeOptions.EffectiveTikTokRetryHeaded
+                     && progress?.IsCancellationRequested != true
+                     && saved > 0
+                     && result.TikTok.Sum(t => t.CommentsCount) == 0)
+            {
+                await ClearTikTokPostsWithoutCommentsAsync(projectId, result);
+                progress?.UpdatePlatform("tiktok", 0,
+                    "TikTok: có video nhưng 0 comment (CAPTCHA) — thử lại với cửa sổ thật...");
+                saved += await RunTikTokBrowserSessionAsync(
+                    projectId, keyword, result, progress, discoveryCts.Token,
+                    headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
             }
 
             if (progress?.IsCancellationRequested == true)
@@ -597,7 +646,8 @@ public class ScrapeByKeywordService
         CancellationToken cancellationToken,
         bool headless,
         ScrapeTimeFilter timeFilter,
-        bool allowUnknownDates)
+        bool allowUnknownDates,
+        TikTokCaptchaTracker captchaTracker)
     {
         IBrowserContext? context = null;
         var savedBefore = result.TikTok.Count;
@@ -618,7 +668,9 @@ public class ScrapeByKeywordService
                 poolSize,
                 _activeOptions,
                 msg => progress?.UpdatePlatform("tiktok", result.TikTok.Count, msg),
-                cancellationToken);
+                cancellationToken,
+                headless,
+                captchaTracker);
 
             if (urls.Count == 0)
                 return 0;
@@ -648,7 +700,7 @@ public class ScrapeByKeywordService
                 }
 
                 var scrapeResult = await videoScraper.ScrapeVideoAsync(
-                    url, tiktokMaxComments, _activeOptions, context);
+                    url, tiktokMaxComments, _activeOptions, context, headless, captchaTracker);
 
                 if (!scrapeResult.Success)
                 {
@@ -730,6 +782,71 @@ public class ScrapeByKeywordService
                 await context.CloseAsync();
         }
     }
+
+    private async Task ClearTikTokPostsWithoutCommentsAsync(int projectId, ScrapeByKeywordResult result)
+    {
+        List<PlatformPostResult> zeroCommentPosts;
+        lock (result.TikTok)
+            zeroCommentPosts = result.TikTok.Where(t => t.CommentsCount == 0).ToList();
+
+        if (zeroCommentPosts.Count == 0)
+            return;
+
+        var feedbackIds = zeroCommentPosts
+            .Select(t => t.FeedbackId)
+            .Where(id => id > 0)
+            .ToList();
+
+        if (feedbackIds.Count > 0)
+        {
+            var analyses = await _db.AiAnalyses
+                .Where(a => feedbackIds.Contains(a.FeedbackId))
+                .ToListAsync();
+            if (analyses.Count > 0)
+                _db.AiAnalyses.RemoveRange(analyses);
+
+            var feedbacks = await _db.ScrapedFeedbacks
+                .Where(f => feedbackIds.Contains(f.FeedbackId) && f.ProjectId == projectId)
+                .ToListAsync();
+
+            foreach (var feedback in feedbacks)
+            {
+                if (!string.IsNullOrWhiteSpace(feedback.OriginalUrl))
+                {
+                    var key = ScrapeUrlHelper.DedupeKey("tiktok", feedback.OriginalUrl);
+                    if (!string.IsNullOrWhiteSpace(key))
+                        _scrapedKeys?.TryRemove(key, out _);
+                }
+
+                _db.ScrapedFeedbacks.Remove(feedback);
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
+        lock (result.TikTok)
+            result.TikTok.RemoveAll(t => t.CommentsCount == 0);
+
+        Console.WriteLine($"[TikTok] Đã xóa {zeroCommentPosts.Count} bài 0 comment để cào lại headed.");
+    }
+
+    private async Task<List<string>> RunYouTubeSearchAsync(
+        YouTubeSearchScraper searchScraper,
+        string keyword,
+        int poolSize,
+        ScrapeTimeFilter timeFilter,
+        bool useProxy)
+    {
+        using var playwright = await Playwright.CreateAsync();
+        var proxy = useProxy ? CurrentPlaywrightProxy() : null;
+        await using var browser = await playwright.Chromium.LaunchAsync(
+            PlaywrightScrapeHelper.YouTubeLaunch(_activeOptions, proxy));
+        return await searchScraper.SearchAsync(
+            keyword, poolSize, _activeOptions, browser, timeFilter.PostedSinceDays);
+    }
+
+    private static bool IsNavigationTimeout(Exception ex) =>
+        ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase);
 
     private static string PlaywrightErrorHint(Exception ex) =>
         ex.Message.Contains("Executable doesn't exist", StringComparison.OrdinalIgnoreCase)
