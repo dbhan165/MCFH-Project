@@ -37,6 +37,40 @@ public static class ScrapingJobPersistence
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Project đến hạn cào nếu: không có job running (hoặc running đã stale),
+    /// và đã qua <paramref name="intervalMinutes"/> kể từ <c>started_at</c> lần gần nhất.
+    /// </summary>
+    public static async Task<bool> IsProjectDueForScrapeAsync(
+        McfhDbContext db,
+        int projectId,
+        int intervalMinutes,
+        int staleRunningMinutes,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.Now;
+        var staleCutoff = now.AddMinutes(-staleRunningMinutes);
+
+        var hasActiveRun = await db.ScrapingJobs.AnyAsync(
+            j => j.ProjectId == projectId
+                 && j.Status == "running"
+                 && j.StartedAt != null
+                 && j.StartedAt > staleCutoff,
+            ct);
+
+        if (hasActiveRun)
+            return false;
+
+        var lastStarted = await db.ScrapingJobs
+            .Where(j => j.ProjectId == projectId && j.StartedAt != null)
+            .MaxAsync(j => (DateTime?)j.StartedAt, ct);
+
+        if (lastStarted == null)
+            return true;
+
+        return lastStarted.Value.AddMinutes(intervalMinutes) <= now;
+    }
+
     public static async Task FinalizeFromStateAsync(McfhDbContext db, ScrapeJobState state)
     {
         var status = MapStatus(state);
