@@ -29,6 +29,15 @@ public class ScrapeOptions
     /// <summary>Cào FB + YouTube + TikTok song song.</summary>
     public bool ParallelPlatforms { get; set; } = true;
 
+    /// <summary>Cron Hangfire kiểm tra project đến hạn cào (mặc định mỗi phút).</summary>
+    public string HangfireSchedulerCron { get; set; } = "*/1 * * * *";
+
+    /// <summary>Khoảng cách tối thiểu giữa hai lần bắt đầu cào của cùng project (phút), căn cứ SCRAPING_JOBS.started_at.</summary>
+    public int PerProjectScrapeIntervalMinutes { get; set; } = 15;
+
+    /// <summary>Job status=running quá lâu (phút) được coi là stale — không chặn lần cào mới.</summary>
+    public int StaleRunningJobMinutes { get; set; } = 120;
+
     /// <summary>Giới hạn thời gian tìm video TikTok (giây) — tránh treo quá lâu.</summary>
     public int TikTokDiscoveryTimeoutSeconds { get; set; } = 90;
 
