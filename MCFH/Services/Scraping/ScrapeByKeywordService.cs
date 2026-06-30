@@ -555,14 +555,14 @@ public class ScrapeByKeywordService
 
         progress?.StartPlatform("tiktok", "Đang tìm video công khai trên TikTok...");
 
-        using var discoveryCts = CancellationTokenSource.CreateLinkedTokenSource(progress?.CancellationToken ?? default);
-        discoveryCts.CancelAfter(TimeSpan.FromSeconds(_activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds));
-
         try
         {
             var captchaTracker = new TikTokCaptchaTracker();
             var headedOnCaptchaOnly = _activeOptions.TikTokHeadedOnCaptchaOnly;
             var initialHeadless = headedOnCaptchaOnly || _activeOptions.TikTokHeadless;
+
+            using var discoveryCts = CreateTikTokSessionCts(
+                progress, _activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds);
 
             var saved = await RunTikTokBrowserSessionAsync(
                 projectId, keyword, result, progress, discoveryCts.Token,
@@ -580,8 +580,9 @@ public class ScrapeByKeywordService
 
                     progress?.UpdatePlatform("tiktok", result.TikTok.Count,
                         "TikTok: CAPTCHA — mở cửa sổ Chromium, vui lòng giải trong 2 phút...");
+                    using var headedCts = CreateTikTokSessionCts(progress, HeadedRetryTimeoutSeconds());
                     saved += await RunTikTokBrowserSessionAsync(
-                        projectId, keyword, result, progress, discoveryCts.Token,
+                        projectId, keyword, result, progress, headedCts.Token,
                         headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
                 }
             }
@@ -592,8 +593,9 @@ public class ScrapeByKeywordService
             {
                 progress?.UpdatePlatform("tiktok", 0,
                     "TikTok: thử lại với cửa sổ Chromium thật (không cần đăng nhập)...");
+                using var headedCts = CreateTikTokSessionCts(progress, HeadedRetryTimeoutSeconds());
                 saved = await RunTikTokBrowserSessionAsync(
-                    projectId, keyword, result, progress, discoveryCts.Token,
+                    projectId, keyword, result, progress, headedCts.Token,
                     headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
             }
             else if (_activeOptions.TikTokHeadless
@@ -606,8 +608,9 @@ public class ScrapeByKeywordService
                 await ClearTikTokPostsWithoutCommentsAsync(projectId, result);
                 progress?.UpdatePlatform("tiktok", 0,
                     "TikTok: có video nhưng 0 comment (CAPTCHA) — thử lại với cửa sổ thật...");
+                using var headedCts = CreateTikTokSessionCts(progress, HeadedRetryTimeoutSeconds());
                 saved += await RunTikTokBrowserSessionAsync(
-                    projectId, keyword, result, progress, discoveryCts.Token,
+                    projectId, keyword, result, progress, headedCts.Token,
                     headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
             }
 
@@ -769,6 +772,19 @@ public class ScrapeByKeywordService
             await TikTokSessionHelper.SaveCookiesAsync(context);
             return result.TikTok.Count - savedBefore;
         }
+        catch (Exception ex) when (ex is OperationCanceledException && progress?.IsCancellationRequested == true)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            var timeoutMsg =
+                $"TikTok: hết thời gian chờ phiên cào ({_activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds}s). Tăng TikTokDiscoveryTimeoutSeconds trong appsettings hoặc thử từ khóa ngắn hơn.";
+            progress?.FailPlatform("tiktok", timeoutMsg);
+            lock (result.Errors)
+                result.Errors.Add(timeoutMsg);
+            return result.TikTok.Count - savedBefore;
+        }
         catch (Exception ex)
         {
             progress?.FailPlatform("tiktok", ex.Message);
@@ -828,6 +844,20 @@ public class ScrapeByKeywordService
             result.TikTok.RemoveAll(t => t.CommentsCount == 0);
 
         Console.WriteLine($"[TikTok] Đã xóa {zeroCommentPosts.Count} bài 0 comment để cào lại headed.");
+    }
+
+    private static CancellationTokenSource CreateTikTokSessionCts(
+        ScrapeJobProgress? progress, int timeoutSeconds)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(progress?.CancellationToken ?? default);
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 30)));
+        return cts;
+    }
+
+    private int HeadedRetryTimeoutSeconds()
+    {
+        var wait = _activeOptions.TikTokAllowManualCaptcha ? _activeOptions.TikTokCaptchaWaitSeconds : 0;
+        return _activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds + wait + 120;
     }
 
     private async Task<List<string>> RunYouTubeSearchAsync(
