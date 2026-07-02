@@ -10,7 +10,7 @@ namespace MCFH.Services.Scraping;
 public static class TikTokCaptchaHelper
 {
     public const string PlatformBlockedMessage =
-        "TikTok chặn bot (CAPTCHA). Admin hệ thống cần cập nhật cookie nền tảng (tiktok_cookie.json) trên server.";
+        "TikTok chặn bot (CAPTCHA). Admin cần cập nhật cookies/tiktok_cookie.json trong thư mục project.";
 
     public static async Task<bool> IsVisibleAsync(IPage page)
     {

@@ -50,7 +50,7 @@ const CreateProject = () => {
   const handleNext = () => {
     setErrorMessage('');
     if (currentStep === 2 && !hasScrapableSource) {
-      setErrorMessage('Vui lòng chọn ít nhất một nền tảng: Facebook, YouTube hoặc TikTok.');
+      setErrorMessage('Vui lòng chọn ít nhất một nền tảng: Facebook hoặc YouTube.');
       return;
     }
     if (currentStep === 3 && !getPrimaryKeyword(keywords)) {
@@ -206,13 +206,12 @@ const CreateProject = () => {
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
               <h2 className="text-xl font-bold mb-2">Nguồn thu thập</h2>
               <p className="text-gray-400 text-sm mb-6">
-                Chọn nền tảng cần cào. Giai đoạn này hỗ trợ <strong className="text-white">Facebook, YouTube, TikTok</strong>.
+                Chọn nền tảng cần cào. Giai đoạn này hỗ trợ <strong className="text-white">Facebook, YouTube</strong>.
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {[
                   { id: 'facebook', icon: Users, label: 'FACEBOOK' },
                   { id: 'youtube', icon: MonitorPlay, label: 'YOUTUBE' },
-                  { id: 'tiktok', icon: Hash, label: 'TIKTOK' },
                 ].map(({ id, icon: Icon, label }) => (
                   <button
                     key={id}
@@ -235,6 +234,7 @@ const CreateProject = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
                 {[
+                  { id: 'tiktok', icon: Hash, label: 'TIKTOK' },
                   { id: 'maps', icon: Map, label: 'GOOGLE MAPS' },
                   { id: 'browser', icon: Globe, label: 'TRÌNH DUYỆT' },
                   { id: 'file', icon: FileUp, label: 'IMPORT FILE' },

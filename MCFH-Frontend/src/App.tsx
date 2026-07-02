@@ -12,6 +12,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
 import SubscriptionPlans from './pages/admin/SubscriptionPlans';
 import ProxyManagement from './pages/admin/ProxyManagement';
+import FbSourceManagement from './pages/admin/FbSourceManagement';
 import ScrapingMonitor from './pages/admin/ScrapingMonitor';
 import SystemSettings from './pages/admin/SystemSettings';
 import BespokeRequests from './pages/reporter/BespokeRequests';
@@ -71,6 +72,7 @@ function AppRoutes() {
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
         <Route path="/admin/proxies" element={<ProxyManagement />} />
+        <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
         <Route path="/admin/scraping" element={<ScrapingMonitor />} />
         <Route path="/admin/settings" element={<SystemSettings />} />
 

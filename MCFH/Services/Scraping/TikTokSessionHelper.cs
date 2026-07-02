@@ -13,8 +13,7 @@ public static class TikTokSessionHelper
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public static readonly string CookiePath =
-        Path.Combine(AppContext.BaseDirectory, "tiktok_cookie.json");
+    public static string CookiePath => ScrapeCookiePaths.TikTokCookiePath;
 
     public static bool CookieFileExists() => File.Exists(CookiePath);
 

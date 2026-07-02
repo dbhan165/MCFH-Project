@@ -5,6 +5,7 @@ import {
   Users,
   CreditCard,
   Server,
+  Globe,
   Activity,
   Settings,
   User,
@@ -20,6 +21,7 @@ const navItems = [
   { label: 'User Management', icon: Users, href: '/admin/users' },
   { label: 'Subscription Plans', icon: CreditCard, href: '/admin/subscriptions' },
   { label: 'Proxy Management', icon: Server, href: '/admin/proxies' },
+  { label: 'Facebook Sources', icon: Globe, href: '/admin/fb-sources' },
   { label: 'Scraping Monitor', icon: Activity, href: '/admin/scraping' },
   { label: 'System Settings', icon: Settings, href: '/admin/settings' },
 ];

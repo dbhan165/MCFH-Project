@@ -11,7 +11,7 @@ public class FacebookGroupScraper
     {
         options ??= new ScrapeOptions();
         var fast = options.FastDemoMode;
-        feedOnly = feedOnly || (fast && options.FastDemoFacebookFeedOnly);
+        feedOnly = feedOnly || options.FacebookFeedOnly || (fast && options.FastDemoFacebookFeedOnly);
         var results = new List<GroupPost>();
 
         using var playwright = await Playwright.CreateAsync();
@@ -36,6 +36,7 @@ public class FacebookGroupScraper
         });
         await page.WaitForTimeoutAsync(fast ? 800 : 1500);
 
+        await DismissCommonOverlaysAsync(page);
         await page.Mouse.MoveAsync(640, 400);
 
         var maxScrolls = fast ? 4 : 12;
@@ -165,8 +166,16 @@ public class FacebookGroupScraper
         post.PostUrl = NormalizeFacebookUrl(permalinkHref);
 
         var urlBeforeClick = page.Url;
-        await timestampLink.ClickAsync();
-        await page.WaitForTimeoutAsync(2500);
+        try
+        {
+            await timestampLink.ClickAsync(new ElementHandleClickOptions { Timeout = 15_000 });
+            await page.WaitForTimeoutAsync(2500);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[FB Group] posinset={posinset} click thất bại — giữ bài từ feed: {ex.Message}");
+            return post;
+        }
 
         var urlAfterClick = page.Url;
         if (urlAfterClick != urlBeforeClick
@@ -302,5 +311,23 @@ public class FacebookGroupScraper
         catch { }
 
         return null;
+    }
+
+    private static async Task DismissCommonOverlaysAsync(IPage page)
+    {
+        var labels = new[] { "Close", "Đóng", "Allow all cookies", "Cho phép tất cả cookie", "Từ chối cookie không cần thiết" };
+        foreach (var label in labels)
+        {
+            try
+            {
+                var btn = page.GetByRole(AriaRole.Button, new() { Name = label, Exact = false });
+                if (await btn.CountAsync() > 0)
+                {
+                    await btn.First.ClickAsync(new LocatorClickOptions { Timeout = 2000 });
+                    await page.WaitForTimeoutAsync(400);
+                }
+            }
+            catch { }
+        }
     }
 }

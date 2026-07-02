@@ -14,6 +14,14 @@ namespace MCFH
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Playwright: dùng thư mục cố định trong project (tránh sandbox/temp của IDE).
+            var playwrightBrowsers = Path.Combine(builder.Environment.ContentRootPath, ".playwright");
+            Directory.CreateDirectory(playwrightBrowsers);
+            Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", playwrightBrowsers);
+
+            ScrapeCookiePaths.Initialize(builder.Environment.ContentRootPath);
+
             // Add services to the container.
             // 1. Cấu hình DbContext sử dụng DI
             builder.Services.AddDbContext<McfhDbContext>(options =>
@@ -94,6 +102,7 @@ namespace MCFH
             builder.Services.AddScoped<ScrapeByKeywordService>();
             builder.Services.AddScoped<ProxyRotationService>();
             builder.Services.AddScoped<ProxyAdminService>();
+            builder.Services.AddScoped<FbSourceAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();
             builder.Services.AddSingleton<ScrapeJobRunner>();
 
