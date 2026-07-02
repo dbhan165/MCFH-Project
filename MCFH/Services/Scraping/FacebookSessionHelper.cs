@@ -6,8 +6,7 @@ namespace MCFH.Services.Scraping;
 
 public static class FacebookSessionHelper
 {
-    public static readonly string CookiePath =
-        Path.Combine(AppContext.BaseDirectory, "fb_cookie.json");
+    public static string CookiePath => ScrapeCookiePaths.FacebookCookiePath;
 
     public static bool CookieFileExists() => File.Exists(CookiePath);
 

@@ -35,3 +35,22 @@ public class ScrapingJobDto
     public DateTime? StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
 }
+
+public class FbSourceDto
+{
+    public int FbSourceId { get; set; }
+    public string GroupUrl { get; set; } = null!;
+    public string? GroupName { get; set; }
+    public string? Status { get; set; }
+    public int AddedBy { get; set; }
+    public string? AddedByName { get; set; }
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class UpsertFbSourceDto
+{
+    public string GroupUrl { get; set; } = null!;
+    public string? GroupName { get; set; }
+    public string? Status { get; set; }
+    public bool Enabled { get; set; } = true;
+}

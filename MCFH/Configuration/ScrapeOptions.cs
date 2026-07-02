@@ -32,6 +32,9 @@ public class ScrapeOptions
     public int FacebookMaxComments { get; set; } = 40;
     public int MaxFacebookPosts { get; set; } = 5;
 
+    /// <summary>Chỉ lấy nội dung từ feed — không click mở modal (ổn định hơn headless).</summary>
+    public bool FacebookFeedOnly { get; set; } = true;
+
     /// <summary>Cào FB + YouTube + TikTok song song.</summary>
     public bool ParallelPlatforms { get; set; } = true;
 
@@ -49,6 +52,27 @@ public class ScrapeOptions
 
     /// <summary>Chờ TikTok load API search sau khi mở trang (ms).</summary>
     public int TikTokSearchWaitMs { get; set; } = 12000;
+
+    /// <summary>Delay/cuộn ngẫu nhiên giống người dùng — giảm CAPTCHA TikTok.</summary>
+    public bool TikTokHumanizeBehavior { get; set; } = true;
+
+    /// <summary>Giây chờ ngẫu nhiên giữa các thao tác (ms, min).</summary>
+    public int TikTokHumanizeDelayMinMs { get; set; } = 1000;
+
+    /// <summary>Giây chờ ngẫu nhiên giữa các thao tác (ms, max).</summary>
+    public int TikTokHumanizeDelayMaxMs { get; set; } = 3000;
+
+    /// <summary>Mỗi bước cuộn chuột tối thiểu (px).</summary>
+    public int TikTokHumanizeScrollStepMinPx { get; set; } = 280;
+
+    /// <summary>Mỗi bước cuộn chuột tối đa (px).</summary>
+    public int TikTokHumanizeScrollStepMaxPx { get; set; } = 620;
+
+    /// <summary>Pause giữa các bước cuộn nhỏ (ms, min).</summary>
+    public int TikTokHumanizeScrollPauseMinMs { get; set; } = 450;
+
+    /// <summary>Pause giữa các bước cuộn nhỏ (ms, max).</summary>
+    public int TikTokHumanizeScrollPauseMaxMs { get; set; } = 1100;
 
     /// <summary>Nếu headless không tìm được video, thử lại 1 lần với cửa sổ Chromium thật.</summary>
     public bool TikTokRetryHeadedOnFailure { get; set; } = true;

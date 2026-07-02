@@ -686,6 +686,7 @@ public class ScrapeByKeywordService
             var videoScraper = new TikTokScraper();
             var tiktokMaxComments = Math.Max(_activeOptions.EffectiveTikTokMaxComments, _activeOptions.EffectiveMaxCommentsPerItem);
             var skipped = 0;
+            var openedVideoCount = 0;
 
             foreach (var url in urls)
             {
@@ -701,6 +702,10 @@ public class ScrapeByKeywordService
                     Console.WriteLine($"[TikTok] Skip existing: {url}");
                     continue;
                 }
+
+                if (openedVideoCount > 0)
+                    await TikTokHumanizeHelper.BetweenVideosAsync(_activeOptions, cancellationToken);
+                openedVideoCount++;
 
                 var scrapeResult = await videoScraper.ScrapeVideoAsync(
                     url, tiktokMaxComments, _activeOptions, context, headless, captchaTracker);

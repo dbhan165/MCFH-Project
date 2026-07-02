@@ -30,3 +30,20 @@ export interface ScrapingJob {
   startedAt?: string | null;
   finishedAt?: string | null;
 }
+
+export interface FbSource {
+  fbSourceId: number;
+  groupUrl: string;
+  groupName?: string | null;
+  status?: string | null;
+  addedBy: number;
+  addedByName?: string | null;
+  createdAt?: string | null;
+}
+
+export interface UpsertFbSource {
+  groupUrl: string;
+  groupName?: string;
+  status?: string;
+  enabled: boolean;
+}

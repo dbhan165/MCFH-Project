@@ -148,7 +148,7 @@ public class TikTokScraper
 
         var captchaBlocked = !await TikTokCaptchaHelper.TryContinueAsync(
             page, options, "video", sessionHeadless, captchaTracker);
-        await page.WaitForTimeoutAsync(2500);
+        await TikTokHumanizeHelper.AfterNavigationAsync(page, options);
         await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
 
         await FillFromDomAsync(page, result);
@@ -160,11 +160,11 @@ public class TikTokScraper
         if (!captchaBlocked)
         {
             await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
-            await TryActivateCommentsTabAsync(page);
-            await TryOpenCommentsAsync(page);
-            await page.WaitForTimeoutAsync(1500);
-            await ExpandReplyThreadsAsync(page);
-            await ScrollCommentsAsync(page, maxComments);
+            await TryActivateCommentsTabAsync(page, options);
+            await TryOpenCommentsAsync(page, options);
+            await TikTokHumanizeHelper.AfterClickAsync(page, options);
+            await ExpandReplyThreadsAsync(page, options);
+            await ScrollCommentsAsync(page, maxComments, options);
 
             foreach (var text in await ExtractCommentsFromDomAsync(page))
                 collectedComments.Add(text);
@@ -177,8 +177,8 @@ public class TikTokScraper
 
             if (collectedComments.Count < maxComments / 2)
             {
-                await ExpandReplyThreadsAsync(page);
-                await ScrollCommentsAsync(page, maxComments, aggressive: true);
+                await ExpandReplyThreadsAsync(page, options);
+                await ScrollCommentsAsync(page, maxComments, options, aggressive: true);
                 foreach (var text in await ExtractCommentsFromDomAsync(page))
                     collectedComments.Add(text);
                 foreach (var text in capture.Comments)
@@ -501,7 +501,7 @@ public class TikTokScraper
         }
     }
 
-    private static async Task TryExpandCommentPanelAsync(IPage page)
+    private static async Task TryExpandCommentPanelAsync(IPage page, ScrapeOptions? options = null)
     {
         foreach (var selector in new[]
         {
@@ -518,7 +518,7 @@ public class TikTokScraper
                 if (await el.IsVisibleAsync())
                 {
                     await el.ClickAsync();
-                    await page.WaitForTimeoutAsync(1500);
+                    await TikTokHumanizeHelper.AfterClickAsync(page, options);
                     return;
                 }
             }
@@ -526,7 +526,7 @@ public class TikTokScraper
         }
     }
 
-    private static async Task TryOpenCommentsAsync(IPage page)
+    private static async Task TryOpenCommentsAsync(IPage page, ScrapeOptions? options = null)
     {
         foreach (var selector in new[]
         {
@@ -542,7 +542,7 @@ public class TikTokScraper
                 if (await btn.IsVisibleAsync())
                 {
                     await btn.ClickAsync();
-                    await page.WaitForTimeoutAsync(1200);
+                    await TikTokHumanizeHelper.AfterClickAsync(page, options);
                     return;
                 }
             }
@@ -550,7 +550,7 @@ public class TikTokScraper
         }
     }
 
-    private static async Task TryActivateCommentsTabAsync(IPage page)
+    private static async Task TryActivateCommentsTabAsync(IPage page, ScrapeOptions? options = null)
     {
         foreach (var selector in new[]
         {
@@ -567,7 +567,7 @@ public class TikTokScraper
                 if (await tab.IsVisibleAsync())
                 {
                     await tab.ClickAsync();
-                    await page.WaitForTimeoutAsync(1000);
+                    await TikTokHumanizeHelper.AfterClickAsync(page, options);
                     return;
                 }
             }
@@ -575,7 +575,7 @@ public class TikTokScraper
         }
     }
 
-    private static async Task ExpandReplyThreadsAsync(IPage page)
+    private static async Task ExpandReplyThreadsAsync(IPage page, ScrapeOptions? options = null)
     {
         try
         {
@@ -593,7 +593,7 @@ public class TikTokScraper
                 try
                 {
                     await buttons.Nth(i).ClickAsync(new LocatorClickOptions { Timeout = 2000 });
-                    await page.WaitForTimeoutAsync(700);
+                    await TikTokHumanizeHelper.DelayAsync(page, options, 700, 500, 1200);
                 }
                 catch { }
             }
@@ -601,7 +601,12 @@ public class TikTokScraper
         catch { }
     }
 
-    private static async Task ScrollCommentsAsync(IPage page, int maxComments, bool aggressive = false)
+    private static async Task ScrollCommentsAsync(
+        IPage page,
+        int maxComments,
+        ScrapeOptions options,
+        bool aggressive = false,
+        CancellationToken cancellationToken = default)
     {
         var previousCount = 0;
         var noChangeStreak = 0;
@@ -609,6 +614,8 @@ public class TikTokScraper
 
         for (var i = 0; i < iterations; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var currentCount = await page.Locator(
                 "[data-e2e='comment-level-1'], [data-e2e='comment-level-2']").CountAsync();
             if (currentCount >= maxComments) break;
@@ -622,19 +629,8 @@ public class TikTokScraper
 
             previousCount = currentCount;
 
-            await page.EvaluateAsync(@"() => {
-                const panels = [
-                    document.querySelector('[class*=""CommentListContainer""]'),
-                    document.querySelector('[class*=""comment-list""]'),
-                    document.querySelector('[data-e2e=""comment-list""]'),
-                    document.querySelector('div[class*=""DivCommentList""]')
-                ].filter(Boolean);
-                for (const panel of panels) panel.scrollTop += 900;
-                window.scrollBy(0, 600);
-            }");
-
-            await page.Mouse.WheelAsync(0, aggressive ? 1600 : 1200);
-            await page.WaitForTimeoutAsync(aggressive ? 1100 : 900);
+            await TikTokHumanizeHelper.ScrollCommentPanelAsync(
+                page, options, aggressive, cancellationToken);
         }
     }
 

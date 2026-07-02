@@ -32,6 +32,23 @@ export interface AdminUser {
   createdAt: string | null;
 }
 
+export interface FbSource {
+  fbSourceId: number;
+  groupUrl: string;
+  groupName?: string | null;
+  status?: string | null;
+  addedBy: number;
+  addedByName?: string | null;
+  createdAt?: string | null;
+}
+
+export interface UpsertFbSource {
+  groupUrl: string;
+  groupName?: string;
+  status?: string;
+  enabled: boolean;
+}
+
 export interface PortalBespokeRequest {
   requestId: number;
   title: string;
@@ -238,6 +255,36 @@ export const adminApi = {
         finishedAt: pickNullableString(j, 'finishedAt', 'FinishedAt'),
       };
     });
+  },
+
+  getFbSources: async (): Promise<FbSource[]> => {
+    const res = await axiosClient.get<unknown[]>('/api/admin/fb-sources');
+    return (res.data ?? []).map((item) => {
+      const s = item as Record<string, unknown>;
+      return {
+        fbSourceId: pickNumber(s, 'fbSourceId', 'FbSourceId'),
+        groupUrl: pickString(s, 'groupUrl', 'GroupUrl'),
+        groupName: pickNullableString(s, 'groupName', 'GroupName'),
+        status: pickNullableString(s, 'status', 'Status'),
+        addedBy: pickNumber(s, 'addedBy', 'AddedBy'),
+        addedByName: pickNullableString(s, 'addedByName', 'AddedByName'),
+        createdAt: pickNullableString(s, 'createdAt', 'CreatedAt'),
+      };
+    });
+  },
+
+  createFbSource: async (payload: UpsertFbSource) => {
+    const res = await axiosClient.post('/api/admin/fb-sources', payload);
+    return res.data;
+  },
+
+  updateFbSource: async (fbSourceId: number, payload: UpsertFbSource) => {
+    const res = await axiosClient.put(`/api/admin/fb-sources/${fbSourceId}`, payload);
+    return res.data;
+  },
+
+  deleteFbSource: async (fbSourceId: number) => {
+    await axiosClient.delete(`/api/admin/fb-sources/${fbSourceId}`);
   },
 
   getSettings: async () => {

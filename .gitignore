@@ -449,3 +449,6 @@ build/
 **/fb_cookie.json
 **/tiktok_cookie.json
 MCFH/cookies/
+
+# Playwright browser binaries (~300MB)
+**/.playwright/
