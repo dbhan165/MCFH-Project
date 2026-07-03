@@ -109,7 +109,7 @@ public static class ScrapingJobPersistence
     private static int CountSaved(ScrapeByKeywordResult? result) =>
         result == null
             ? 0
-            : result.Facebook.Count + result.YouTube.Count + result.TikTok.Count;
+            : result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.News.Count;
 
     private static string? BuildErrorLog(ScrapeByKeywordResult? result)
     {

@@ -53,6 +53,7 @@ function getPlatformTags(project: Project) {
   if (project.enableFacebook) tags.push('Facebook');
   if (project.enableYoutube) tags.push('YouTube');
   if (project.enableTiktok) tags.push('TikTok');
+  if (project.enableNews) tags.push('Tin tức');
   if (project.enableMaps) tags.push('Maps');
   return tags;
 }

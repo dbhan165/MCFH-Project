@@ -9,6 +9,7 @@ export interface Project {
   enableYoutube: boolean;
   enableTiktok: boolean;
   enableMaps: boolean;
+  enableNews?: boolean;
   createdAt: string | null;
 }
 

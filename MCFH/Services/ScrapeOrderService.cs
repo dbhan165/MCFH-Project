@@ -331,8 +331,9 @@ public class ScrapeOrderService
 
         var fbTarget = Math.Max(1, _scrapeOptions.MaxFacebookPosts);
         var videoTarget = Math.Max(1, _scrapeOptions.MaxVideosPerPlatform);
+        var newsTarget = Math.Max(1, _scrapeOptions.MaxNewsArticles);
 
-        var sum = platforms.Sum(p => PlatformProgressPercent(p, fbTarget, videoTarget));
+        var sum = platforms.Sum(p => PlatformProgressPercent(p, fbTarget, videoTarget, newsTarget));
         var avg = sum / platforms.Count;
 
         // Giai đoạn cào chiếm ~8%–78% tổng tiến trình đơn hàng
@@ -350,6 +351,7 @@ public class ScrapeOrderService
 
         var fbTarget = Math.Max(1, _scrapeOptions.MaxFacebookPosts);
         var videoTarget = Math.Max(1, _scrapeOptions.MaxVideosPerPlatform);
+        var newsTarget = Math.Max(1, _scrapeOptions.MaxNewsArticles);
 
         var parts = platforms.Select(p =>
         {
@@ -358,11 +360,10 @@ public class ScrapeOrderService
                 "Facebook" => "FB",
                 "YouTube" => "YT",
                 "TikTok" => "TT",
+                "Tin tức" => "News",
                 _ => p.Label
             };
-            var target = string.Equals(p.Platform, "facebook", StringComparison.OrdinalIgnoreCase)
-                ? fbTarget
-                : videoTarget;
+            var target = PlatformTarget(p.Platform, fbTarget, videoTarget, newsTarget);
 
             return p.Status switch
             {
@@ -379,13 +380,14 @@ public class ScrapeOrderService
     private static int PlatformProgressPercent(
         Models.Scraping.ScrapePlatformProgressDto platform,
         int fbTarget,
-        int videoTarget)
+        int videoTarget,
+        int newsTarget)
     {
         return platform.Status switch
         {
             "done" => 100,
             "error" => 100,
-            "running" => PlatformRunningPercent(platform, fbTarget, videoTarget),
+            "running" => PlatformRunningPercent(platform, fbTarget, videoTarget, newsTarget),
             _ => 0
         };
     }
@@ -393,11 +395,10 @@ public class ScrapeOrderService
     private static int PlatformRunningPercent(
         Models.Scraping.ScrapePlatformProgressDto platform,
         int fbTarget,
-        int videoTarget)
+        int videoTarget,
+        int newsTarget)
     {
-        var target = string.Equals(platform.Platform, "facebook", StringComparison.OrdinalIgnoreCase)
-            ? fbTarget
-            : videoTarget;
+        var target = PlatformTarget(platform.Platform, fbTarget, videoTarget, newsTarget);
         if (target <= 0)
             return 20;
 
@@ -406,11 +407,20 @@ public class ScrapeOrderService
         return (int)Math.Clamp(15 + ratio * 80, 15, 95);
     }
 
+    private static int PlatformTarget(string platform, int fbTarget, int videoTarget, int newsTarget) =>
+        platform.ToLowerInvariant() switch
+        {
+            "facebook" => fbTarget,
+            "news" => newsTarget,
+            _ => videoTarget
+        };
+
     private static int PlatformOrder(string platform) => platform.ToLowerInvariant() switch
     {
         "facebook" => 0,
         "youtube" => 1,
-        "tiktok" => 2,
+        "news" => 2,
+        "tiktok" => 3,
         _ => 9
     };
 

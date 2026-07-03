@@ -82,7 +82,7 @@ public class ScrapeJobState
         _cts.Cancel();
     }
 
-    public void InitPlatforms(bool facebook, bool youtube, bool tiktok)
+    public void InitPlatforms(bool facebook, bool youtube, bool tiktok, bool news = false)
     {
         lock (_lock)
         {
@@ -92,6 +92,8 @@ public class ScrapeJobState
                 youtube ? "Chờ cào..." : "Chưa bật nguồn YouTube");
             SetPlatformLocked("tiktok", "TikTok", tiktok ? "pending" : "skipped",
                 tiktok ? "Chờ cào..." : "Chưa bật nguồn TikTok");
+            SetPlatformLocked("news", "Tin tức", news ? "pending" : "skipped",
+                news ? "Chờ cào..." : "Chưa bật nguồn tin tức");
         }
     }
 
