@@ -57,16 +57,28 @@ và quan sát console log — nếu thấy `[FB Session] Loaded N cookies.` và 
 
 ---
 
-## 3. SerpApi Key (KHÔNG dùng trong luồng chính hiện tại)
+## 3. SerpApi Key (News discovery)
 
-`GoogleDorkSearchScraper.cs` từng được dùng để search bài viết Facebook public qua Google Dorking (SerpApi), nhưng **đã không còn nằm trong luồng chính** sau khi pivot sang hướng tracking group cố định (search trực tiếp trong group bằng `FacebookGroupScraper`).
+Luồng **Tin tức** dùng SerpApi để tìm URL bài báo (Google `site:` query), sau đó Playwright đọc nội dung từng bài. Nếu SerpApi lỗi / hết quota / không có kết quả → tự fallback sang Playwright (Google → Bing).
 
-File này vẫn được giữ lại trong code để tham khảo, phòng trường hợp cần mở rộng tìm kiếm bài viết public ngoài phạm vi các group đã track. Nếu dùng lại, cần:
+1. Đăng ký tại [serpapi.com](https://serpapi.com) (free tier ~100 searches/tháng).
+2. Thêm key vào User Secrets hoặc `appsettings.Development.json` (file này đã gitignore):
 
-1. Đăng ký tài khoản tại [serpapi.com](https://serpapi.com) (free tier: 100 searches/tháng).
-2. Thay giá trị `API_KEY` hardcode trong `GoogleDorkSearchScraper.cs` bằng key thật của bạn.
+```json
+"SerpApi": {
+  "Enabled": true,
+  "ApiKey": "YOUR_KEY_HERE"
+}
+```
 
-> Hiện không cần làm bước này để chạy được luồng scraper chính (Facebook Group / YouTube / TikTok).
+Hoặc biến môi trường: `SerpApi__ApiKey=...`
+
+3. `Scraping:NewsDiscoveryProvider`:
+   - `auto` (mặc định) — SerpApi nếu có key, else Playwright
+   - `serpapi` — ưu tiên SerpApi, fallback Playwright khi lỗi
+   - `playwright` — bỏ qua SerpApi (dev / zero cost)
+
+> Không commit ApiKey vào git. `appsettings.json` để `ApiKey` rỗng.
 
 ---
 

@@ -42,7 +42,7 @@ export function getPrimaryKeyword(keywords: string): string {
     .filter(Boolean)[0] ?? '';
 }
 
-export const SCRAPABLE_PLATFORMS = ['facebook', 'youtube'] as const;
+export const SCRAPABLE_PLATFORMS = ['facebook', 'youtube', 'news'] as const;
 
 export function buildDataSources(
   selectedSources: string[],

@@ -30,6 +30,7 @@ public class ProjectExtendedResponseDto
     public bool EnableYoutube { get; set; }
     public bool EnableTiktok { get; set; }
     public bool EnableMaps { get; set; }
+    public bool EnableNews { get; set; }
     public DateTime? CreatedAt { get; set; }
 }
 

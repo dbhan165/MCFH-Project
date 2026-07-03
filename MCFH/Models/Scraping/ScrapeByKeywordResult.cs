@@ -12,6 +12,7 @@ public class ScrapeByKeywordResult
     public List<PlatformPostResult> Facebook { get; set; } = new();
     public List<PlatformPostResult> YouTube { get; set; } = new();
     public List<PlatformPostResult> TikTok { get; set; } = new();
+    public List<PlatformPostResult> News { get; set; } = new();
     public AnalyzeProjectResultDto? Analysis { get; set; }
 }
 
