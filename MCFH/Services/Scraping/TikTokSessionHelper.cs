@@ -54,6 +54,12 @@ public static class TikTokSessionHelper
             if (tiktokCookies.Count == 0)
                 return;
 
+            if (CookieFileExists())
+            {
+                File.Copy(CookiePath, ScrapeCookiePaths.TikTokCookieBackupPath, overwrite: true);
+                Console.WriteLine($"[TikTok Session] Backup cookie → {ScrapeCookiePaths.TikTokCookieBackupPath}");
+            }
+
             var entries = tiktokCookies.Select(ToCookieEditorEntry).ToList();
             await File.WriteAllTextAsync(CookiePath, JsonSerializer.Serialize(entries, JsonOptions));
             Console.WriteLine($"[TikTok Session] Saved {entries.Count} cookies → {CookiePath}");
@@ -62,6 +68,32 @@ public static class TikTokSessionHelper
         {
             Console.WriteLine($"[TikTok Session] Cookie save failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Chỉ lưu khi phiên scrape thành công — tránh session CAPTCHA ghi đè cookie tốt trên server.
+    /// </summary>
+    public static async Task TrySaveAfterSuccessfulSessionAsync(
+        IBrowserContext? context,
+        TikTokCaptchaTracker captchaTracker,
+        int newVideosSaved)
+    {
+        if (context == null)
+            return;
+
+        if (captchaTracker.Encountered)
+        {
+            Console.WriteLine("[TikTok Session] Skip save — phiên gặp CAPTCHA, giữ cookie hiện tại.");
+            return;
+        }
+
+        if (newVideosSaved <= 0)
+        {
+            Console.WriteLine("[TikTok Session] Skip save — không lưu được video mới trong phiên này.");
+            return;
+        }
+
+        await SaveCookiesAsync(context);
     }
 
     private static Microsoft.Playwright.Cookie ToPlaywrightCookie(CookieEditorEntry e) => new()

@@ -676,7 +676,10 @@ public class ScrapeByKeywordService
                 captchaTracker);
 
             if (urls.Count == 0)
+            {
+                await TikTokSessionHelper.TrySaveAfterSuccessfulSessionAsync(context, captchaTracker, 0);
                 return 0;
+            }
 
             progress?.UpdatePlatform("tiktok", result.TikTok.Count,
                 $"TikTok: tìm thấy {urls.Count} video, đang lấy nội dung...");
@@ -760,10 +763,12 @@ public class ScrapeByKeywordService
 
             if (progress?.IsCancellationRequested == true)
             {
-                if (result.TikTok.Count > savedBefore)
+                var savedDelta = result.TikTok.Count - savedBefore;
+                if (savedDelta > 0)
                     progress?.CompletePlatform("tiktok", result.TikTok.Count,
                         $"Đã lưu {result.TikTok.Count} bài trước khi dừng");
-                return result.TikTok.Count - savedBefore;
+                await TikTokSessionHelper.TrySaveAfterSuccessfulSessionAsync(context, captchaTracker, savedDelta);
+                return savedDelta;
             }
 
             if (result.TikTok.Count > savedBefore)
@@ -774,8 +779,9 @@ public class ScrapeByKeywordService
             else if (urls.Count > 0)
                 progress?.FailPlatform("tiktok", TikTokCaptchaHelper.PlatformBlockedMessage);
 
-            await TikTokSessionHelper.SaveCookiesAsync(context);
-            return result.TikTok.Count - savedBefore;
+            var newSaved = result.TikTok.Count - savedBefore;
+            await TikTokSessionHelper.TrySaveAfterSuccessfulSessionAsync(context, captchaTracker, newSaved);
+            return newSaved;
         }
         catch (Exception ex) when (ex is OperationCanceledException && progress?.IsCancellationRequested == true)
         {
