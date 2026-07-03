@@ -19,6 +19,7 @@ public class ScrapeByKeywordService
     private readonly ScrapeOptions _scrapeOptions;
     private readonly ProxyRotationService _proxyRotation;
     private readonly ProxyOptions _proxyOptions;
+    private readonly SerpApiNewsDiscovery _serpApiNewsDiscovery;
     private ScrapeOptions _activeOptions = null!;
     private SystemProxy? _activeProxy;
     private string? _scrapeJobId;
@@ -31,13 +32,15 @@ public class ScrapeByKeywordService
         AiAnalysisService aiAnalysisService,
         IOptions<ScrapeOptions> scrapeOptions,
         ProxyRotationService proxyRotation,
-        IOptions<ProxyOptions> proxyOptions)
+        IOptions<ProxyOptions> proxyOptions,
+        SerpApiNewsDiscovery serpApiNewsDiscovery)
     {
         _db = db;
         _aiAnalysisService = aiAnalysisService;
         _scrapeOptions = scrapeOptions.Value;
         _proxyRotation = proxyRotation;
         _proxyOptions = proxyOptions.Value;
+        _serpApiNewsDiscovery = serpApiNewsDiscovery;
     }
 
     public async Task<ScrapeByKeywordResult> ScrapeAsync(
@@ -76,10 +79,13 @@ public class ScrapeByKeywordService
             var keyword = project.SearchQuery;
             result.Keyword = keyword;
 
+            var enableNews = await ProjectEnablesNewsAsync(projectId);
+
             progress?.InitPlatforms(
                 project.EnableFacebook == true,
                 project.EnableYoutube == true,
-                project.EnableTiktok == true);
+                project.EnableTiktok == true,
+                enableNews);
             progress?.SetPhase("scraping", _activeOptions.FastDemoMode
                 ? $"Chế độ demo nhanh — cào «{keyword}»..."
                 : timeFilter.IsActive
@@ -89,6 +95,16 @@ public class ScrapeByKeywordService
             _scrapedKeys = await LoadExistingScrapeKeysAsync(projectId);
             _skippedCount = 0;
 
+            var hasAnySource = project.EnableFacebook == true
+                               || project.EnableYoutube == true
+                               || project.EnableTiktok == true
+                               || enableNews;
+            if (!hasAnySource)
+            {
+                result.ErrorMessage = "Project chưa bật nguồn dữ liệu nào.";
+                return result;
+            }
+
             var parallelTasks = new List<Task>();
 
             if (project.EnableFacebook == true)
@@ -97,14 +113,11 @@ public class ScrapeByKeywordService
             if (project.EnableYoutube == true)
                 parallelTasks.Add(RunYouTubeAsync(projectId, keyword, result, progress, timeFilter, allowUnknownDates));
 
+            if (enableNews)
+                parallelTasks.Add(RunNewsAsync(projectId, keyword, result, progress, timeFilter, allowUnknownDates));
+
             if (project.EnableTiktok == true && _activeOptions.FastDemoMode && _activeOptions.FastDemoRunTikTokParallel)
                 parallelTasks.Add(RunTikTokAsync(projectId, keyword, result, progress, timeFilter, allowUnknownDates));
-
-            if (parallelTasks.Count == 0 && project.EnableTiktok != true)
-            {
-                result.ErrorMessage = "Project chưa bật nguồn dữ liệu nào.";
-                return result;
-            }
 
             if (parallelTasks.Count > 0)
             {
@@ -130,7 +143,7 @@ public class ScrapeByKeywordService
         {
             if (_activeProxy != null)
             {
-                var total = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count;
+                var total = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.News.Count;
                 if (total > 0)
                     await _proxyRotation.RecordSuccessAsync(_activeProxy.ProxyId);
                 else if (result.Errors.Count > 0 || !string.IsNullOrWhiteSpace(result.ErrorMessage))
@@ -228,13 +241,13 @@ public class ScrapeByKeywordService
     private async Task<ScrapeByKeywordResult> FinalizeResultAsync(
         int projectId, ScrapeByKeywordResult result, ScrapeJobProgress? progress, bool cancelled)
     {
-        var totalSaved = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count;
+        var totalSaved = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.News.Count;
 
         if (cancelled)
         {
             progress?.SkipPendingPlatforms("Đã bỏ qua — người dùng dừng");
             result.Message = totalSaved > 0
-                ? $"Đã dừng — giữ {totalSaved} bài (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count})."
+                ? $"Đã dừng — giữ {totalSaved} bài (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}, News: {result.News.Count})."
                 : "Đã dừng — chưa lưu bài nào.";
             result.Errors.Add("Đã dừng theo yêu cầu người dùng.");
             return result;
@@ -260,7 +273,7 @@ public class ScrapeByKeywordService
                 + result.TikTok.Sum(p => p.CommentsCount);
 
             result.Message =
-                $"Đã lưu {totalSaved} bản ghi + {totalComments} bình luận text (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}).";
+                $"Đã lưu {totalSaved} bản ghi + {totalComments} bình luận text (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}, News: {result.News.Count}).";
 
             progress?.SetPhase("analyzing", "Đang phân tích AI các bài vừa cào...");
             if (_activeOptions.FastDemoMode && _activeOptions.FastDemoSkipAiAnalysis)
@@ -544,6 +557,173 @@ public class ScrapeByKeywordService
             lock (result.Errors)
                 result.Errors.Add($"YouTube: {ex.Message}{PlaywrightErrorHint(ex)}");
         }
+    }
+
+    private async Task<bool> ProjectEnablesNewsAsync(int projectId) =>
+        await _db.DataSources.AsNoTracking()
+            .AnyAsync(d => d.ProjectId == projectId
+                           && d.Platform == "news"
+                           && d.Status == "active");
+
+    private async Task RunNewsAsync(
+        int projectId, string keyword, ScrapeByKeywordResult result, ScrapeJobProgress? progress,
+        ScrapeTimeFilter timeFilter, bool allowUnknownDates)
+    {
+        var targetCount = _activeOptions.EffectiveMaxNewsArticles;
+        var poolSize = timeFilter.DiscoveryPoolSize(targetCount);
+        progress?.StartPlatform("news", "Đang tìm bài báo (SerpApi / Google / Bing)...");
+        try
+        {
+            var useProxy = _activeProxy != null;
+            List<string> urls;
+            try
+            {
+                urls = await NewsSearchScraper.DiscoverArticleUrlsAsync(
+                    keyword,
+                    poolSize,
+                    _activeOptions,
+                    _serpApiNewsDiscovery,
+                    msg => progress?.UpdatePlatform("news", result.News.Count, msg),
+                    progress?.CancellationToken ?? CancellationToken.None,
+                    useProxy ? CurrentPlaywrightProxy() : null);
+            }
+            catch (Exception ex) when (IsNavigationTimeout(ex) && useProxy)
+            {
+                Console.WriteLine("[News] Timeout qua proxy — thử lại không dùng proxy...");
+                progress?.UpdatePlatform("news", 0, "Tin tức: proxy chậm, thử lại trực tiếp...");
+                useProxy = false;
+                urls = await NewsSearchScraper.DiscoverArticleUrlsAsync(
+                    keyword,
+                    poolSize,
+                    _activeOptions,
+                    _serpApiNewsDiscovery,
+                    msg => progress?.UpdatePlatform("news", result.News.Count, msg),
+                    progress?.CancellationToken ?? CancellationToken.None,
+                    null);
+            }
+
+            if (urls.Count == 0)
+            {
+                progress?.CompletePlatform("news", 0, "Tin tức: không tìm thấy bài");
+                lock (result.Errors)
+                    result.Errors.Add("Tin tức: Không tìm thấy bài báo cho từ khóa này.");
+                return;
+            }
+
+            progress?.UpdatePlatform("news", 0, $"Tin tức: tìm thấy {urls.Count} bài, đang đọc nội dung...");
+
+            using var playwright = await Playwright.CreateAsync();
+            var newsProxy = useProxy ? CurrentPlaywrightProxy() : null;
+            await using var browser = await playwright.Chromium.LaunchAsync(
+                PlaywrightScrapeHelper.CreateHeadlessLaunch(_activeOptions.NewsHeadless, newsProxy));
+
+            var context = await browser.NewContextAsync(new BrowserNewContextOptions
+            {
+                UserAgent =
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                Locale = "vi-VN",
+                ExtraHTTPHeaders = new Dictionary<string, string>
+                {
+                    ["Accept-Language"] = "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"
+                }
+            });
+
+            var skipped = 0;
+            foreach (var url in urls)
+            {
+                if (progress?.IsCancellationRequested == true)
+                    break;
+                if (result.News.Count >= targetCount)
+                    break;
+
+                if (IsAlreadyScraped("news", url))
+                {
+                    NoteSkipped();
+                    skipped++;
+                    Console.WriteLine($"[News] Skip existing: {url}");
+                    continue;
+                }
+
+                var article = await NewsSearchScraper.ScrapeArticleAsync(
+                    url, _activeOptions, context, progress?.CancellationToken ?? CancellationToken.None);
+
+                if (!article.Success)
+                {
+                    Console.WriteLine($"[News] Skip {url}: {article.ErrorMessage}");
+                    continue;
+                }
+
+                if (!timeFilter.IsWithinRange(article.PostedAt, allowUnknownDates))
+                {
+                    Console.WriteLine($"[News] Skip ngoài khoảng thời gian: {url} posted={article.PostedAt}");
+                    continue;
+                }
+
+                var content = BuildNewsContent(article.Title, article.Content);
+                var (feedbackId, _, wasSkipped) = await SaveFeedbackAsync(
+                    projectId, "news",
+                    content,
+                    article.Author,
+                    url,
+                    [],
+                    article.PostedAt);
+
+                if (wasSkipped)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                lock (result.News)
+                {
+                    result.News.Add(new PlatformPostResult
+                    {
+                        FeedbackId = feedbackId,
+                        Author = article.Author,
+                        Text = article.Title,
+                        Url = url,
+                        CommentsCount = 0
+                    });
+                }
+
+                Console.WriteLine($"[News] Saved article {feedbackId}: {url}");
+                progress?.UpdatePlatform(
+                    "news",
+                    result.News.Count,
+                    skipped > 0
+                        ? $"Tin tức: đã lưu {result.News.Count}/{targetCount} bài (bỏ qua {skipped} cũ)..."
+                        : $"Tin tức: đã lưu {result.News.Count}/{targetCount} bài...");
+            }
+
+            if (result.News.Count == 0 && skipped > 0)
+                progress?.CompletePlatform("news", 0, $"Tin tức: {skipped} bài đã cào trước đó — bỏ qua");
+            else if (result.News.Count == 0)
+            {
+                progress?.FailPlatform("news", "Tìm thấy bài nhưng không lưu được — kiểm tra Playwright.");
+                lock (result.Errors)
+                    result.Errors.Add("Tin tức: Tìm thấy bài nhưng không lưu được — kiểm tra Playwright.");
+            }
+            else
+            {
+                progress?.CompletePlatform("news", result.News.Count,
+                    skipped > 0 ? $"Hoàn tất — {result.News.Count} bài mới (+{skipped} đã cào trước)" : null);
+            }
+        }
+        catch (Exception ex)
+        {
+            progress?.FailPlatform("news", ex.Message);
+            lock (result.Errors)
+                result.Errors.Add($"Tin tức: {ex.Message}{PlaywrightErrorHint(ex)}");
+        }
+    }
+
+    private static string BuildNewsContent(string? title, string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return title?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(title))
+            return body.Trim();
+        return $"{title.Trim()}\n\n{body.Trim()}";
     }
 
     private async Task RunTikTokAsync(

@@ -109,6 +109,7 @@ public class ProjectCreateExtendedService
                 EnableYoutube = p.EnableYoutube == true,
                 EnableTiktok = p.EnableTiktok == true,
                 EnableMaps = p.EnableMaps == true,
+                EnableNews = p.DataSources.Any(d => d.Platform == "news" && d.Status == "active"),
                 CreatedAt = p.CreatedAt
             })
             .ToListAsync();
@@ -169,6 +170,7 @@ public class ProjectCreateExtendedService
                 EnableYoutube = p.EnableYoutube == true,
                 EnableTiktok = p.EnableTiktok == true,
                 EnableMaps = p.EnableMaps == true,
+                EnableNews = p.DataSources.Any(d => d.Platform == "news" && d.Status == "active"),
                 CreatedAt = p.CreatedAt
             })
             .FirstOrDefaultAsync();

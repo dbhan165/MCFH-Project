@@ -32,6 +32,8 @@ export function getPlatformLabel(platform: string) {
       return 'YT';
     case 'tiktok':
       return 'TT';
+    case 'news':
+      return 'News';
     default:
       return platform.toUpperCase().slice(0, 2);
   }
@@ -45,12 +47,14 @@ export function getPlatformDisplayName(platform: string) {
       return 'YouTube';
     case 'tiktok':
       return 'TikTok';
+    case 'news':
+      return 'Tin tức';
     default:
       return platform.charAt(0).toUpperCase() + platform.slice(1);
   }
 }
 
-export const MENTION_PLATFORMS = ['all', 'youtube', 'tiktok', 'facebook'] as const;
+export const MENTION_PLATFORMS = ['all', 'youtube', 'tiktok', 'facebook', 'news'] as const;
 export type MentionPlatformFilter = (typeof MENTION_PLATFORMS)[number];
 
 export const MENTION_SENTIMENTS = ['all', 'positive', 'negative', 'neutral', 'pending'] as const;
@@ -94,6 +98,8 @@ export function getPlatformBadgeClass(platform: string) {
       return 'bg-red-500/20 text-red-400';
     case 'tiktok':
       return 'bg-pink-500/20 text-pink-400';
+    case 'news':
+      return 'bg-amber-500/20 text-amber-400';
     default:
       return 'bg-gray-500/20 text-gray-400';
   }
@@ -131,6 +137,7 @@ export const PLATFORM_CHART_COLORS: Record<string, string> = {
   facebook: '#3B82F6',
   youtube: '#EF4444',
   tiktok: '#EC4899',
+  news: '#F59E0B',
   unknown: '#64748B',
 };
 

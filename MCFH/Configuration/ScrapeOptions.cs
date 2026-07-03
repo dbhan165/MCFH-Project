@@ -32,6 +32,26 @@ public class ScrapeOptions
     public int FacebookMaxComments { get; set; } = 40;
     public int MaxFacebookPosts { get; set; } = 5;
 
+    /// <summary>Số bài báo tối đa mỗi lần cào (Google/Bing + keyword).</summary>
+    public int MaxNewsArticles { get; set; } = 5;
+
+    /// <summary>Tin tức — headless qua Playwright.</summary>
+    public bool NewsHeadless { get; set; } = true;
+
+    /// <summary>Domain báo VN dùng trong truy vấn site: (Google/Bing).</summary>
+    public List<string> NewsSearchSites { get; set; } =
+    [
+        "vnexpress.net",
+        "tuoitre.vn",
+        "thanhnien.vn",
+        "vietnamnet.vn"
+    ];
+
+    /// <summary>
+    /// News discovery: auto (SerpApi nếu có key, else Playwright), serpapi, playwright.
+    /// </summary>
+    public string NewsDiscoveryProvider { get; set; } = "auto";
+
     /// <summary>Chỉ lấy nội dung từ feed — không click mở modal (ổn định hơn headless).</summary>
     public bool FacebookFeedOnly { get; set; } = true;
 
@@ -94,6 +114,9 @@ public class ScrapeOptions
 
     public int EffectiveMaxVideosPerPlatform =>
         FastDemoMode ? FastDemoMaxPostsPerPlatform : MaxVideosPerPlatform;
+
+    public int EffectiveMaxNewsArticles =>
+        FastDemoMode ? FastDemoMaxPostsPerPlatform : MaxNewsArticles;
 
     public int EffectiveMaxCommentsPerItem =>
         FastDemoMode ? FastDemoMaxCommentsPerItem : MaxCommentsPerItem;
