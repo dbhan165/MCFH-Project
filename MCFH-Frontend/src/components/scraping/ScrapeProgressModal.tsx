@@ -5,6 +5,7 @@ const PLATFORM_STYLE: Record<string, { dot: string; label: string }> = {
   facebook: { dot: 'bg-blue-400', label: 'Facebook' },
   youtube: { dot: 'bg-red-400', label: 'YouTube' },
   tiktok: { dot: 'bg-cyan-300', label: 'TikTok' },
+  news: { dot: 'bg-amber-400', label: 'Tin tức' },
 };
 
 function statusIcon(status: string) {
@@ -106,6 +107,7 @@ export default function ScrapeProgressModal({
             : [
                 { platform: 'facebook', label: 'Facebook', status: 'pending', count: 0, message: 'Chờ...' },
                 { platform: 'youtube', label: 'YouTube', status: 'pending', count: 0, message: 'Chờ...' },
+                { platform: 'news', label: 'Tin tức', status: 'pending', count: 0, message: 'Chờ...' },
                 { platform: 'tiktok', label: 'TikTok', status: 'pending', count: 0, message: 'Chờ...' },
               ]
           ).map((item) => {

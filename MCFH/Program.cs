@@ -96,7 +96,9 @@ namespace MCFH
 
             builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
             builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
+            builder.Services.Configure<SerpApiOptions>(builder.Configuration.GetSection(SerpApiOptions.SectionName));
             builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
+            builder.Services.AddHttpClient<SerpApiNewsDiscovery>();
             builder.Services.AddHttpClient<IGeminiSentimentService, GeminiSentimentService>();
             builder.Services.AddScoped<AiAnalysisService>();
             builder.Services.AddScoped<ScrapeByKeywordService>();

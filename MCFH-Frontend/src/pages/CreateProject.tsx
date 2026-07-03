@@ -206,12 +206,13 @@ const CreateProject = () => {
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
               <h2 className="text-xl font-bold mb-2">Nguồn thu thập</h2>
               <p className="text-gray-400 text-sm mb-6">
-                Chọn nền tảng cần cào. Giai đoạn này hỗ trợ <strong className="text-white">Facebook, YouTube</strong>.
+                Chọn nền tảng cần cào. Giai đoạn này hỗ trợ <strong className="text-white">Facebook, YouTube, Tin tức</strong>.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {[
                   { id: 'facebook', icon: Users, label: 'FACEBOOK' },
                   { id: 'youtube', icon: MonitorPlay, label: 'YOUTUBE' },
+                  { id: 'news', icon: Globe, label: 'TIN TỨC' },
                 ].map(({ id, icon: Icon, label }) => (
                   <button
                     key={id}
@@ -236,7 +237,6 @@ const CreateProject = () => {
                 {[
                   { id: 'tiktok', icon: Hash, label: 'TIKTOK' },
                   { id: 'maps', icon: Map, label: 'GOOGLE MAPS' },
-                  { id: 'browser', icon: Globe, label: 'TRÌNH DUYỆT' },
                   { id: 'file', icon: FileUp, label: 'IMPORT FILE' },
                 ].map(({ id, icon: Icon, label }) => (
                   <div key={id} className="flex items-center gap-4 p-4 rounded-xl border border-white/5 bg-[#151B2B]/50 text-gray-500">
