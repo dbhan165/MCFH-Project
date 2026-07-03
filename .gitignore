@@ -448,6 +448,7 @@ build/
 # Facebook session cookie — KHÔNG commit, chứa thông tin đăng nhập nhạy cảm
 **/fb_cookie.json
 **/tiktok_cookie.json
+**/tiktok_cookie.backup.json
 MCFH/cookies/
 
 # Playwright browser binaries (~300MB)
