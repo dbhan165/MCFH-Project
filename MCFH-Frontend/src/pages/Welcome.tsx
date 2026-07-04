@@ -1,6 +1,7 @@
 import { ArrowRight, PlayCircle } from 'lucide-react';
 import wellcome from '../assets/wellcome.png';
 import { Link } from 'react-router-dom';
+import McfhLogo from '../components/brand/McfhLogo';
 
 const Welcome = () => {
   return (
@@ -19,8 +20,13 @@ const Welcome = () => {
       {/* Header / Navbar */}
       <header className="relative z-10 border-b border-white/5">
         <div className="container mx-auto px-8 h-20 flex items-center justify-between">
-          {/* Logo Placeholder (Trống theo design gốc) */}
-          <div className="w-24"></div> 
+          <McfhLogo
+            linkTo="/"
+            size={38}
+            textClassName="text-white text-xl"
+            subtitle="System Hub"
+            subtitleClassName="text-[10px] text-gray-400 font-semibold tracking-[0.28em] uppercase"
+          />
           
           {/* Main Navigation */}
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-300">
@@ -121,8 +127,14 @@ const Welcome = () => {
       <footer className="relative z-10 border-t border-white/5 bg-[#080D18]">
         <div className="container mx-auto px-8 py-10 flex flex-col md:flex-row justify-between items-end gap-6 text-sm text-[#9BA1B0]">
           <div className="space-y-4">
-            <div className="text-[#FF7575] text-3xl font-bold tracking-tighter">MCFH</div>
-            <div>© 2024 MCFH Kinetic Systems. All rights reserved.</div>
+            <McfhLogo
+              linkTo="/"
+              size={34}
+              textClassName="text-white text-2xl"
+              subtitle="System Hub"
+              subtitleClassName="text-[10px] text-gray-400 font-semibold tracking-[0.28em] uppercase"
+            />
+            <div>© {new Date().getFullYear()} MCFH System Hub. All rights reserved.</div>
           </div>
           <div className="flex gap-8">
             <a href="#privacy" className="hover:text-white transition-colors">Privacy Policy</a>

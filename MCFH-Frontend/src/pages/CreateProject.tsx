@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Users, Hash, Map, FileUp, Link as LinkIcon, Check, MonitorPlay, Globe,
+  Users, Hash, Map, FileUp, Check, MonitorPlay, Globe,
   Loader2, AlertCircle, CreditCard, Clock,
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -31,7 +31,6 @@ const CreateProject = () => {
 
   const [campaignName, setCampaignName] = useState('');
   const [selectedSources, setSelectedSources] = useState<string[]>(['facebook', 'youtube']);
-  const [targetUrl, setTargetUrl] = useState('');
   const [keywords, setKeywords] = useState('');
   const [postedSinceDays, setPostedSinceDays] = useState(0);
 
@@ -104,7 +103,7 @@ const CreateProject = () => {
         enableYoutube: selectedSources.includes('youtube'),
         enableTiktok: selectedSources.includes('tiktok'),
         enableMaps: selectedSources.includes('maps'),
-        dataSources: buildDataSources(selectedSources, targetUrl),
+        dataSources: buildDataSources(selectedSources),
       });
 
       const order = await scrapeOrderApi.create({
@@ -152,7 +151,7 @@ const CreateProject = () => {
           </h1>
           {isOnboarding && (
             <p className="text-gray-400 mt-2 text-sm">
-              Chọn nền tảng, nhập URL/từ khóa — hệ thống sẽ tự động cào dữ liệu và phân tích bằng AI.
+              Chọn nền tảng và nhập từ khóa — hệ thống sẽ tự động cào dữ liệu và phân tích bằng AI.
             </p>
           )}
         </div>
@@ -245,22 +244,6 @@ const CreateProject = () => {
                     <span className="ml-auto text-xs">Sắp ra mắt</span>
                   </div>
                 ))}
-              </div>
-
-              <div className="pt-6 mt-4 border-t border-white/5">
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-3">
-                  URL Group / Fanpage Facebook (khuyến nghị khi cào FB)
-                </label>
-                <div className="relative">
-                  <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="url"
-                    value={targetUrl}
-                    onChange={(e) => setTargetUrl(e.target.value)}
-                    placeholder="https://www.facebook.com/groups/... hoặc fanpage..."
-                    className="w-full pl-12 pr-4 py-4 bg-[#151B2B] border border-white/5 text-white placeholder-gray-500 rounded-xl focus:outline-none focus:border-[#FF7575]"
-                  />
-                </div>
               </div>
             </div>
           )}

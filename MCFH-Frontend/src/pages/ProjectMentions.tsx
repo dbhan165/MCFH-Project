@@ -128,8 +128,15 @@ const ProjectMentions = () => {
 
   const runAnalyze = async (force: boolean) => {
     if (!wid || !projectId) return;
+
+    if (!force && sentimentCounts.pending === 0) {
+      setAnalyzeMessage('Không có mention mới cần phân tích AI.');
+      setErrorMessage('');
+      return;
+    }
+
     setIsAnalyzing(true);
-    setAnalyzeMessage('Đang phân tích AI (thường vài giây)...');
+    setAnalyzeMessage(force ? 'Đang phân tích lại toàn bộ dữ liệu...' : 'Đang phân tích các mention chưa có AI...');
     setErrorMessage('');
     try {
       const result = await projectApi.analyze(wid, projectId, force);
@@ -148,6 +155,7 @@ const ProjectMentions = () => {
       youtube: 0,
       tiktok: 0,
       facebook: 0,
+      news: 0,
     };
     for (const item of mentions) {
       const p = item.platform.toLowerCase() as MentionPlatformFilter;
@@ -279,7 +287,7 @@ const ProjectMentions = () => {
         <div className="flex flex-wrap gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => runAnalyze(true)}
+            onClick={() => runAnalyze(false)}
             disabled={isAnalyzing || isLoading || mentions.length === 0}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF7575] text-white text-sm font-medium hover:bg-[#ff5c5c] disabled:opacity-50 disabled:cursor-not-allowed"
           >
