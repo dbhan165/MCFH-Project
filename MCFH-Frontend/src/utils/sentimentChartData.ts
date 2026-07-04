@@ -88,8 +88,9 @@ export function buildTrendPoints(mentions: ProjectMention[]): TrendPoint[] {
   const map = new Map<string, TrendPoint>();
 
   for (const m of mentions) {
-    if (!m.scrapedAt) continue;
-    const d = new Date(m.scrapedAt);
+    const sourceDate = m.postedAt || m.scrapedAt;
+    if (!sourceDate) continue;
+    const d = new Date(sourceDate);
     if (Number.isNaN(d.getTime())) continue;
 
     const date = d.toISOString().slice(0, 10);

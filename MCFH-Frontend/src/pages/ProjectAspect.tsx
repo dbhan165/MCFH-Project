@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   BarChart2,
@@ -10,20 +10,7 @@ import {
   Target,
   Layers,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  Radar,
-} from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { projectApi } from '../api/projectApi';
 import type { AspectAnalysis, AspectStats } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
@@ -35,6 +22,12 @@ const TOOLTIP_STYLE = {
   borderRadius: 12,
   padding: '10px 14px',
 };
+
+function getAspectTone(aspect: AspectStats): 'positive' | 'negative' | 'mixed' {
+  if (aspect.positivePercent >= aspect.negativePercent + 15) return 'positive';
+  if (aspect.negativePercent >= aspect.positivePercent + 15) return 'negative';
+  return 'mixed';
+}
 
 const ProjectAspect = () => {
   const { workspaceId, id } = useParams();
@@ -63,28 +56,36 @@ const ProjectAspect = () => {
     loadData();
   }, [loadData]);
 
-  const stackData = useMemo(
-    () =>
-      (data?.aspects ?? []).map((a) => ({
-        label: a.label,
-        'Tích cực': a.positive,
-        'Trung lập': a.neutral,
-        'Tiêu cực': a.negative,
-        total: a.totalMentions,
-      })),
+  const rankedAspects = useMemo(
+    () => [...(data?.aspects ?? [])].sort((a, b) => b.totalMentions - a.totalMentions),
     [data]
   );
 
-  const radarData = useMemo(
+  const volumeChartData = useMemo(
     () =>
-      (data?.aspects ?? []).map((a) => ({
-        aspect: a.label.length > 14 ? `${a.label.slice(0, 12)}…` : a.label,
-        fullLabel: a.label,
-        positive: a.positivePercent,
-        negative: a.negativePercent,
+      rankedAspects.map((aspect) => ({
+        label: aspect.label,
+        mentions: aspect.totalMentions,
       })),
-    [data]
+    [rankedAspects]
   );
+
+  const sentimentRateData = useMemo(
+    () =>
+      rankedAspects.map((aspect) => ({
+        label: aspect.label,
+        'Tích cực %': aspect.positivePercent,
+        'Trung lập %': aspect.neutralPercent,
+        'Tiêu cực %': aspect.negativePercent,
+      })),
+    [rankedAspects]
+  );
+
+  const mostDiscussed = rankedAspects[0] ?? null;
+  const avgHitsPerMention =
+    data && data.totalAnalyzedMentions > 0
+      ? Math.round((data.totalAspectHits / data.totalAnalyzedMentions) * 10) / 10
+      : 0;
 
   if (isLoading) {
     return (
@@ -113,24 +114,23 @@ const ProjectAspect = () => {
 
   return (
     <div className="animate-in fade-in duration-500 max-w-7xl mx-auto space-y-8 pb-10">
-      {/* Header */}
       <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#12182A] to-[#0A101D] p-8">
         <div className="absolute -top-20 -right-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-[#FF7575]/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div>
+        <div className="relative flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+          <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400 mb-4">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Aspect-Based Sentiment
+              Aspect-based reading
             </div>
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <BarChart2 className="text-emerald-400 w-8 h-8" />
-              Phân tích Khía cạnh
+              Aspect Analysis
             </h2>
-            <p className="text-gray-400 text-sm mt-2 max-w-xl">
-              Đào sâu chủ đề người dùng đang bàn luận — từ {formatNumber(data.totalAnalyzedMentions)} mentions có
-              nhắc khía cạnh · {formatNumber(data.totalAspectHits)} lượt phát hiện
+            <p className="text-gray-400 text-sm mt-3 leading-relaxed">
+              Màn hình này giúp user biết cộng đồng đang nhắc nhiều nhất đến điều gì, điều gì được khen, và điểm nào đang bị
+              phàn nàn. Toàn bộ UI này chỉ dùng dữ liệu aspect mà backend hiện đang trả về.
             </p>
           </div>
 
@@ -150,74 +150,55 @@ const ProjectAspect = () => {
           <Target className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa phát hiện khía cạnh nào</p>
           <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
-            Cần mentions có nội dung/bình luận nhắc đến giá, chất lượng, dịch vụ, lương thưởng, v.v.
+            Cần mentions có nội dung / bình luận nhắc đến các chủ đề như giá, chất lượng, dịch vụ, lương thưởng, môi trường...
           </p>
         </div>
       ) : (
         <>
-          {/* Highlights */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-[#151B2B] border border-emerald-500/20 rounded-2xl p-6 flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="text-emerald-400 w-7 h-7" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm text-gray-500">Khía cạnh được khen nhiều nhất</p>
-                <h4 className="text-xl font-bold text-white truncate mt-1">
-                  {data.topPositiveAspect ?? '—'}
-                </h4>
-              </div>
-            </div>
-            <div className="bg-[#151B2B] border border-[#FF7575]/20 rounded-2xl p-6 flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#FF7575]/10 flex items-center justify-center shrink-0">
-                <AlertCircle className="text-[#FF7575] w-7 h-7" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm text-gray-500">Khía cạnh bị phàn nàn nhiều nhất</p>
-                <h4 className="text-xl font-bold text-white truncate mt-1">
-                  {data.topNegativeAspect ?? '—'}
-                </h4>
-              </div>
-            </div>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <MetricCard title="Số khía cạnh" value={formatNumber(rankedAspects.length)} detail="Số nhóm chủ đề được backend detect" accent="text-white" />
+            <MetricCard title="Mentions da xet" value={formatNumber(data.totalAnalyzedMentions)} detail="Tap mention duoc dung de tinh aspect" accent="text-[#00B4D8]" />
+            <MetricCard title="Tổng aspect hits" value={formatNumber(data.totalAspectHits)} detail="Tổng lượt phát hiện trên toàn bộ corpus" accent="text-emerald-400" />
+            <MetricCard title="Hits / mention" value={String(avgHitsPerMention)} detail="Mức độ phong phú chủ đề trong thảo luận" accent="text-yellow-400" />
           </div>
 
-          {/* Stacked bar + radar */}
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-            <div className="xl:col-span-3 bg-[#151B2B] border border-white/5 rounded-3xl p-6">
-              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
-                <div>
-                  <h3 className="font-bold text-white flex items-center gap-2">
-                    <Layers className="w-5 h-5 text-emerald-400" />
-                    Cảm xúc theo khía cạnh
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">Stacked bar — tích cực / trung lập / tiêu cực</p>
-                </div>
-                <div className="flex gap-4 text-xs font-semibold">
-                  <span className="flex items-center gap-1.5 text-gray-400">
-                    <span className="w-3 h-3 rounded-sm" style={{ background: SENTIMENT_COLORS.positive }} /> Tích cực
-                  </span>
-                  <span className="flex items-center gap-1.5 text-gray-400">
-                    <span className="w-3 h-3 rounded-sm" style={{ background: SENTIMENT_COLORS.neutral }} /> Trung lập
-                  </span>
-                  <span className="flex items-center gap-1.5 text-gray-400">
-                    <span className="w-3 h-3 rounded-sm" style={{ background: SENTIMENT_COLORS.negative }} /> Tiêu cực
-                  </span>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <HighlightCard
+              title="Được khen nhiều nhất"
+              value={data.topPositiveAspect ?? 'Không có'}
+              detail="Aspect có xu hướng positive nổi bật nhất hiện tại"
+              tone="positive"
+              icon={<CheckCircle2 className="text-emerald-400 w-7 h-7" />}
+            />
+            <HighlightCard
+              title="Bị phàn nàn nhiều nhất"
+              value={data.topNegativeAspect ?? 'Không có'}
+              detail="Aspect có xu hướng negative cao nhất hiện tại"
+              tone="negative"
+              icon={<AlertCircle className="text-[#FF7575] w-7 h-7" />}
+            />
+            <HighlightCard
+              title="Được nhắc đến nhiều nhất"
+              value={mostDiscussed?.label ?? 'Không có'}
+              detail={mostDiscussed ? `${mostDiscussed.totalMentions} mentions gắn với aspect này` : 'Không đủ dữ liệu'}
+              tone="neutral"
+              icon={<Layers className="text-yellow-400 w-7 h-7" />}
+            />
+          </div>
 
-              <ResponsiveContainer width="100%" height={Math.max(280, stackData.length * 52)}>
-                <BarChart
-                  data={stackData}
-                  layout="vertical"
-                  margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
-                  barCategoryGap="24%"
-                >
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6">
+              <h3 className="font-bold text-white mb-1">Mức độ được nhắc đến</h3>
+              <p className="text-xs text-gray-500 mb-4">Aspect nao dang chiem nhieu trong luong thao luan nhat</p>
+
+              <ResponsiveContainer width="100%" height={Math.max(280, volumeChartData.length * 52)}>
+                <BarChart data={volumeChartData} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
                   <XAxis type="number" allowDecimals={false} tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis
                     type="category"
                     dataKey="label"
-                    width={120}
+                    width={130}
                     tick={{ fill: '#D1D5DB', fontSize: 11, fontWeight: 600 }}
                     axisLine={false}
                     tickLine={false}
@@ -228,98 +209,49 @@ const ProjectAspect = () => {
                     itemStyle={{ color: '#fff' }}
                     cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                   />
-                  <Bar dataKey="Tích cực" stackId="a" fill={SENTIMENT_COLORS.positive} />
-                  <Bar dataKey="Trung lập" stackId="a" fill={SENTIMENT_COLORS.neutral} />
-                  <Bar dataKey="Tiêu cực" stackId="a" fill={SENTIMENT_COLORS.negative} radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="mentions" name="Mentions" fill="#10B981" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="xl:col-span-2 bg-[#151B2B] border border-white/5 rounded-3xl p-6">
-              <h3 className="font-bold text-white mb-1">Radar cảm xúc</h3>
-              <p className="text-xs text-gray-500 mb-4">% tích cực vs tiêu cực từng khía cạnh</p>
+            <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6">
+              <h3 className="font-bold text-white mb-1">Sentiment theo tung aspect</h3>
+              <p className="text-xs text-gray-500 mb-4">So sánh tỉ lệ tích cực / trung lập / tiêu cực trên từng chủ đề</p>
 
-              {radarData.length < 3 ? (
-                <div className="h-[300px] flex items-center justify-center text-gray-500 text-sm border border-dashed border-white/10 rounded-2xl">
-                  Cần thêm khía cạnh để hiển thị radar.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
-                    <PolarGrid stroke="rgba(255,255,255,0.08)" />
-                    <PolarAngleAxis dataKey="aspect" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
-                    <Radar
-                      name="% Tích cực"
-                      dataKey="positive"
-                      stroke={SENTIMENT_COLORS.positive}
-                      fill={SENTIMENT_COLORS.positive}
-                      fillOpacity={0.25}
-                      strokeWidth={2}
-                    />
-                    <Radar
-                      name="% Tiêu cực"
-                      dataKey="negative"
-                      stroke={SENTIMENT_COLORS.negative}
-                      fill={SENTIMENT_COLORS.negative}
-                      fillOpacity={0.2}
-                      strokeWidth={2}
-                    />
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.[0]) return null;
-                        const row = payload[0].payload as { fullLabel: string; positive: number; negative: number };
-                        return (
-                          <div style={TOOLTIP_STYLE}>
-                            <p className="text-sm font-semibold text-white">{row.fullLabel}</p>
-                            <p className="text-xs text-[#00B4D8] mt-1">Tích cực: {row.positive}%</p>
-                            <p className="text-xs text-[#FF7575]">Tiêu cực: {row.negative}%</p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#9CA3AF' }} iconSize={8} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              )}
+              <ResponsiveContainer width="100%" height={Math.max(280, sentimentRateData.length * 52)}>
+                <BarChart data={sentimentRateData} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
+                  <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={130}
+                    tick={{ fill: '#D1D5DB', fontSize: 11, fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={{ color: '#9CA3AF' }}
+                    itemStyle={{ color: '#fff' }}
+                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12, color: '#9CA3AF' }} iconSize={8} />
+                  <Bar dataKey="Tích cực %" fill={SENTIMENT_COLORS.positive} />
+                  <Bar dataKey="Trung lập %" fill={SENTIMENT_COLORS.neutral} />
+                  <Bar dataKey="Tiêu cực %" fill={SENTIMENT_COLORS.negative} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Percent bars (CSS) + detail cards */}
           <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6 md:p-8">
-            <h3 className="font-bold text-white mb-6">Chi tiết từng khía cạnh</h3>
-            <div className="space-y-8">
-              {data.aspects.map((asp) => (
-                <AspectRow key={asp.key} aspect={asp} />
+            <h3 className="font-bold text-white mb-6">Tổng hợp từng khía cạnh</h3>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              {rankedAspects.map((aspect) => (
+                <AspectCard key={aspect.key} aspect={aspect} totalAspectHits={data.totalAspectHits} />
               ))}
             </div>
-          </div>
-
-          {/* Grouped column chart */}
-          <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6">
-            <h3 className="font-bold text-white mb-1">So sánh số lượng mention</h3>
-            <p className="text-xs text-gray-500 mb-4">Số lần nhắc đến mỗi khía cạnh trong dữ liệu</p>
-
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={stackData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fill: '#6B7280', fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-15}
-                  textAnchor="end"
-                  height={56}
-                />
-                <YAxis allowDecimals={false} tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#9CA3AF' }} iconSize={8} />
-                <Bar dataKey="Tích cực" fill={SENTIMENT_COLORS.positive} radius={[4, 4, 0, 0]} maxBarSize={36} />
-                <Bar dataKey="Trung lập" fill={SENTIMENT_COLORS.neutral} maxBarSize={36} />
-                <Bar dataKey="Tiêu cực" fill={SENTIMENT_COLORS.negative} maxBarSize={36} />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </>
       )}
@@ -327,45 +259,139 @@ const ProjectAspect = () => {
   );
 };
 
-function AspectRow({ aspect }: { aspect: AspectStats }) {
-  const { positivePercent, neutralPercent, negativePercent, totalMentions } = aspect;
+function MetricCard({
+  title,
+  value,
+  detail,
+  accent,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/5 bg-[#151B2B] p-5">
+      <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">{title}</p>
+      <p className={`text-3xl font-bold mt-2 tabular-nums ${accent}`}>{value}</p>
+      <p className="text-xs text-gray-500 mt-2">{detail}</p>
+    </div>
+  );
+}
+
+function HighlightCard({
+  title,
+  value,
+  detail,
+  tone,
+  icon,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  tone: 'positive' | 'negative' | 'neutral';
+  icon: ReactNode;
+}) {
+  const toneClass =
+    tone === 'positive'
+      ? 'border-emerald-500/20'
+      : tone === 'negative'
+        ? 'border-[#FF7575]/20'
+        : 'border-white/10';
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <span className="text-sm font-semibold text-gray-200">{aspect.label}</span>
-        <span className="text-xs text-gray-500">{totalMentions} mentions</span>
+    <div className={`bg-[#151B2B] rounded-2xl p-6 flex items-center gap-4 border ${toneClass}`}>
+      <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <p className="text-sm text-gray-500">{title}</p>
+        <h4 className="text-xl font-bold text-white truncate mt-1">{value}</h4>
+        <p className="text-xs text-gray-500 mt-1">{detail}</p>
       </div>
-      <div className="w-full h-7 flex rounded-lg overflow-hidden bg-[#0A101D] ring-1 ring-white/5">
-        {positivePercent > 0 && (
-          <div
-            style={{ width: `${positivePercent}%` }}
-            className="h-full bg-[#00B4D8] flex items-center justify-center text-[10px] font-bold text-white min-w-[28px] transition-all duration-700"
-          >
-            {positivePercent >= 8 ? `${positivePercent}%` : ''}
-          </div>
-        )}
-        {neutralPercent > 0 && (
-          <div
-            style={{ width: `${neutralPercent}%` }}
-            className="h-full bg-yellow-500 flex items-center justify-center text-[10px] font-bold text-white min-w-[28px] transition-all duration-700"
-          >
-            {neutralPercent >= 8 ? `${neutralPercent}%` : ''}
-          </div>
-        )}
-        {negativePercent > 0 && (
-          <div
-            style={{ width: `${negativePercent}%` }}
-            className="h-full bg-[#FF7575] flex items-center justify-center text-[10px] font-bold text-white min-w-[28px] transition-all duration-700"
-          >
-            {negativePercent >= 8 ? `${negativePercent}%` : ''}
-          </div>
-        )}
+    </div>
+  );
+}
+
+function AspectCard({ aspect, totalAspectHits }: { aspect: AspectStats; totalAspectHits: number }) {
+  const tone = getAspectTone(aspect);
+  const share = totalAspectHits > 0 ? Math.round((aspect.totalMentions / totalAspectHits) * 100) : 0;
+  const balance = aspect.positive - aspect.negative;
+
+  return (
+    <div className="rounded-2xl border border-white/5 bg-[#0F1524] p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-lg font-bold text-white">{aspect.label}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {aspect.totalMentions} mentions · {share}% tong aspect hits
+          </p>
+        </div>
+        <span
+          className={`px-3 py-1 rounded-full text-[11px] font-semibold ${
+            tone === 'positive'
+              ? 'bg-[#00B4D8]/10 text-[#00B4D8]'
+              : tone === 'negative'
+                ? 'bg-[#FF7575]/10 text-[#FF7575]'
+                : 'bg-yellow-500/10 text-yellow-400'
+          }`}
+        >
+          {tone === 'positive' ? 'Thiên về khen' : tone === 'negative' ? 'Thiên về chê' : 'Đang tranh luận'}
+        </span>
       </div>
-      <div className="flex gap-4 mt-2 text-[11px] text-gray-600">
-        <span className="text-[#00B4D8]">{aspect.positive} tích cực</span>
-        <span className="text-yellow-600">{aspect.neutral} trung lập</span>
-        <span className="text-[#FF7575]">{aspect.negative} tiêu cực</span>
+
+      <div className="mt-4 h-7 flex rounded-lg overflow-hidden bg-[#0A101D] ring-1 ring-white/5">
+        {aspect.positivePercent > 0 ? (
+          <div
+            style={{ width: `${aspect.positivePercent}%` }}
+            className="h-full bg-[#00B4D8] flex items-center justify-center text-[10px] font-bold text-white min-w-[28px]"
+          >
+            {aspect.positivePercent >= 8 ? `${aspect.positivePercent}%` : ''}
+          </div>
+        ) : null}
+        {aspect.neutralPercent > 0 ? (
+          <div
+            style={{ width: `${aspect.neutralPercent}%` }}
+            className="h-full bg-yellow-500 flex items-center justify-center text-[10px] font-bold text-white min-w-[28px]"
+          >
+            {aspect.neutralPercent >= 8 ? `${aspect.neutralPercent}%` : ''}
+          </div>
+        ) : null}
+        {aspect.negativePercent > 0 ? (
+          <div
+            style={{ width: `${aspect.negativePercent}%` }}
+            className="h-full bg-[#FF7575] flex items-center justify-center text-[10px] font-bold text-white min-w-[28px]"
+          >
+            {aspect.negativePercent >= 8 ? `${aspect.negativePercent}%` : ''}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
+        <div className="rounded-xl bg-[#0A101D] border border-white/5 px-3 py-2">
+            <p className="text-gray-500">Tích cực</p>
+          <p className="text-[#00B4D8] font-bold mt-1">
+            {aspect.positive} · {aspect.positivePercent}%
+          </p>
+        </div>
+        <div className="rounded-xl bg-[#0A101D] border border-white/5 px-3 py-2">
+            <p className="text-gray-500">Trung lập</p>
+          <p className="text-yellow-400 font-bold mt-1">
+            {aspect.neutral} · {aspect.neutralPercent}%
+          </p>
+        </div>
+        <div className="rounded-xl bg-[#0A101D] border border-white/5 px-3 py-2">
+            <p className="text-gray-500">Tiêu cực</p>
+          <p className="text-[#FF7575] font-bold mt-1">
+            {aspect.negative} · {aspect.negativePercent}%
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 text-sm text-gray-400 leading-relaxed">
+        {balance > 0
+          ? `Aspect nay dang nghiêng tich cuc voi chenhlech +${balance} mention so voi nhom tieu cuc.`
+          : balance < 0
+            ? `Aspect nay dang nghiêng tieu cuc voi chenhlech ${balance} mention, can doc ky cac mention lien quan.`
+            : 'Aspect nay dang can bang giua khen va che, can doc them mentions de hieu boi canh.'}
       </div>
     </div>
   );

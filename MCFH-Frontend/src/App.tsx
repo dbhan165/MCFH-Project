@@ -66,54 +66,58 @@ function AppRoutes() {
 
       {/* Private */}
       <Route element={<PrivateRoute />}>
-        {/* Admin */}
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/users" element={<UserManagement />} />
-        <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
-        <Route path="/admin/proxies" element={<ProxyManagement />} />
-        <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
-        <Route path="/admin/scraping" element={<ScrapingMonitor />} />
-        <Route path="/admin/settings" element={<SystemSettings />} />
+        <Route element={<PrivateRoute allowedRoles={['Admin']} />}>
+          {/* Admin */}
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
+          <Route path="/admin/proxies" element={<ProxyManagement />} />
+          <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
+          <Route path="/admin/scraping" element={<ScrapingMonitor />} />
+          <Route path="/admin/settings" element={<SystemSettings />} />
+        </Route>
 
-        {/* Reporter */}
-        <Route path="/reporter" element={<Navigate to="/reporter/tasks" replace />} />
-        <Route path="/reporter/tasks" element={<BespokeRequests />} />
-        <Route path="/reporter/requests/:id" element={<RequestDetail />} />
-        <Route
-          path="/reporter/dashboard"
-          element={
-            <ReporterPlaceholder
-              title="Dashboard"
-              description="Tổng quan hiệu suất và đơn yêu cầu của bạn."
-              activeTopNav="dashboard"
-            />
-          }
-        />
-        <Route path="/reporter/performance" element={<MyPerformance />} />
-        <Route
-          path="/reporter/settings"
-          element={
-            <ReporterPlaceholder
-              title="Settings"
-              description="Cấu hình tài khoản và tùy chọn làm việc."
-              activeTopNav="settings"
-            />
-          }
-        />
-        <Route
-          path="/reporter/archive"
-          element={
-            <ReporterPlaceholder
-              title="Archive"
-              description="Lưu trữ các báo cáo và đơn yêu cầu đã hoàn thành."
-              activeTopNav="archive"
-            />
-          }
-        />
-        <Route path="/reporter/pipeline/:id" element={<PipelineConfig />} />
-        <Route path="/reporter/delivery/:id" element={<RequestDelivery />} />
-        <Route path="/reporter/workspace/:id" element={<AnalystWorkspace />} />
+        <Route element={<PrivateRoute allowedRoles={['Reporter', 'Admin']} />}>
+          {/* Reporter */}
+          <Route path="/reporter" element={<Navigate to="/reporter/tasks" replace />} />
+          <Route path="/reporter/tasks" element={<BespokeRequests />} />
+          <Route path="/reporter/requests/:id" element={<RequestDetail />} />
+          <Route
+            path="/reporter/dashboard"
+            element={
+              <ReporterPlaceholder
+                title="Dashboard"
+                description="Tổng quan hiệu suất và đơn yêu cầu của bạn."
+                activeTopNav="dashboard"
+              />
+            }
+          />
+          <Route path="/reporter/performance" element={<MyPerformance />} />
+          <Route
+            path="/reporter/settings"
+            element={
+              <ReporterPlaceholder
+                title="Settings"
+                description="Cấu hình tài khoản và tùy chọn làm việc."
+                activeTopNav="settings"
+              />
+            }
+          />
+          <Route
+            path="/reporter/archive"
+            element={
+              <ReporterPlaceholder
+                title="Archive"
+                description="Lưu trữ các báo cáo và đơn yêu cầu đã hoàn thành."
+                activeTopNav="archive"
+              />
+            }
+          />
+          <Route path="/reporter/pipeline/:id" element={<PipelineConfig />} />
+          <Route path="/reporter/delivery/:id" element={<RequestDelivery />} />
+          <Route path="/reporter/workspace/:id" element={<AnalystWorkspace />} />
+        </Route>
 
         {/* Workspace */}
         <Route element={<DashboardLayout />}>

@@ -45,15 +45,11 @@ export function getPrimaryKeyword(keywords: string): string {
 export const SCRAPABLE_PLATFORMS = ['facebook', 'youtube', 'news'] as const;
 
 export function buildDataSources(
-  selectedSources: string[],
-  targetUrl: string
+  selectedSources: string[]
 ): { platform: string; targetUrl?: string }[] {
-  const trimmedUrl = targetUrl.trim();
-
   return selectedSources
     .filter((platform) => SCRAPABLE_PLATFORMS.includes(platform as (typeof SCRAPABLE_PLATFORMS)[number]))
     .map((platform) => ({
       platform,
-      ...(platform === 'facebook' && trimmedUrl ? { targetUrl: trimmedUrl } : {}),
     }));
 }

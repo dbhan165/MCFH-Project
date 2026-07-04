@@ -17,7 +17,7 @@ export function buildSovSlices(influencers: ProjectInfluencer[], topN = 5) {
 
   if (restSov > 0) {
     slices.push({
-      name: 'Kh├íc',
+      name: 'Khác',
       value: Math.round(restSov * 10) / 10,
       mentions: sorted.slice(topN).reduce((s, i) => s + i.mentions, 0),
       color: SOV_COLORS[5],
@@ -44,7 +44,7 @@ export function getAvatarColor(seed: string): string {
 }
 
 export function formatFollowers(count: number | null): string {
-  if (count == null || count <= 0) return 'ΓÇö';
+  if (count == null || count <= 0) return '--';
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
   return String(count);

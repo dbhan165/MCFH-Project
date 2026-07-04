@@ -3,12 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import {
   FileText,
   Download,
-  FileSpreadsheet,
   Plus,
   Loader2,
   AlertCircle,
   RefreshCw,
-  FileJson,
   Sparkles,
   Clock,
   HardDrive,
@@ -19,7 +17,7 @@ import {
   Play,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { BespokeCenter, BespokeRequestItem, ReportCenter, ReportFile, ReportTemplate } from '../types/project';
+import type { BespokeCenter, BespokeRequestItem, ReportCenter, ReportTemplate } from '../types/project';
 import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { formatNumber } from '../utils/sentimentHelpers';
 import { formatWorkspaceDateTime, isSystemAdmin, isSystemReporter } from '../utils/workspaceHelpers';
@@ -30,23 +28,35 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getTypeIcon(type: string, format: string) {
-  if (format === 'csv' || type.includes('csv')) return FileSpreadsheet;
-  if (format === 'json' || type.includes('json')) return FileJson;
+function getReportFormat(type: string): 'pdf' | 'html' | 'csv' | 'json' {
+  if (type.includes('pdf')) return 'pdf';
+  if (type.includes('csv')) return 'csv';
+  if (type.includes('json')) return 'json';
+  return 'html';
+}
+
+function getTypeIcon() {
   return FileText;
 }
 
 function getTypeBadgeClass(format: string) {
   switch (format) {
-    case 'csv':
-      return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'pdf':
+      return 'bg-[#FF7575]/10 text-[#FF7575] border-[#FF7575]/20';
     case 'html':
-      return 'bg-red-500/10 text-red-400 border-red-500/20';
+      return 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20';
     case 'json':
       return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+    case 'csv':
+      return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     default:
       return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
   }
+}
+
+function sanitizeDownloadName(name: string, extension: string) {
+  const safe = name.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+  return `${safe || 'report'}.${extension}`;
 }
 
 function bespokeStatusClass(status: string) {
@@ -141,21 +151,6 @@ const ProjectReports = () => {
     }
   };
 
-  const handleDownload = async (report: ReportFile) => {
-    if (!wid || !projectId) return;
-    setDownloadingId(report.reportId);
-    setErrorMessage('');
-    try {
-      const ext = report.type.includes('csv') ? 'csv' : report.type.includes('json') ? 'json' : 'html';
-      const fileName = `${report.reportId}.${ext}`;
-      await projectApi.downloadReport(wid, projectId, report.reportId, fileName);
-    } catch (error) {
-      setErrorMessage(extractApiError(error, 'Không thể tải báo cáo.'));
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
   const handleAssign = async (requestId: number) => {
     const reporterId = assignReporterId[requestId];
     if (!wid || !projectId || !reporterId) return;
@@ -212,7 +207,10 @@ const ProjectReports = () => {
     }
   };
 
-  const filteredReports = useMemo(() => center?.reports ?? [], [center]);
+  const filteredReports = useMemo(
+    () => (center?.reports ?? []).filter((report) => ['analytics-html', 'analytics-pdf'].includes(report.type)),
+    [center]
+  );
   const bespokeRequests = useMemo(() => bespoke?.requests ?? [], [bespoke]);
   const createBespokePath = `/workspace/${wid}/project/${projectId}/create-bespoke`;
 
@@ -259,21 +257,21 @@ const ProjectReports = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400 mb-4">
               <Sparkles className="w-3.5 h-3.5 text-[#FF7575]" />
-              Export & Reports
+              User-ready exports
             </div>
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <FileText className="text-[#FF7575] w-8 h-8" />
               Report Center
             </h2>
             <p className="text-gray-400 text-sm mt-2">
-              Xuất báo cáo từ dữ liệu thật — CSV mentions, HTML tổng hợp, JSON analytics
+              Tạo báo cáo chi tiết, dễ đọc và sẵn sàng chia sẻ cho khách hàng hoặc đội nội bộ.
             </p>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-center">
-              <p className="text-2xl font-bold text-white tabular-nums">{center.totalReports}</p>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Báo cáo đã tạo</p>
+              <p className="text-2xl font-bold text-white tabular-nums">{filteredReports.length}</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Báo cáo user-facing</p>
             </div>
             <button
               type="button"
@@ -377,9 +375,9 @@ const ProjectReports = () => {
           <Plus className="w-5 h-5 text-[#FF7575]" />
           Tạo báo cáo mới
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {center.templates.map((template) => {
-            const Icon = getTypeIcon(template.key, template.format);
+            const Icon = getTypeIcon();
             const generating = isGenerating === template.key;
 
             return (
@@ -437,7 +435,7 @@ const ProjectReports = () => {
       <div className="bg-[#151B2B] border border-white/5 rounded-3xl overflow-hidden">
         <div className="p-6 border-b border-white/5">
           <h3 className="font-bold text-white">Lịch sử báo cáo</h3>
-          <p className="text-xs text-gray-500 mt-1">{filteredReports.length} file đã lưu trên server</p>
+          <p className="text-xs text-gray-500 mt-1">{filteredReports.length} file chi tiết đang hiển thị cho người dùng</p>
         </div>
 
         {filteredReports.length === 0 ? (
@@ -463,8 +461,8 @@ const ProjectReports = () => {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filteredReports.map((report) => {
-                  const Icon = getTypeIcon(report.type, report.type.includes('csv') ? 'csv' : report.type.includes('json') ? 'json' : 'html');
-                  const format = report.type.includes('csv') ? 'csv' : report.type.includes('json') ? 'json' : 'html';
+                  const format = getReportFormat(report.type);
+                  const Icon = getTypeIcon();
                   const downloading = downloadingId === report.reportId;
 
                   return (
@@ -472,8 +470,12 @@ const ProjectReports = () => {
                       <td className="px-6 py-4">
                         <div className="font-semibold text-white mb-0.5 max-w-xs truncate">{report.name}</div>
                         <div className="text-xs text-gray-600 font-mono">{report.reportId}</div>
-                        {report.rowCount > 0 && report.type.includes('csv') && (
-                          <div className="text-[11px] text-gray-500 mt-1">{formatNumber(report.rowCount)} dòng</div>
+                        {report.rowCount > 0 && (
+                          <div className="text-[11px] text-gray-500 mt-1">
+                            {format === 'html' || format === 'pdf'
+                              ? `Bao phủ ${formatNumber(report.rowCount)} mentions`
+                              : `${formatNumber(report.rowCount)} dòng`}
+                          </div>
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -495,7 +497,23 @@ const ProjectReports = () => {
                       <td className="px-6 py-4 text-right">
                         <button
                           type="button"
-                          onClick={() => handleDownload(report)}
+                          onClick={async () => {
+                            if (!wid || !projectId) return;
+                            setDownloadingId(report.reportId);
+                            setErrorMessage('');
+                            try {
+                              await projectApi.downloadReport(
+                                wid,
+                                projectId,
+                                report.reportId,
+                                sanitizeDownloadName(report.name, format)
+                              );
+                            } catch (error) {
+                              setErrorMessage(extractApiError(error, 'Không thể tải báo cáo.'));
+                            } finally {
+                              setDownloadingId(null);
+                            }
+                          }}
                           disabled={!!downloadingId}
                           className="inline-flex items-center gap-2 text-sm font-semibold text-[#00B4D8] bg-[#00B4D8]/10 hover:bg-[#00B4D8] hover:text-white disabled:opacity-50 px-4 py-2 rounded-xl transition-colors"
                         >
@@ -517,7 +535,7 @@ const ProjectReports = () => {
       </div>
 
       <p className="text-xs text-gray-600 text-center">
-        Báo cáo HTML có thể mở bằng trình duyệt và in thành PDF (Ctrl+P → Save as PDF).
+        Chỉ hiển thị các báo cáo thực sự hữu ích cho người dùng cuối. Bản HTML phù hợp để xem nhanh, bản PDF phù hợp để gửi và in ấn.
       </p>
     </div>
   );
