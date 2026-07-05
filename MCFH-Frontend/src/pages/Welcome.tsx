@@ -30,11 +30,10 @@ const Welcome = () => {
           
           {/* Main Navigation */}
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-300">
-            <a href="#product" className="text-white border-b-2 border-[#FF7575] pb-1">Product</a>
-            <a href="#ai-solutions" className="hover:text-white transition-colors pb-1">AI Solutions</a>
-            <a href="#bespoke" className="hover:text-white transition-colors pb-1">Bespoke Reports</a>
-            {/* Đã cập nhật thẻ <a> thành <Link> để điều hướng tới route /pricing */}
-            <Link to="/pricing" className="hover:text-white transition-colors pb-1">Pricing</Link>
+            <a href="#product" className="text-white border-b-2 border-[#FF7575] pb-1">Sản phẩm</a>
+            <a href="#ai-solutions" className="hover:text-white transition-colors pb-1">Giải pháp AI</a>
+            <Link to="/pricing" className="hover:text-white transition-colors pb-1">Báo cáo Bespoke</Link>
+            <Link to="/pricing" className="hover:text-white transition-colors pb-1">Bảng giá</Link>
           </nav>
 
           {/* Auth Actions */}
@@ -50,7 +49,7 @@ const Welcome = () => {
       </header>
 
       {/* Hero Section */}
-      <main className="relative z-10 grow flex items-center container mx-auto px-8 py-16 lg:py-0">
+      <main id="product" className="relative z-10 grow flex items-center container mx-auto px-8 py-16 lg:py-0 scroll-mt-24">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           
           {/* Cột trái: Nội dung Text */}
@@ -86,7 +85,7 @@ const Welcome = () => {
             </div>
 
             {/* Statistics */}
-            <div className="pt-10 border-t border-white/10 flex gap-20 mt-4">
+            <div id="ai-solutions" className="pt-10 border-t border-white/10 flex gap-20 mt-4 scroll-mt-24">
               <div>
                 <div className="text-[1.35rem] font-semibold mb-1">500+</div>
                 <div className="text-sm text-[#9BA1B0]">Doanh nghiệp tin dùng</div>
@@ -137,10 +136,9 @@ const Welcome = () => {
             <div>© {new Date().getFullYear()} MCFH System Hub. All rights reserved.</div>
           </div>
           <div className="flex gap-8">
-            <a href="#privacy" className="hover:text-white transition-colors">Privacy Policy</a>
-            <a href="#terms" className="hover:text-white transition-colors">Terms of Service</a>
-            <a href="#security" className="hover:text-white transition-colors">Security</a>
-            <a href="#contact" className="hover:text-white transition-colors">Contact</a>
+            <Link to="/pricing" className="hover:text-white transition-colors">Bảng giá</Link>
+            <Link to="/login" className="hover:text-white transition-colors">Đăng nhập</Link>
+            <Link to="/create-workspace" className="hover:text-white transition-colors">Dùng thử</Link>
           </div>
         </div>
       </footer>

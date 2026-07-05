@@ -385,7 +385,7 @@ public class ProjectAnalyticsService
         var totalMentions = feedbacks.Count;
         var totalComments = feedbacks.Sum(f => f.CommentsCount ?? 0);
 
-        var platformOrder = new[] { "facebook", "youtube", "tiktok" };
+        var platformOrder = new[] { "facebook", "youtube", "tiktok", "news" };
 
         var channels = feedbacks
             .GroupBy(f => (f.Platform ?? "unknown").ToLowerInvariant())
@@ -474,7 +474,16 @@ public class ProjectAnalyticsService
                 if (!accumulators.TryGetValue(hit.Key, out var acc)) continue;
                 acc.TotalMentions++;
                 totalHits++;
-                switch (hit.Sentiment)
+
+                var sentiment = hit.Sentiment;
+                if (sentiment == "neutral")
+                {
+                    var aiSentiment = feedback.AiAnalysis?.MainSentiment?.ToLowerInvariant();
+                    if (aiSentiment is "positive" or "negative" or "neutral")
+                        sentiment = aiSentiment;
+                }
+
+                switch (sentiment)
                 {
                     case "positive": acc.Positive++; break;
                     case "negative": acc.Negative++; break;
@@ -538,6 +547,7 @@ public class ProjectAnalyticsService
             "facebook" => "Facebook",
             "youtube" => "YouTube",
             "tiktok" => "TikTok",
+            "news" => "Tin tức",
             _ => char.ToUpper(platform[0]) + platform[1..]
         };
 
@@ -558,6 +568,9 @@ public class ProjectAnalyticsService
         if (!string.IsNullOrWhiteSpace(authorName))
             return authorName.Trim();
 
+        if (platform == "news")
+            return ExtractNewsSourceName(originalUrl);
+
         var handle = ExtractTikTokHandle(originalUrl);
         if (!string.IsNullOrWhiteSpace(handle))
             return handle;
@@ -571,6 +584,24 @@ public class ProjectAnalyticsService
         };
     }
 
+    private static string ExtractNewsSourceName(string? originalUrl)
+    {
+        if (string.IsNullOrWhiteSpace(originalUrl) || !Uri.TryCreate(originalUrl, UriKind.Absolute, out var uri))
+            return "Nguồn tin";
+
+        var host = uri.Host.ToLowerInvariant();
+        if (host.StartsWith("www.")) host = host[4..];
+
+        var parts = host.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+        {
+            var site = parts[^2];
+            return char.ToUpperInvariant(site[0]) + site[1..];
+        }
+
+        return host;
+    }
+
     private static string? ExtractTikTokHandle(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return null;
@@ -581,6 +612,9 @@ public class ProjectAnalyticsService
     private static string? ExtractProfileUrl(string platform, string? originalUrl)
     {
         if (string.IsNullOrWhiteSpace(originalUrl)) return null;
+
+        if (platform == "news")
+            return originalUrl;
 
         if (platform == "tiktok")
         {

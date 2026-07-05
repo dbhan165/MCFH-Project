@@ -543,7 +543,7 @@ public class ProjectReportService
             "facebook" => "Facebook",
             "youtube" => "YouTube",
             "tiktok" => "TikTok",
-            "news" => "News",
+            "news" => "Tin tức",
             null or "" => "Unknown",
             _ => CultureInfo.GetCultureInfo("vi-VN").TextInfo.ToTitleCase(platform.ToLowerInvariant())
         };

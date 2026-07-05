@@ -7,7 +7,6 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  Sparkles,
   Clock,
   HardDrive,
   CheckCircle2,
@@ -113,7 +112,7 @@ const ProjectReports = () => {
       reportLoaded = true;
     } catch (error) {
       setCenter(null);
-      setErrorMessage(extractApiError(error, 'Không thể tải Report Center.'));
+      setErrorMessage(extractApiError(error, 'Không thể tải báo cáo.'));
     }
 
     try {
@@ -221,7 +220,7 @@ const ProjectReports = () => {
           <div className="absolute inset-0 rounded-full bg-[#FF7575]/20 blur-2xl animate-pulse" />
           <Loader2 className="relative w-12 h-12 animate-spin text-[#FF7575]" />
         </div>
-        <p className="text-sm">Đang tải Report Center...</p>
+        <p className="text-sm">Đang tải báo cáo...</p>
       </div>
     );
   }
@@ -230,7 +229,7 @@ const ProjectReports = () => {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-gray-400 gap-4 max-w-lg mx-auto text-center">
         <AlertCircle className="w-12 h-12 text-red-400 shrink-0" />
-        <p className="text-white font-semibold">Không tải được Report Center</p>
+        <p className="text-white font-semibold">Không tải được báo cáo</p>
         <p className="text-sm text-gray-500">
           {errorMessage || 'Kiểm tra quyền truy cập dự án hoặc đảm bảo backend đang chạy tại http://localhost:5254'}
         </p>
@@ -255,23 +254,19 @@ const ProjectReports = () => {
 
         <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400 mb-4">
-              <Sparkles className="w-3.5 h-3.5 text-[#FF7575]" />
-              User-ready exports
-            </div>
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <FileText className="text-[#FF7575] w-8 h-8" />
-              Report Center
+              Báo cáo
             </h2>
             <p className="text-gray-400 text-sm mt-2">
-              Tạo báo cáo chi tiết, dễ đọc và sẵn sàng chia sẻ cho khách hàng hoặc đội nội bộ.
+              Tạo và tải báo cáo HTML hoặc PDF.
             </p>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-center">
               <p className="text-2xl font-bold text-white tabular-nums">{filteredReports.length}</p>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Báo cáo user-facing</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Đã tạo</p>
             </div>
             <button
               type="button"
@@ -435,7 +430,7 @@ const ProjectReports = () => {
       <div className="bg-[#151B2B] border border-white/5 rounded-3xl overflow-hidden">
         <div className="p-6 border-b border-white/5">
           <h3 className="font-bold text-white">Lịch sử báo cáo</h3>
-          <p className="text-xs text-gray-500 mt-1">{filteredReports.length} file chi tiết đang hiển thị cho người dùng</p>
+          <p className="text-xs text-gray-500 mt-1">{filteredReports.length} báo cáo</p>
         </div>
 
         {filteredReports.length === 0 ? (
@@ -535,7 +530,7 @@ const ProjectReports = () => {
       </div>
 
       <p className="text-xs text-gray-600 text-center">
-        Chỉ hiển thị các báo cáo thực sự hữu ích cho người dùng cuối. Bản HTML phù hợp để xem nhanh, bản PDF phù hợp để gửi và in ấn.
+        HTML để xem nhanh, PDF để gửi và in.
       </p>
     </div>
   );
