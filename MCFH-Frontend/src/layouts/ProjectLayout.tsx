@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, Outlet, useParams, useLocation } from 'react-router-dom';
 import { 
   BarChart2, PieChart, LayoutDashboard, Share2, MessageCircle, 
-  Bell, Download, FileText, FileSpreadsheet, 
-  ArrowLeft, Calendar, GitCompareArrows, Users, Loader2
+  Bell, Download, FileText,
+  ArrowLeft, Users, Loader2
 } from 'lucide-react';
 import McfhLogo from '../components/brand/McfhLogo';
 import { projectApi } from '../api/projectApi';
@@ -13,7 +13,6 @@ const ProjectLayout = () => {
   const wid = Number(workspaceId);
   const projectId = Number(id);
   const location = useLocation();
-  const [isExportOpen, setIsExportOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectKeyword, setProjectKeyword] = useState<string | null>(null);
@@ -50,16 +49,22 @@ const ProjectLayout = () => {
     };
   }, [wid, projectId]);
 
-  // Khai báo menu và nối đường dẫn chính xác (Khớp 100% với App.tsx)
   const menuItems = [
-    { path: '', icon: <LayoutDashboard size={20} />, label: 'Overview Dashboard', exact: true },
-    { path: 'mentions', icon: <MessageCircle size={20} />, label: 'Data Stream (Mentions)' },
-    { path: 'sentiment', icon: <PieChart size={20} />, label: 'Sentiment Chart' },
-    { path: 'influencers', icon: <Users size={20} />, label: 'KOLs & Influencers' },
-    { path: 'channel', icon: <Share2 size={20} />, label: 'Channel Comparison' },
-    { path: 'aspect', icon: <BarChart2 size={20} />, label: 'Aspect Analysis' },
-    { path: 'reports', icon: <FileText size={20} />, label: 'Report Center' },
+    { path: '', icon: <LayoutDashboard size={20} />, label: 'Tổng quan', exact: true },
+    { path: 'mentions', icon: <MessageCircle size={20} />, label: 'Mentions' },
+    { path: 'sentiment', icon: <PieChart size={20} />, label: 'Sentiment' },
+    { path: 'influencers', icon: <Users size={20} />, label: 'KOL & Influencer' },
+    { path: 'channel', icon: <Share2 size={20} />, label: 'So sánh kênh' },
+    { path: 'aspect', icon: <BarChart2 size={20} />, label: 'Khía cạnh' },
+    { path: 'reports', icon: <FileText size={20} />, label: 'Báo cáo' },
   ];
+
+  const activePage = menuItems.find((item) =>
+    item.exact
+      ? location.pathname === `/workspace/${workspaceId}/project/${id}` ||
+        location.pathname === `/workspace/${workspaceId}/project/${id}/`
+      : location.pathname.includes(item.path)
+  );
 
   return (
     <div className="h-screen w-full bg-[#050A15] text-white font-sans flex flex-col md:flex-row selection:bg-[#FF7575] selection:text-white overflow-hidden">
@@ -94,7 +99,7 @@ const ProjectLayout = () => {
             )}
           </div>
 
-          <p className="text-xs font-bold text-gray-500 mb-4 tracking-wider uppercase">Phân tích chuyên sâu</p>
+          <p className="text-xs font-bold text-gray-500 mb-4 tracking-wider uppercase">Dashboard</p>
           <nav className="space-y-2">
             {menuItems.map((item) => {
               // CẬP NHẬT: Sinh ra đường dẫn đầy đủ chứa cả workspaceId
@@ -130,33 +135,15 @@ const ProjectLayout = () => {
         
         <header className="h-20 bg-[#0A101D]/80 backdrop-blur-md border-b border-white/5 px-8 flex items-center justify-between shrink-0 z-20">
           <div>
-            <h1 className="text-xl font-bold text-white hidden sm:block">Dashboard Tổng quan</h1>
+            <h1 className="text-xl font-bold text-white hidden sm:block">{activePage?.label ?? 'Dashboard'}</h1>
           </div>
           <div className="flex items-center gap-4">
-            <button className="hidden lg:flex items-center gap-2 px-4 py-2 bg-[#151B2B] border border-white/10 rounded-lg text-sm text-gray-300 hover:text-white transition-colors">
-              <Calendar size={16} /> 7 ngày qua
-            </button>
-            <button className="hidden xl:flex items-center gap-2 px-4 py-2 bg-[#151B2B] border border-white/10 rounded-lg text-sm text-gray-300 hover:text-white transition-colors">
-              <GitCompareArrows size={16} /> So sánh
-            </button>
-            <div className="hidden md:block w-px h-8 bg-white/10 mx-2"></div>
-            
-            {/* Export Menu */}
-            <div className="relative">
-              <button 
-                onClick={() => setIsExportOpen(!isExportOpen)} 
-                onBlur={() => setTimeout(() => setIsExportOpen(false), 200)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-400 border border-blue-600/20 rounded-lg text-sm font-semibold hover:bg-blue-600 hover:text-white transition-all"
-              >
-                <Download size={16} /> <span className="hidden sm:inline">Xuất báo cáo</span>
-              </button>
-              {isExportOpen && (
-                <div className="absolute top-full right-0 mt-2 w-56 bg-[#151B2B] border border-white/10 rounded-xl shadow-2xl py-2 z-50">
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"><FileSpreadsheet size={16} className="text-green-400" /> Export Raw CSV</button>
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"><FileText size={16} className="text-red-400" /> Export PDF</button>
-                </div>
-              )}
-            </div>
+            <Link
+              to={`/workspace/${workspaceId}/project/${id}/reports`}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-400 border border-blue-600/20 rounded-lg text-sm font-semibold hover:bg-blue-600 hover:text-white transition-all"
+            >
+              <Download size={16} /> <span className="hidden sm:inline">Báo cáo</span>
+            </Link>
 
             {/* Noti */}
             <div className="relative">

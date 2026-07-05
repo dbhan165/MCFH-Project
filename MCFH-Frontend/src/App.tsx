@@ -47,6 +47,7 @@ import ProjectAspect from './pages/ProjectAspect';
 import ProjectReports from './pages/ProjectReports';
 import ProjectCreateBespoke from './pages/ProjectCreateBespoke';
 import { AppModalProvider } from './contexts/AppModalContext';
+import { ScrapeJobProvider } from './contexts/ScrapeJobContext';
 
 function AppRoutes() {
   const location = useLocation();
@@ -170,9 +171,11 @@ function AppRoutes() {
 function App() {
   return (
     <AppModalProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
+      <ScrapeJobProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </ScrapeJobProvider>
     </AppModalProvider>
   );
 }

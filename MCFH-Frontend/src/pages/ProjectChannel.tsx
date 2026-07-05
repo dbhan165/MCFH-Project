@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Share2,
@@ -6,52 +6,52 @@ import {
   AlertCircle,
   RefreshCw,
   MessageCircle,
-  BarChart3,
   TrendingUp,
   TrendingDown,
   Minus,
-  Layers,
+  Crown,
+  ShieldAlert,
+  BarChart3,
+  CheckCircle2,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Legend,
-} from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { projectApi } from '../api/projectApi';
 import type { ChannelComparison, ChannelStats } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
-import { formatNumber, getPlatformBadgeClass, getPlatformChartColor, SENTIMENT_COLORS } from '../utils/sentimentHelpers';
+import {
+  formatNumber,
+  getPlatformBadgeClass,
+  getPlatformChartColor,
+  SENTIMENT_COLORS,
+} from '../utils/sentimentHelpers';
 
-const TOOLTIP_STYLE = {
-  backgroundColor: '#0A101D',
-  border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: 12,
-  padding: '10px 14px',
-};
-
-function ShareTooltip({
-  active,
-  payload,
+function PageMetricCard({
+  icon,
+  label,
+  value,
+  caption,
+  accentColor,
 }: {
-  active?: boolean;
-  payload?: Array<{ payload: { label: string; mentionShare: number; mentions: number } }>;
+  icon: ReactNode;
+  label: string;
+  value: string;
+  caption: string;
+  accentColor: string;
 }) {
-  if (!active || !payload?.[0]) return null;
-  const item = payload[0].payload;
   return (
-    <div style={TOOLTIP_STYLE}>
-      <p className="text-sm font-semibold text-white">{item.label}</p>
-      <p className="text-xs text-gray-400 mt-1">
-        {item.mentions} mentions · {item.mentionShare}% SOV
-      </p>
+    <div
+      className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#141A28] to-[#101622] p-4 sm:p-5 hover:border-white/10 transition-all"
+      style={{ boxShadow: `inset 3px 0 0 ${accentColor}88` }}
+    >
+      <div
+        className="inline-flex p-2 rounded-xl border mb-3"
+        style={{ background: `${accentColor}14`, borderColor: `${accentColor}33`, color: accentColor }}
+      >
+        {icon}
+      </div>
+      <p className="text-[10px] text-gray-500 uppercase tracking-[0.14em] font-semibold">{label}</p>
+      <p className="text-lg font-bold text-white truncate mt-1">{value}</p>
+      <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">{caption}</p>
     </div>
   );
 }
@@ -62,6 +62,113 @@ function NsrIcon({ score }: { score: number }) {
   return <Minus className="w-4 h-4 text-yellow-500" />;
 }
 
+function getNsrColor(score: number) {
+  if (score >= 10) return SENTIMENT_COLORS.positive;
+  if (score <= -10) return SENTIMENT_COLORS.negative;
+  return SENTIMENT_COLORS.neutral;
+}
+
+function ChannelDetailCard({ channel, isHighlighted }: { channel: ChannelStats; isHighlighted: boolean }) {
+  const color = getPlatformChartColor(channel.platform);
+  const analyzed = channel.mentions - channel.unanalyzed;
+  const coverage = channel.mentions > 0 ? Math.round((analyzed / channel.mentions) * 100) : 0;
+  const nsrColor = getNsrColor(channel.nsrScore);
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-2xl border p-5 transition-all duration-200 ${
+        isHighlighted ? 'border-white/20 bg-white/[0.05]' : 'border-white/5 bg-[#151B2B]/80'
+      }`}
+      style={{ boxShadow: `inset 3px 0 0 ${color}${isHighlighted ? '' : '88'}` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold ${getPlatformBadgeClass(channel.platform)}`}>
+            {channel.label}
+          </span>
+          <p className="text-2xl font-black text-white tabular-nums mt-3 leading-none">{formatNumber(channel.mentions)}</p>
+          <p className="text-xs text-gray-500 mt-1.5">
+            {channel.mentionShare}% SOV · {formatNumber(channel.totalComments)} comments
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          {coverage === 100 ? (
+            <div className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Đủ AI
+            </div>
+          ) : (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-right">
+              <p className="text-[10px] text-amber-300/80 uppercase">Độ phủ AI</p>
+              <p className="text-lg font-bold text-amber-300 tabular-nums">{coverage}%</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 h-2.5 rounded-full overflow-hidden flex bg-white/5 ring-1 ring-white/5">
+        {channel.positivePercent > 0 && (
+          <div
+            className="h-full"
+            style={{
+              width: `${Math.max(channel.positivePercent, 2)}%`,
+              background: `linear-gradient(90deg, ${SENTIMENT_COLORS.positive}, ${SENTIMENT_COLORS.positive}cc)`,
+            }}
+          />
+        )}
+        {channel.neutralPercent > 0 && (
+          <div
+            className="h-full"
+            style={{
+              width: `${Math.max(channel.neutralPercent, 2)}%`,
+              background: `linear-gradient(90deg, ${SENTIMENT_COLORS.neutral}, ${SENTIMENT_COLORS.neutral}cc)`,
+            }}
+          />
+        )}
+        {channel.negativePercent > 0 && (
+          <div
+            className="h-full"
+            style={{
+              width: `${Math.max(channel.negativePercent, 2)}%`,
+              background: `linear-gradient(90deg, ${SENTIMENT_COLORS.negative}, ${SENTIMENT_COLORS.negative}cc)`,
+            }}
+          />
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-center">
+          <p className="text-[10px] text-gray-500 uppercase">Tích cực</p>
+          <p className="text-sm font-bold mt-1 tabular-nums" style={{ color: SENTIMENT_COLORS.positive }}>
+            {channel.positivePercent}%
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-center">
+          <p className="text-[10px] text-gray-500 uppercase">Trung lập</p>
+          <p className="text-sm font-bold mt-1 tabular-nums" style={{ color: SENTIMENT_COLORS.neutral }}>
+            {channel.neutralPercent}%
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-center">
+          <p className="text-[10px] text-gray-500 uppercase">Tiêu cực</p>
+          <p className="text-sm font-bold mt-1 tabular-nums" style={{ color: SENTIMENT_COLORS.negative }}>
+            {channel.negativePercent}%
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <span className="text-gray-500">NSR</span>
+        <span className="font-bold tabular-nums flex items-center gap-1.5" style={{ color: nsrColor }}>
+          <NsrIcon score={channel.nsrScore} />
+          {channel.nsrScore > 0 ? '+' : ''}
+          {channel.nsrScore}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const ProjectChannel = () => {
   const { workspaceId, id } = useParams();
   const wid = Number(workspaceId);
@@ -70,6 +177,7 @@ const ProjectChannel = () => {
   const [data, setData] = useState<ChannelComparison | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [activePlatform, setActivePlatform] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
@@ -90,33 +198,14 @@ const ProjectChannel = () => {
   }, [loadData]);
 
   const channels = data?.channels ?? [];
+  const maxMentions = useMemo(() => Math.max(...channels.map((c) => c.mentions), 1), [channels]);
+  const maxComments = useMemo(() => Math.max(...channels.map((c) => c.totalComments), 1), [channels]);
 
   const pieData = useMemo(
     () =>
       channels.map((channel) => ({
         ...channel,
         color: getPlatformChartColor(channel.platform),
-      })),
-    [channels]
-  );
-
-  const volumeData = useMemo(
-    () =>
-      channels.map((channel) => ({
-        label: channel.label,
-        Mentions: channel.mentions,
-        Comments: channel.totalComments,
-      })),
-    [channels]
-  );
-
-  const sentimentRateData = useMemo(
-    () =>
-      channels.map((channel) => ({
-        label: channel.label,
-        'Tích cực %': channel.positivePercent,
-        'Trung lập %': channel.neutralPercent,
-        'Tiêu cực %': channel.negativePercent,
       })),
     [channels]
   );
@@ -159,20 +248,14 @@ const ProjectChannel = () => {
 
         <div className="relative flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400 mb-4">
-              <Layers className="w-3.5 h-3.5 text-purple-400" />
-              Cross-platform comparison
-            </div>
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <Share2 className="text-purple-400 w-8 h-8" />
-              Channel Comparison
+              So sánh kênh
             </h2>
             <p className="text-gray-400 text-sm mt-3 leading-relaxed">
-              Màn hình này giúp user trả lời 4 câu hỏi: kênh nào đang tạo nhiều volume nhất, kênh nào sinh bình luận nhất,
-              kênh nào có sentiment tốt nhất, và kênh nào cần ưu tiên theo dõi do rủi ro.
+              So sánh volume, bình luận và sentiment giữa các nền tảng — gồm Tin tức.
             </p>
           </div>
-
           <button
             type="button"
             onClick={loadData}
@@ -185,53 +268,81 @@ const ProjectChannel = () => {
       </div>
 
       {!hasData ? (
-        <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-16 text-center">
+        <div className="rounded-3xl border border-white/5 bg-[#151B2B] p-16 text-center">
           <Share2 className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa có dữ liệu kênh</p>
-          <p className="text-gray-500 text-sm mt-2">Cần cào dữ liệu từ Facebook, YouTube, TikTok hoặc News để bắt đầu so sánh.</p>
+          <p className="text-gray-500 text-sm mt-2">
+            Cần cào dữ liệu từ Facebook, YouTube, TikTok hoặc Tin tức.
+          </p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-            <SignalCard
-              title="Dẫn đầu SOV"
-              value={leaderBySov?.label ?? 'Không có'}
-              detail={leaderBySov ? `${leaderBySov.mentionShare}% share of voice` : 'Không đủ dữ liệu'}
-              accent="text-purple-400"
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+            <PageMetricCard
+              icon={<Crown className="w-4 h-4" />}
+              label="Dẫn đầu SOV"
+              value={leaderBySov?.label ?? '—'}
+              caption={leaderBySov ? `${leaderBySov.mentionShare}% tổng thảo luận` : 'Chưa đủ dữ liệu'}
+              accentColor="#A78BFA"
             />
-            <SignalCard
-              title="Nhiều comments nhất"
-              value={leaderByComments?.label ?? 'Không có'}
-              detail={leaderByComments ? `${leaderByComments.commentShare}% tổng comments` : 'Không đủ dữ liệu'}
-              accent="text-[#00B4D8]"
+            <PageMetricCard
+              icon={<MessageCircle className="w-4 h-4" />}
+              label="Nhiều comments"
+              value={leaderByComments?.label ?? '—'}
+              caption={leaderByComments ? `${leaderByComments.commentShare}% bình luận` : 'Chưa đủ dữ liệu'}
+              accentColor="#00B4D8"
             />
-            <SignalCard
-              title="NSR tot nhat"
-              value={bestNsr?.label ?? 'Không có'}
-              detail={bestNsr ? `${bestNsr.nsrScore > 0 ? '+' : ''}${bestNsr.nsrScore}% NSR` : 'Không đủ dữ liệu'}
-              accent="text-emerald-400"
+            <PageMetricCard
+              icon={<TrendingUp className="w-4 h-4" />}
+              label="NSR tốt nhất"
+              value={bestNsr?.label ?? '—'}
+              caption={bestNsr ? `${bestNsr.nsrScore > 0 ? '+' : ''}${bestNsr.nsrScore}% NSR` : 'Chưa đủ dữ liệu'}
+              accentColor="#34D399"
             />
-            <SignalCard
-              title="Cần theo dõi"
-              value={highestRisk?.label ?? 'Không có'}
-              detail={highestRisk ? `${highestRisk.negativePercent}% tiêu cực` : 'Không đủ dữ liệu'}
-              accent="text-[#FF7575]"
+            <PageMetricCard
+              icon={<ShieldAlert className="w-4 h-4" />}
+              label="Cần theo dõi"
+              value={highestRisk?.label ?? '—'}
+              caption={highestRisk ? `${highestRisk.negativePercent}% tiêu cực` : 'Chưa đủ dữ liệu'}
+              accentColor="#FF7575"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {channels.map((channel) => (
-              <ChannelCard key={channel.platform} channel={channel} />
-            ))}
-          </div>
+          <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#12182A] to-[#0F1524] p-6">
+            <div className="absolute -top-20 -right-20 w-56 h-56 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6">
-              <h3 className="font-bold text-white mb-1">Tỉ trọng thảo luận theo kênh</h3>
-              <p className="text-xs text-gray-500 mb-4">Cho biết khảo sát đang được tạo nhiều nhất ở đâu</p>
+            <div className="relative flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-xl border border-white/10 bg-white/[0.04] p-2">
+                  <BarChart3 className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-lg">Phân bổ thảo luận</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formatNumber(data.totalMentions)} mentions · {formatNumber(data.totalComments)} comments
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'Tích cực', color: SENTIMENT_COLORS.positive },
+                  { label: 'Trung lập', color: SENTIMENT_COLORS.neutral },
+                  { label: 'Tiêu cực', color: SENTIMENT_COLORS.negative },
+                ].map((item) => (
+                  <span
+                    key={item.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-gray-300"
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ background: item.color }} />
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
 
+            <div className="relative grid grid-cols-1 xl:grid-cols-2 gap-8">
               <div className="flex flex-col sm:flex-row items-center gap-6">
-                <div className="relative w-[220px] h-[220px] shrink-0">
+                <div className="relative w-[200px] h-[200px] shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -239,251 +350,111 @@ const ProjectChannel = () => {
                         cx="50%"
                         cy="50%"
                         innerRadius={58}
-                        outerRadius={95}
+                        outerRadius={88}
                         paddingAngle={3}
                         dataKey="mentions"
-                        stroke="none"
-                        animationDuration={800}
+                        stroke="rgba(255,255,255,0.1)"
+                        strokeWidth={1}
                       >
                         {pieData.map((channel) => (
                           <Cell key={channel.platform} fill={channel.color} />
                         ))}
                       </Pie>
-                      <Tooltip content={<ShareTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                      <p className="text-2xl font-black text-white">{data.totalMentions}</p>
-                      <p className="text-[10px] text-gray-500 uppercase">mentions</p>
+                      <p className="text-2xl font-black text-white tabular-nums">{formatNumber(data.totalMentions)}</p>
+                      <p className="text-[10px] text-gray-500 uppercase">Mentions</p>
                     </div>
                   </div>
                 </div>
-
                 <div className="flex-1 w-full space-y-4">
                   {pieData.map((channel) => (
-                    <div key={channel.platform}>
-                      <div className="flex justify-between text-sm mb-1.5">
+                    <div
+                      key={channel.platform}
+                      onMouseEnter={() => setActivePlatform(channel.platform)}
+                      onMouseLeave={() => setActivePlatform(null)}
+                    >
+                      <div className="flex justify-between items-center gap-2 mb-1.5">
                         <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${getPlatformBadgeClass(channel.platform)}`}>
                           {channel.label}
                         </span>
-                        <span className="font-bold tabular-nums" style={{ color: channel.color }}>
+                        <span className="font-bold tabular-nums text-sm" style={{ color: channel.color }}>
                           {channel.mentionShare}%
                         </span>
                       </div>
-                      <div className="w-full bg-[#0A101D] h-2.5 rounded-full overflow-hidden">
+                      <div className="h-2.5 rounded-full bg-white/5 overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-700"
                           style={{ width: `${channel.mentionShare}%`, background: channel.color }}
                         />
                       </div>
-                      <p className="text-[11px] text-gray-600 mt-1">
-                        {formatNumber(channel.mentions)} mentions · {formatNumber(channel.totalComments)} comments
-                      </p>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
 
-            <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6">
-              <h3 className="font-bold text-white flex items-center gap-2 mb-1">
-                <BarChart3 className="w-5 h-5 text-purple-400" />
-                Luong volume va comments
-              </h3>
-              <p className="text-xs text-gray-500 mb-4">So sánh quy mô thảo luận và mức độ tương tác trên từng kênh</p>
-
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={volumeData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={TOOLTIP_STYLE}
-                    labelStyle={{ color: '#9CA3AF', fontSize: 12 }}
-                    itemStyle={{ color: '#fff', fontSize: 13 }}
-                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, color: '#9CA3AF', paddingTop: 12 }} iconType="circle" iconSize={8} />
-                  <Bar dataKey="Mentions" fill="#A78BFA" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                  <Bar dataKey="Comments" fill="#00B4D8" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="space-y-5">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Volume & tương tác</p>
+                {channels.map((channel) => {
+                  const color = getPlatformChartColor(channel.platform);
+                  const mentionWidth = (channel.mentions / maxMentions) * 100;
+                  const commentWidth = (channel.totalComments / maxComments) * 100;
+                  return (
+                    <div
+                      key={`vol-${channel.platform}`}
+                      className={`rounded-xl border px-4 py-3 transition-all ${
+                        activePlatform === channel.platform ? 'border-white/15 bg-white/[0.04]' : 'border-white/5 bg-white/[0.02]'
+                      }`}
+                      onMouseEnter={() => setActivePlatform(channel.platform)}
+                      onMouseLeave={() => setActivePlatform(null)}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-semibold text-gray-200">{channel.label}</span>
+                        <span className="text-xs text-gray-500 tabular-nums">
+                          {formatNumber(channel.mentions)} mentions · {formatNumber(channel.totalComments)} comments
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-500 w-16">Mentions</span>
+                          <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${mentionWidth}%`, background: color }} />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-500 w-16">Comments</span>
+                          <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full opacity-80"
+                              style={{ width: `${commentWidth}%`, background: SENTIMENT_COLORS.positive }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          <div className="bg-[#151B2B] border border-white/5 rounded-3xl p-6">
-            <h3 className="font-bold text-white mb-1">Chất lượng sentiment theo kênh</h3>
-            <p className="text-xs text-gray-500 mb-4">Đọc nhanh tỉ lệ tích cực / trung lập / tiêu cực để biết kênh nào cần ưu tiên xử lý</p>
-
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={sentimentRateData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
-                <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
-                  labelStyle={{ color: '#9CA3AF' }}
-                  itemStyle={{ color: '#fff' }}
-                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#9CA3AF' }} iconType="circle" iconSize={8} />
-                <Bar dataKey="Tích cực %" fill={SENTIMENT_COLORS.positive} radius={[6, 6, 0, 0]} maxBarSize={38} />
-                <Bar dataKey="Trung lập %" fill={SENTIMENT_COLORS.neutral} maxBarSize={38} />
-                <Bar dataKey="Tiêu cực %" fill={SENTIMENT_COLORS.negative} maxBarSize={38} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="bg-[#151B2B] border border-white/5 rounded-3xl overflow-hidden">
-            <div className="p-6 border-b border-white/5">
-              <h3 className="font-bold text-white">Bang so sanh chi tiet</h3>
-              <p className="text-xs text-gray-500 mt-1">Toàn bộ KPI quan trọng cho từng kênh: volume, comment share, sentiment và độ phủ AI</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-white/[0.02] border-b border-white/5">
-                    {['Nền tảng', 'Mentions', '% SOV', 'Comments', '% Comments', 'Độ phủ AI', 'NSR', '% Tích cực', '% Tiêu cực'].map((header) => (
-                      <th key={header} className="px-5 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {channels.map((channel) => {
-                    const analyzed = channel.mentions - channel.unanalyzed;
-                    const coverage = channel.mentions > 0 ? Math.round((analyzed / channel.mentions) * 100) : 0;
-                    return (
-                      <tr key={channel.platform} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-5 py-4">
-                          <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-semibold ${getPlatformBadgeClass(channel.platform)}`}>
-                            {channel.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-sm font-bold text-white tabular-nums">{channel.mentions}</td>
-                        <td className="px-5 py-4 text-sm font-semibold tabular-nums" style={{ color: getPlatformChartColor(channel.platform) }}>
-                          {channel.mentionShare}%
-                        </td>
-                        <td className="px-5 py-4 text-sm text-gray-300 tabular-nums">
-                          <span className="inline-flex items-center gap-1">
-                            <MessageCircle className="w-3.5 h-3.5 text-gray-600" />
-                            {formatNumber(channel.totalComments)}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-gray-400 tabular-nums">{channel.commentShare}%</td>
-                        <td className="px-5 py-4 text-sm text-white tabular-nums">{coverage}%</td>
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex items-center gap-1 text-sm font-bold tabular-nums ${
-                              channel.nsrScore >= 10 ? 'text-[#00B4D8]' : channel.nsrScore <= -10 ? 'text-[#FF7575]' : 'text-yellow-500'
-                            }`}
-                          >
-                            <NsrIcon score={channel.nsrScore} />
-                            {channel.nsrScore > 0 ? '+' : ''}
-                            {channel.nsrScore}%
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-[#00B4D8] tabular-nums">{channel.positivePercent}%</td>
-                        <td className="px-5 py-4 text-sm text-[#FF7575] tabular-nums">{channel.negativePercent}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {channels.map((channel) => (
+              <div
+                key={channel.platform}
+                onMouseEnter={() => setActivePlatform(channel.platform)}
+                onMouseLeave={() => setActivePlatform(null)}
+              >
+                <ChannelDetailCard channel={channel} isHighlighted={activePlatform === channel.platform} />
+              </div>
+            ))}
           </div>
         </>
       )}
     </div>
   );
 };
-
-function SignalCard({
-  title,
-  value,
-  detail,
-  accent,
-}: {
-  title: string;
-  value: string;
-  detail: string;
-  accent: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/5 bg-[#151B2B] p-5">
-      <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">{title}</p>
-      <p className={`text-2xl font-bold mt-2 ${accent}`}>{value}</p>
-      <p className="text-xs text-gray-500 mt-2">{detail}</p>
-    </div>
-  );
-}
-
-function ChannelCard({ channel }: { channel: ChannelStats }) {
-  const color = getPlatformChartColor(channel.platform);
-  const analyzed = channel.mentions - channel.unanalyzed;
-  const coverage = channel.mentions > 0 ? Math.round((analyzed / channel.mentions) * 100) : 0;
-
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-[#151B2B] p-5">
-      <div className="absolute top-0 left-0 w-full h-1" style={{ background: color }} />
-      <div className="flex items-start justify-between gap-3">
-        <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-semibold ${getPlatformBadgeClass(channel.platform)}`}>
-          {channel.label}
-        </span>
-        <span className="text-xs font-bold tabular-nums" style={{ color }}>
-          {channel.mentionShare}%
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-xs text-gray-500">Mentions</p>
-          <p className="text-2xl font-bold text-white tabular-nums">{channel.mentions}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Comments</p>
-          <p className="text-2xl font-bold text-white tabular-nums">{formatNumber(channel.totalComments)}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500">NSR</span>
-          <span
-            className={`text-sm font-bold tabular-nums flex items-center gap-1 ${
-              channel.nsrScore >= 10 ? 'text-[#00B4D8]' : channel.nsrScore <= -10 ? 'text-[#FF7575]' : 'text-yellow-500'
-            }`}
-          >
-            <NsrIcon score={channel.nsrScore} />
-            {channel.nsrScore > 0 ? '+' : ''}
-            {channel.nsrScore}%
-          </span>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-            <span>Độ phủ AI</span>
-            <span className="tabular-nums">{coverage}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-[#0A101D] overflow-hidden">
-            <div className="h-full rounded-full bg-white/70" style={{ width: `${coverage}%` }} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl bg-[#0A101D] border border-white/5 px-3 py-2">
-            <p className="text-gray-500">Tích cực</p>
-            <p className="text-[#00B4D8] font-bold mt-1">{channel.positivePercent}%</p>
-          </div>
-          <div className="rounded-xl bg-[#0A101D] border border-white/5 px-3 py-2">
-            <p className="text-gray-500">Tiêu cực</p>
-            <p className="text-[#FF7575] font-bold mt-1">{channel.negativePercent}%</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default ProjectChannel;

@@ -62,7 +62,7 @@ const ProjectCreateBespoke = () => {
         to={reportsPath}
         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors w-fit text-sm font-semibold"
       >
-        <ArrowLeft size={16} /> Quay lại Report Center
+        <ArrowLeft size={16} /> Quay lại Báo cáo
       </Link>
 
       <div className="mb-4">

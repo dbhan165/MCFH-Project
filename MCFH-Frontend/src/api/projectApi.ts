@@ -32,6 +32,7 @@ function normalizeProject(data: Record<string, unknown>): Project {
     enableYoutube: Boolean(pickField(data, 'enableYoutube', 'EnableYoutube')),
     enableTiktok: Boolean(pickField(data, 'enableTiktok', 'EnableTiktok')),
     enableMaps: Boolean(pickField(data, 'enableMaps', 'EnableMaps')),
+    enableNews: Boolean(pickField(data, 'enableNews', 'EnableNews')),
     createdAt: pickNullableString(data, 'createdAt', 'CreatedAt'),
   };
 }

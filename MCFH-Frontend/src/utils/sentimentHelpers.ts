@@ -33,7 +33,7 @@ export function getPlatformLabel(platform: string) {
     case 'tiktok':
       return 'TT';
     case 'news':
-      return 'News';
+      return 'Tin';
     default:
       return platform.toUpperCase().slice(0, 2);
   }
@@ -56,6 +56,23 @@ export function getPlatformDisplayName(platform: string) {
 
 export const MENTION_PLATFORMS = ['all', 'youtube', 'tiktok', 'facebook', 'news'] as const;
 export type MentionPlatformFilter = (typeof MENTION_PLATFORMS)[number];
+
+export const PLATFORM_SORT_ORDER = ['facebook', 'youtube', 'tiktok', 'news'] as const;
+
+export function sortByPlatformOrder<T extends { platform: string }>(
+  items: T[],
+  getVolume?: (item: T) => number
+): T[] {
+  return [...items].sort((a, b) => {
+    const aIdx = PLATFORM_SORT_ORDER.indexOf(a.platform.toLowerCase() as (typeof PLATFORM_SORT_ORDER)[number]);
+    const bIdx = PLATFORM_SORT_ORDER.indexOf(b.platform.toLowerCase() as (typeof PLATFORM_SORT_ORDER)[number]);
+    const aOrder = aIdx >= 0 ? aIdx : 99;
+    const bOrder = bIdx >= 0 ? bIdx : 99;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    if (getVolume) return getVolume(b) - getVolume(a);
+    return 0;
+  });
+}
 
 export const MENTION_SENTIMENTS = ['all', 'positive', 'negative', 'neutral', 'pending'] as const;
 export type MentionSentimentFilter = (typeof MENTION_SENTIMENTS)[number];

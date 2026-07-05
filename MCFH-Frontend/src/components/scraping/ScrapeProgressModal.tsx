@@ -1,4 +1,4 @@
-import { Loader2, CheckCircle2, AlertCircle, Circle, MinusCircle, Square } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Circle, MinusCircle, Square, Minimize2 } from 'lucide-react';
 import type { ScrapeJobStatus } from '../../types/project';
 
 const PLATFORM_STYLE: Record<string, { dot: string; label: string }> = {
@@ -29,6 +29,7 @@ type ScrapeProgressModalProps = {
   job: ScrapeJobStatus | null;
   progressPercent?: number;
   onCancel?: () => void;
+  onMinimize?: () => void;
   isCancelling?: boolean;
 };
 
@@ -38,6 +39,7 @@ export default function ScrapeProgressModal({
   job,
   progressPercent,
   onCancel,
+  onMinimize,
   isCancelling,
 }: ScrapeProgressModalProps) {
   if (!open) return null;
@@ -88,10 +90,20 @@ export default function ScrapeProgressModal({
             ) : (
               <AlertCircle className="w-8 h-8 text-amber-400 shrink-0" />
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h3 className="text-lg font-bold text-white truncate">{title}</h3>
               <p className="text-sm text-gray-400 truncate">{projectName}</p>
             </div>
+            {onMinimize ? (
+              <button
+                type="button"
+                onClick={onMinimize}
+                className="shrink-0 p-2 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Chạy nền"
+              >
+                <Minimize2 className="w-4 h-4" />
+              </button>
+            ) : null}
           </div>
           <p className="text-sm text-gray-300 mt-3">{phaseMessage}</p>
           {job && platforms.length > 0 && (
@@ -161,6 +173,15 @@ export default function ScrapeProgressModal({
                   : 'Dừng (giữ dữ liệu đã cào)'}
               </button>
             )}
+            {onMinimize ? (
+              <button
+                type="button"
+                onClick={onMinimize}
+                className="w-full py-2.5 rounded-xl border border-white/10 text-gray-300 text-sm font-semibold hover:bg-white/5 transition-colors"
+              >
+                Chạy nền — tiếp tục cào
+              </button>
+            ) : null}
           </div>
         )}
       </div>

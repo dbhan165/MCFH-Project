@@ -4,7 +4,7 @@ import { Loader2, AlertCircle, BarChart3 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { ProjectOverviewStats } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
-import { formatNumber } from '../utils/sentimentHelpers';
+import { formatNumber, getPlatformDisplayName, getPlatformBadgeClass, sortByPlatformOrder } from '../utils/sentimentHelpers';
 
 const ProjectOverview = () => {
   const { workspaceId, id } = useParams();
@@ -54,15 +54,20 @@ const ProjectOverview = () => {
 
   if (!overview) return null;
 
+  const platformBreakdown = sortByPlatformOrder(
+    Object.entries(overview.platformBreakdown).map(([platform, count]) => ({ platform, count })),
+    (item) => item.count
+  );
+
   const cards = [
-    { title: 'Tổng Mentions', value: formatNumber(overview.totalMentions), sub: 'Bài/video đã cào' },
+    { title: 'Tổng mentions', value: formatNumber(overview.totalMentions), sub: 'Bài đăng đã cào' },
     {
       title: 'Chỉ số NSR',
       value: `${overview.nsrScore > 0 ? '+' : ''}${overview.nsrScore}%`,
       sub: `${overview.positiveCount} tích cực · ${overview.negativeCount} tiêu cực`,
       accent: overview.nsrScore >= 0 ? 'text-[#00B4D8]' : 'text-[#FF7575]',
     },
-    { title: 'Tổng bình luận', value: formatNumber(overview.totalComments), sub: 'Từ các nguồn đã thu thập' },
+    { title: 'Tổng bình luận', value: formatNumber(overview.totalComments), sub: 'Từ các nguồn đã chọn' },
     { title: 'Đã phân tích AI', value: formatNumber(overview.analyzedCount), sub: overview.pendingAnalysisCount > 0 ? `${overview.pendingAnalysisCount} chờ phân tích` : 'Hoàn tất' },
   ];
 
@@ -70,7 +75,7 @@ const ProjectOverview = () => {
     <div className="animate-in fade-in duration-500 space-y-6 max-w-7xl mx-auto">
       <div className="mb-2">
         <h2 className="text-2xl font-bold text-white">{overview.projectName}</h2>
-        <p className="text-gray-400 text-sm mt-1">Tổng quan dữ liệu thật từ scraping + AI sentiment</p>
+        <p className="text-gray-400 text-sm mt-1">Số liệu tổng hợp từ mentions đã thu thập</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -89,13 +94,15 @@ const ProjectOverview = () => {
             <BarChart3 className="text-[#FF7575] w-5 h-5" /> Phân bổ theo nền tảng
           </h3>
           {Object.keys(overview.platformBreakdown).length === 0 ? (
-            <p className="text-gray-500 text-sm">Chưa có dữ liệu. Hãy chạy scrape cho dự án này.</p>
+            <p className="text-gray-500 text-sm">Chưa có dữ liệu. Hãy cào dữ liệu cho dự án này.</p>
           ) : (
             <div className="space-y-3">
-              {Object.entries(overview.platformBreakdown).map(([platform, count]) => (
+              {platformBreakdown.map(({ platform, count }) => (
                 <div key={platform} className="flex items-center justify-between p-3 bg-[#0A101D] rounded-xl border border-white/5">
-                  <span className="capitalize text-gray-300">{platform}</span>
-                  <span className="font-bold text-white">{count} mentions</span>
+                  <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold ${getPlatformBadgeClass(platform)}`}>
+                    {getPlatformDisplayName(platform)}
+                  </span>
+                  <span className="font-bold text-white tabular-nums">{formatNumber(count)} mentions</span>
                 </div>
               ))}
             </div>

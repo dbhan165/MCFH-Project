@@ -19,14 +19,14 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { projectApi, scrapeApi } from '../api/projectApi';
+import { projectApi } from '../api/projectApi';
 import { scrapeOrderApi, type ScrapeOrder } from '../api/scrapeOrderApi';
 import { workspaceApi } from '../api/workspaceApi';
-import type { Project, ScrapeJobStatus } from '../types/project';
+import type { Project } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDate } from '../utils/workspaceHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
-import ScrapeProgressModal from '../components/scraping/ScrapeProgressModal';
+import { useScrapeJob } from '../contexts/ScrapeJobContext';
 
 const CARD_GRADIENTS = [
   'from-[#FF7575]/15 via-transparent to-transparent',
@@ -39,6 +39,7 @@ const PLATFORM_STYLES: Record<string, string> = {
   Facebook: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   YouTube: 'bg-red-500/10 text-red-400 border-red-500/20',
   TikTok: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+  'Tin tức': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   Maps: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
 };
 
@@ -298,6 +299,7 @@ const Projects = () => {
   const navigate = useNavigate();
   const wid = Number(workspaceId);
   const { confirm, alert } = useAppModal();
+  const { startKeywordScrape } = useScrapeJob();
 
   const [workspaceName, setWorkspaceName] = useState('');
   const [projectList, setProjectList] = useState<Project[]>([]);
@@ -307,13 +309,6 @@ const Projects = () => {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [actionProjectId, setActionProjectId] = useState<number | null>(null);
   const [orderByProject, setOrderByProject] = useState<Record<number, ScrapeOrder>>({});
-  const [scrapeProgress, setScrapeProgress] = useState<{
-    open: boolean;
-    projectName: string;
-    job: ScrapeJobStatus | null;
-    jobId: string | null;
-    isCancelling: boolean;
-  }>({ open: false, projectName: '', job: null, jobId: null, isCancelling: false });
   const menuRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
@@ -432,87 +427,15 @@ const Projects = () => {
     }
   };
 
-  const handleRescrape = async (project: Project) => {
-    setActionProjectId(project.projectId);
+  const handleRescrape = (project: Project) => {
     setOpenMenuId(null);
     setErrorMessage('');
-    setScrapeProgress({ open: true, projectName: project.name, job: null, jobId: null, isCancelling: false });
-
-    try {
-      const result = await scrapeApi.byKeyword(project.projectId, (job) => {
-        setScrapeProgress((prev) => ({
-          open: true,
-          projectName: project.name,
-          job,
-          jobId: job.jobId || prev.jobId,
-          isCancelling: prev.isCancelling || job.phase === 'cancelling',
-        }));
-      });
-
-      const count =
-        (result.facebook?.length ?? 0) + (result.youTube?.length ?? 0) + (result.tikTok?.length ?? 0);
-
-      setScrapeProgress((prev) => ({ ...prev, open: false }));
-
-      if (result.cancelled) {
-        if (count > 0) {
-          await alert({
-            title: 'Đã dừng cào dữ liệu',
-            message: result.message || `Đã giữ ${count} bản ghi cho "${project.name}".`,
-            type: 'success',
-          });
-        } else {
-          await alert({
-            title: 'Đã dừng cào dữ liệu',
-            message: result.message || 'Không có bản ghi nào được lưu trước khi dừng.',
-            type: 'warning',
-          });
-        }
-        return;
-      }
-
-      if (result.errorMessage && count === 0) throw new Error(result.errorMessage);
-
-      if (count === 0 && result.message?.includes('đã cào trước')) {
-        await alert({
-          title: 'Cào lại hoàn tất',
-          message: result.message,
-          type: 'success',
-        });
-      } else if (count === 0) {
-        const detail = result.errors?.length
-          ? result.errors.join('\n')
-          : 'Không thu thập được dữ liệu. Kiểm tra Playwright, cookie Facebook và từ khóa.';
-        await alert({
-          title: 'Không có dữ liệu mới',
-          message: `Đã thu thập 0 bản ghi cho "${project.name}".\n\n${detail}`,
-          type: 'warning',
-        });
-      } else {
-        await alert({
-          title: 'Cào dữ liệu hoàn tất',
-          message: result.message || `Đã thu thập ${count} bản ghi cho "${project.name}".`,
-          type: 'success',
-        });
-
-        if (result.errors?.length) {
-          await alert({
-            title: 'Một số nguồn gặp lỗi',
-            message: result.errors.join('\n'),
-            type: 'warning',
-          });
-        }
-      }
-    } catch (error) {
-      setScrapeProgress((prev) => ({ ...prev, open: false }));
-      await alert({
-        title: 'Cào dữ liệu thất bại',
-        message: extractApiError(error, 'Không thể cào dữ liệu.'),
-        type: 'error',
-      });
-    } finally {
-      setActionProjectId(null);
-    }
+    startKeywordScrape({
+      projectId: project.projectId,
+      projectName: project.name,
+      workspaceId: wid,
+      onComplete: loadProjects,
+    });
   };
 
   const handleAnalyze = async (project: Project) => {
@@ -733,25 +656,6 @@ const Projects = () => {
         </div>
       )}
 
-      <ScrapeProgressModal
-        open={scrapeProgress.open}
-        projectName={scrapeProgress.projectName}
-        job={scrapeProgress.job}
-        isCancelling={scrapeProgress.isCancelling}
-        onCancel={
-          scrapeProgress.jobId
-            ? async () => {
-                if (!scrapeProgress.jobId || scrapeProgress.isCancelling) return;
-                setScrapeProgress((prev) => ({ ...prev, isCancelling: true }));
-                try {
-                  await scrapeApi.cancelJob(scrapeProgress.jobId);
-                } catch {
-                  setScrapeProgress((prev) => ({ ...prev, isCancelling: false }));
-                }
-              }
-            : undefined
-        }
-      />
     </div>
   );
 };
