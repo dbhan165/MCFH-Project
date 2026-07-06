@@ -8,6 +8,8 @@ public class NotificationDto
     public string? Type { get; set; }
     public string? RelatedType { get; set; }
     public int? RelatedId { get; set; }
+    public int? ProjectId { get; set; }
+    public int? WorkspaceId { get; set; }
     public bool IsRead { get; set; }
     public DateTime? CreatedAt { get; set; }
 }

@@ -12,7 +12,8 @@ public interface INotificationService
         string? message,
         string type,
         string? relatedType = null,
-        int? relatedId = null);
+        int? relatedId = null,
+        int? projectId = null);
 
     Task<List<NotificationDto>> GetRecentAsync(int userId, int limit = 30);
     Task<int> GetUnreadCountAsync(int userId);
@@ -36,11 +37,13 @@ public class NotificationService : INotificationService
         string? message,
         string type,
         string? relatedType = null,
-        int? relatedId = null)
+        int? relatedId = null,
+        int? projectId = null)
     {
         _context.Notifications.Add(new Notification
         {
             UserId = userId,
+            ProjectId = projectId,
             Title = title,
             Message = message,
             Type = type,
@@ -66,6 +69,8 @@ public class NotificationService : INotificationService
                 Type = n.Type,
                 RelatedType = n.RelatedType,
                 RelatedId = n.RelatedId,
+                ProjectId = n.ProjectId,
+                WorkspaceId = n.Project != null ? n.Project.WorkspaceId : null,
                 IsRead = n.IsRead == true,
                 CreatedAt = n.CreatedAt
             })

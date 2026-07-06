@@ -36,6 +36,22 @@ public class ProjectReportService
             Description = "Bản xem chi tiết với KPI, insight, kênh, influencer, aspect và top mentions nổi bật.",
             Format = "html",
             TypeLabel = "HTML Report"
+        },
+        new()
+        {
+            Key = "mentions-csv",
+            Name = "Xuất Mentions (CSV)",
+            Description = "Danh sách mentions dạng bảng để mở trong Excel hoặc BI tool.",
+            Format = "csv",
+            TypeLabel = "CSV Export"
+        },
+        new()
+        {
+            Key = "analytics-pptx",
+            Name = "Báo cáo Trình chiếu (PPTX)",
+            Description = "Slide tóm tắt KPI và insight để trình bày nhanh với team hoặc khách hàng.",
+            Format = "pptx",
+            TypeLabel = "PPTX Report"
         }
     ];
 
@@ -83,6 +99,15 @@ public class ProjectReportService
             rowCount = count;
             var filePath = Path.Combine(folder, $"{fileName}.{extension}");
             await File.WriteAllBytesAsync(filePath, pdfBytes);
+            fileName = $"{fileName}.{extension}";
+        }
+        else if (type == "analytics-pptx")
+        {
+            var (pptxBytes, ext, count) = await BuildAnalyticsPptxAsync(workspaceId, projectId, userId, project.Name);
+            extension = ext;
+            rowCount = count;
+            var filePath = Path.Combine(folder, $"{fileName}.{extension}");
+            await File.WriteAllBytesAsync(filePath, pptxBytes);
             fileName = $"{fileName}.{extension}";
         }
         else
@@ -139,6 +164,7 @@ public class ProjectReportService
             "mentions-csv" => "text/csv; charset=utf-8",
             "analytics-html" => "text/html; charset=utf-8",
             "analytics-pdf" => "application/pdf",
+            "analytics-pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "analytics-json" => "application/json; charset=utf-8",
             _ => "application/octet-stream"
         };
@@ -392,6 +418,59 @@ public class ProjectReportService
         sb.AppendLine("</body></html>");
 
         return (sb.ToString(), "html", totalMentions);
+    }
+
+    private async Task<(byte[] Content, string Extension, int RowCount)> BuildAnalyticsPptxAsync(
+        int workspaceId, int projectId, int userId, string projectName)
+    {
+        var overview = await _analytics.GetOverviewAsync(workspaceId, projectId, userId);
+        var sentiment = await _analytics.GetSentimentSummaryAsync(workspaceId, projectId, userId);
+        var channels = await _analytics.GetChannelComparisonAsync(workspaceId, projectId, userId);
+        var generated = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("vi-VN"));
+
+        var slides = new List<PptxSlide>
+        {
+            new()
+            {
+                Heading = "Tổng quan KPI",
+                Bullets =
+                [
+                    $"Tổng mentions: {FormatNumber(overview?.TotalMentions ?? 0)}",
+                    $"Tổng bình luận: {FormatNumber(overview?.TotalComments ?? 0)}",
+                    $"NSR Score: {(overview?.NsrScore ?? sentiment?.NsrScore ?? 0):+#.#;-#.#;0}%",
+                    $"Tích cực: {FormatNumber(sentiment?.Positive ?? 0)} ({sentiment?.PositivePercent ?? 0:0.#}%)",
+                    $"Tiêu cực: {FormatNumber(sentiment?.Negative ?? 0)} ({sentiment?.NegativePercent ?? 0:0.#}%)",
+                    $"Chưa phân tích: {FormatNumber(sentiment?.Unanalyzed ?? 0)}"
+                ]
+            }
+        };
+
+        if (channels?.Channels.Count > 0)
+        {
+            slides.Add(new PptxSlide
+            {
+                Heading = "Hiệu quả theo kênh",
+                Bullets = channels.Channels
+                    .OrderByDescending(c => c.Mentions)
+                    .Take(6)
+                    .Select(c => $"{c.Label}: {FormatNumber(c.Mentions)} mentions · SOV {c.MentionShare:0.#}% · NSR {c.NsrScore:+#.#;-#.#;0}%")
+                    .ToList()
+            });
+        }
+
+        slides.Add(new PptxSlide
+        {
+            Heading = "Ghi chú",
+            Bullets =
+            [
+                $"Thời điểm xuất: {generated}",
+                "Báo cáo được tổng hợp từ dữ liệu hiện có trong MCFH.",
+                "Nên đối chiếu thêm tab Sentiment và Mentions trước khi ra quyết định."
+            ]
+        });
+
+        var bytes = SimplePptxBuilder.Build($"Báo cáo — {projectName}", slides);
+        return (bytes, "pptx", overview?.TotalMentions ?? 0);
     }
 
     private async Task<(byte[] Content, string Extension, int RowCount)> BuildAnalyticsPdfAsync(

@@ -17,9 +17,12 @@ import {
   Filter,
   X,
   MessagesSquare,
+  Tag,
+  VolumeX,
+  AlertTriangle,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { ProjectMention } from '../types/project';
+import type { MentionTag, ProjectMention } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
@@ -98,6 +101,10 @@ function MentionCard({
   onCopy,
   onDelete,
   onOpenOriginal,
+  onEditSentiment,
+  onManageTags,
+  onMuteAuthor,
+  onMutePlatform,
 }: {
   item: ProjectMention;
   isMenuOpen: boolean;
@@ -112,6 +119,10 @@ function MentionCard({
   onCopy: () => void;
   onDelete: () => void;
   onOpenOriginal: () => void;
+  onEditSentiment: (sentiment: 'positive' | 'negative' | 'neutral') => void;
+  onManageTags: () => void;
+  onMuteAuthor: () => void;
+  onMutePlatform: () => void;
 }) {
   const hasComments = item.comments.length > 0;
   const hasSentiment = item.sentiment != null && item.sentiment !== '';
@@ -147,6 +158,12 @@ function MentionCard({
                 <h4 className="font-bold text-white truncate max-w-full">
                   {item.authorName || 'Không rõ tác giả'}
                 </h4>
+                {item.isCrisisAlert && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                    <AlertTriangle className="w-3 h-3" />
+                    Khủng hoảng
+                  </span>
+                )}
                 <span
                   className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md border border-white/10"
                   style={{ color: platformColor, borderColor: `${platformColor}33`, background: `${platformColor}14` }}
@@ -171,6 +188,7 @@ function MentionCard({
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: accent }} />
               {hasSentiment ? getSentimentLabel(item.sentiment) : 'Chờ AI'}
+              {item.isSentimentOverridden ? ' · Sửa tay' : ''}
               {item.confidenceScore != null && hasSentiment
                 ? ` · ${Math.round(item.confidenceScore * 100)}%`
                 : ''}
@@ -188,7 +206,7 @@ function MentionCard({
               </button>
 
               {isMenuOpen && (
-                <div className="absolute right-0 top-10 w-52 bg-[#1A2235] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
+                <div className="absolute right-0 top-10 w-56 bg-[#1A2235] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
                   {item.originalUrl ? (
                     <button
                       type="button"
@@ -199,6 +217,29 @@ function MentionCard({
                       Xem bài gốc
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={onManageTags}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                  >
+                    <Tag size={16} className="text-emerald-400" />
+                    Gán tag
+                  </button>
+                  <div className="px-4 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1.5">Sửa sentiment</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(['positive', 'negative', 'neutral'] as const).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => onEditSentiment(s)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border ${getSentimentBadgeClass(s)}`}
+                        >
+                          {getSentimentLabel(s)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={onAnalyze}
@@ -216,6 +257,25 @@ function MentionCard({
                     Sao chép nội dung
                   </button>
                   <div className="h-px bg-white/5 my-1" />
+                  {item.authorName ? (
+                    <button
+                      type="button"
+                      onClick={onMuteAuthor}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                    >
+                      <VolumeX size={16} className="text-gray-400" />
+                      Mute tác giả
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={onMutePlatform}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                  >
+                    <VolumeX size={16} className="text-gray-400" />
+                    Mute nền tảng
+                  </button>
+                  <div className="h-px bg-white/5 my-1" />
                   <button
                     type="button"
                     onClick={onDelete}
@@ -229,6 +289,21 @@ function MentionCard({
             </div>
           </div>
         </div>
+
+        {item.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {item.tags.map((tag) => (
+              <span
+                key={tag.tagId}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border border-white/10 bg-white/5 text-gray-200"
+                style={{ borderColor: `${tag.color ?? '#00B4D8'}44`, color: tag.color ?? '#00B4D8' }}
+              >
+                <Tag className="w-3 h-3" />
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-xl border border-white/5 bg-[#0A101D]/50 px-4 py-3.5 mb-4">
           <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{displayContent}</p>
@@ -359,8 +434,22 @@ const ProjectMentions = () => {
   const [analyzeMessage, setAnalyzeMessage] = useState('');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [actionMentionId, setActionMentionId] = useState<number | null>(null);
+  const [projectTags, setProjectTags] = useState<MentionTag[]>([]);
+  const [tagModalMention, setTagModalMention] = useState<ProjectMention | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [newTagName, setNewTagName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const { confirm, alert } = useAppModal();
+
+  const loadProjectTags = useCallback(async () => {
+    if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
+    try {
+      const tags = await projectApi.listMentionTags(wid, projectId);
+      setProjectTags(tags);
+    } catch {
+      setProjectTags([]);
+    }
+  }, [wid, projectId]);
 
   const loadMentions = useCallback(async () => {
     if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
@@ -404,6 +493,10 @@ const ProjectMentions = () => {
   useEffect(() => {
     loadSavedFilters();
   }, [loadSavedFilters]);
+
+  useEffect(() => {
+    loadProjectTags();
+  }, [loadProjectTags]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -588,6 +681,103 @@ const ProjectMentions = () => {
   const handleOpenOriginal = (item: ProjectMention) => {
     setOpenMenuId(null);
     if (item.originalUrl) window.open(item.originalUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleEditSentiment = async (item: ProjectMention, sentiment: 'positive' | 'negative' | 'neutral') => {
+    if (!wid || !projectId) return;
+    setOpenMenuId(null);
+    setActionMentionId(item.feedbackId);
+    try {
+      await projectApi.updateMentionSentiment(wid, projectId, item.feedbackId, sentiment);
+      await loadMentions();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể cập nhật sentiment.'));
+    } finally {
+      setActionMentionId(null);
+    }
+  };
+
+  const openTagModal = (item: ProjectMention) => {
+    setOpenMenuId(null);
+    setTagModalMention(item);
+    setSelectedTagIds(item.tags.map((t) => t.tagId));
+    setNewTagName('');
+  };
+
+  const handleSaveTags = async () => {
+    if (!wid || !projectId || !tagModalMention) return;
+    setActionMentionId(tagModalMention.feedbackId);
+    try {
+      await projectApi.assignMentionTags(wid, projectId, tagModalMention.feedbackId, selectedTagIds);
+      setTagModalMention(null);
+      await loadMentions();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể gán tag.'));
+    } finally {
+      setActionMentionId(null);
+    }
+  };
+
+  const handleCreateTag = async () => {
+    if (!wid || !projectId || !newTagName.trim()) return;
+    try {
+      const tag = await projectApi.createMentionTag(wid, projectId, { name: newTagName.trim() });
+      setProjectTags((prev) => [...prev, tag]);
+      setSelectedTagIds((prev) => [...prev, tag.tagId]);
+      setNewTagName('');
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể tạo tag.'));
+    }
+  };
+
+  const handleMuteAuthor = async (item: ProjectMention) => {
+    if (!wid || !projectId || !item.authorName) return;
+    const confirmed = await confirm({
+      title: 'Mute tác giả',
+      message: `Ẩn tất cả mention từ «${item.authorName}» khỏi danh sách?`,
+      confirmText: 'Mute',
+      cancelText: 'Hủy',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+    setOpenMenuId(null);
+    setActionMentionId(item.feedbackId);
+    try {
+      await projectApi.muteMentionSource(wid, projectId, {
+        entityType: 'author',
+        entityValue: item.authorName,
+      });
+      await loadMentions();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể mute tác giả.'));
+    } finally {
+      setActionMentionId(null);
+    }
+  };
+
+  const handleMutePlatform = async (item: ProjectMention) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Mute nền tảng',
+      message: `Ẩn tất cả mention từ ${getPlatformDisplayName(item.platform)}?`,
+      confirmText: 'Mute',
+      cancelText: 'Hủy',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+    setOpenMenuId(null);
+    setActionMentionId(item.feedbackId);
+    try {
+      await projectApi.muteMentionSource(wid, projectId, {
+        entityType: 'platform',
+        entityValue: item.platform,
+      });
+      await loadMentions();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể mute nền tảng.'));
+    } finally {
+      setActionMentionId(null);
+    }
   };
 
   return (
@@ -827,8 +1017,90 @@ const ProjectMentions = () => {
               onCopy={() => handleCopyContent(item)}
               onDelete={() => handleDeleteMention(item)}
               onOpenOriginal={() => handleOpenOriginal(item)}
+              onEditSentiment={(sentiment) => handleEditSentiment(item, sentiment)}
+              onManageTags={() => openTagModal(item)}
+              onMuteAuthor={() => handleMuteAuthor(item)}
+              onMutePlatform={() => handleMutePlatform(item)}
             />
           ))}
+        </div>
+      )}
+
+      {tagModalMention && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151B2B] p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-white">Gán tag</h3>
+              <button
+                type="button"
+                onClick={() => setTagModalMention(null)}
+                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-4 line-clamp-2">{tagModalMention.content}</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto mb-4">
+              {projectTags.length === 0 ? (
+                <p className="text-sm text-gray-500">Chưa có tag — tạo tag mới bên dưới.</p>
+              ) : (
+                projectTags.map((tag) => {
+                  const checked = selectedTagIds.includes(tag.tagId);
+                  return (
+                    <label
+                      key={tag.tagId}
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 hover:bg-white/5 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedTagIds((prev) =>
+                            checked ? prev.filter((id) => id !== tag.tagId) : [...prev, tag.tagId]
+                          )
+                        }
+                        className="rounded border-white/20"
+                      />
+                      <span className="text-sm text-white">{tag.name}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="flex gap-2 mb-5">
+              <input
+                type="text"
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                placeholder="Tên tag mới"
+                className="flex-1 px-3 py-2 rounded-xl bg-[#0A101D] border border-white/10 text-sm text-white"
+              />
+              <button
+                type="button"
+                onClick={handleCreateTag}
+                disabled={!newTagName.trim()}
+                className="px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-semibold disabled:opacity-40"
+              >
+                Tạo
+              </button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setTagModalMention(null)}
+                className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTags}
+                className="px-4 py-2 rounded-xl bg-[#FF7575] text-white text-sm font-semibold hover:bg-[#ff9090]"
+              >
+                Lưu tag
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

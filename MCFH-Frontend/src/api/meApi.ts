@@ -9,6 +9,8 @@ export interface AppNotification {
   type: string | null;
   relatedType: string | null;
   relatedId: number | null;
+  projectId: number | null;
+  workspaceId: number | null;
   isRead: boolean;
   createdAt: string | null;
 }
@@ -21,6 +23,8 @@ function normalizeNotification(data: Record<string, unknown>): AppNotification {
     type: pickNullableString(data, 'type', 'Type'),
     relatedType: pickNullableString(data, 'relatedType', 'RelatedType'),
     relatedId: pickField<number>(data, 'relatedId', 'RelatedId') ?? null,
+    projectId: pickField<number>(data, 'projectId', 'ProjectId') ?? null,
+    workspaceId: pickField<number>(data, 'workspaceId', 'WorkspaceId') ?? null,
     isRead: pickField(data, 'isRead', 'IsRead') === true,
     createdAt: pickNullableString(data, 'createdAt', 'CreatedAt'),
   };
