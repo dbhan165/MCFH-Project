@@ -5,6 +5,7 @@ import type {
   ChannelComparison,
   CreateProjectPayload,
   InfluencerAnalytics,
+  MentionTag,
   Project,
   ProjectMention,
   ProjectOverviewStats,
@@ -189,6 +190,17 @@ export const projectApi = {
           pickField(d, 'isAnalyzed', 'IsAnalyzed') === true ||
           pickNullableString(d, 'sentiment', 'Sentiment') != null,
         analyzedAt: pickNullableString(d, 'analyzedAt', 'AnalyzedAt'),
+        tags: (pickField<unknown[]>(d, 'tags', 'Tags') ?? []).map((tag) => {
+          const t = tag as Record<string, unknown>;
+          return {
+            tagId: pickNumber(t, 'tagId', 'TagId'),
+            name: pickString(t, 'name', 'Name'),
+            color: pickNullableString(t, 'color', 'Color'),
+          } satisfies MentionTag;
+        }),
+        isSentimentOverridden:
+          pickField(d, 'isSentimentOverridden', 'IsSentimentOverridden') === true,
+        isCrisisAlert: pickField(d, 'isCrisisAlert', 'IsCrisisAlert') === true,
       };
     });
   },
@@ -491,6 +503,72 @@ export const projectApi = {
       { timeout: 120_000 }
     );
     return normalizeAnalyzeResult(response.data);
+  },
+
+  listMentionTags: async (workspaceId: number, projectId: number): Promise<MentionTag[]> => {
+    const response = await axiosClient.get<unknown[]>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-tags`
+    );
+    return (response.data ?? []).map((item) => {
+      const t = item as Record<string, unknown>;
+      return {
+        tagId: pickNumber(t, 'tagId', 'TagId'),
+        name: pickString(t, 'name', 'Name'),
+        color: pickNullableString(t, 'color', 'Color'),
+      };
+    });
+  },
+
+  createMentionTag: async (
+    workspaceId: number,
+    projectId: number,
+    payload: { name: string; color?: string }
+  ): Promise<MentionTag> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-tags`,
+      payload
+    );
+    const t = response.data;
+    return {
+      tagId: pickNumber(t, 'tagId', 'TagId'),
+      name: pickString(t, 'name', 'Name'),
+      color: pickNullableString(t, 'color', 'Color'),
+    };
+  },
+
+  assignMentionTags: async (
+    workspaceId: number,
+    projectId: number,
+    feedbackId: number,
+    tagIds: number[]
+  ): Promise<void> => {
+    await axiosClient.put(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/mentions/${feedbackId}/tags`,
+      { tagIds }
+    );
+  },
+
+  updateMentionSentiment: async (
+    workspaceId: number,
+    projectId: number,
+    feedbackId: number,
+    sentiment: 'positive' | 'negative' | 'neutral'
+  ): Promise<void> => {
+    await axiosClient.put(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/mentions/${feedbackId}/sentiment`,
+      { sentiment }
+    );
+  },
+
+  muteMentionSource: async (
+    workspaceId: number,
+    projectId: number,
+    payload: { entityType: 'author' | 'platform'; entityValue: string }
+  ): Promise<void> => {
+    await axiosClient.post(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources`,
+      payload
+    );
   },
 };
 

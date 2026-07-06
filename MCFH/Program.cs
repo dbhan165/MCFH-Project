@@ -100,6 +100,9 @@ namespace MCFH
             builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
             builder.Services.AddHttpClient<SerpApiNewsDiscovery>();
             builder.Services.AddHttpClient<IGeminiSentimentService, GeminiSentimentService>();
+            builder.Services.AddScoped<INotificationService, NotificationService>();
+            builder.Services.AddScoped<ProjectAlertService>();
+            builder.Services.AddScoped<MentionManagementService>();
             builder.Services.AddScoped<AiAnalysisService>();
             builder.Services.AddScoped<ScrapeByKeywordService>();
             builder.Services.AddScoped<ProxyRotationService>();

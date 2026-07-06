@@ -27,8 +27,9 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getReportFormat(type: string): 'pdf' | 'html' | 'csv' | 'json' {
+function getReportFormat(type: string): 'pdf' | 'html' | 'csv' | 'json' | 'pptx' {
   if (type.includes('pdf')) return 'pdf';
+  if (type.includes('pptx')) return 'pptx';
   if (type.includes('csv')) return 'csv';
   if (type.includes('json')) return 'json';
   return 'html';
@@ -48,6 +49,8 @@ function getTypeBadgeClass(format: string) {
       return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     case 'csv':
       return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'pptx':
+      return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
     default:
       return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
   }
@@ -207,7 +210,10 @@ const ProjectReports = () => {
   };
 
   const filteredReports = useMemo(
-    () => (center?.reports ?? []).filter((report) => ['analytics-html', 'analytics-pdf'].includes(report.type)),
+    () =>
+      (center?.reports ?? []).filter((report) =>
+        ['analytics-html', 'analytics-pdf', 'mentions-csv', 'analytics-pptx'].includes(report.type)
+      ),
     [center]
   );
   const bespokeRequests = useMemo(() => bespoke?.requests ?? [], [bespoke]);
@@ -259,7 +265,7 @@ const ProjectReports = () => {
               Báo cáo
             </h2>
             <p className="text-gray-400 text-sm mt-2">
-              Tạo và tải báo cáo HTML hoặc PDF.
+              Tạo và tải báo cáo HTML, PDF, CSV hoặc PPTX.
             </p>
           </div>
 
@@ -530,7 +536,7 @@ const ProjectReports = () => {
       </div>
 
       <p className="text-xs text-gray-600 text-center">
-        HTML để xem nhanh, PDF để gửi và in.
+        HTML để xem nhanh, PDF/PPTX để trình bày, CSV để phân tích sâu.
       </p>
     </div>
   );

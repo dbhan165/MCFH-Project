@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, Outlet, useParams, useLocation } from 'react-router-dom';
 import { 
   BarChart2, PieChart, LayoutDashboard, Share2, MessageCircle, 
-  Bell, Download, FileText,
+  Download, FileText,
   ArrowLeft, Users, Loader2
 } from 'lucide-react';
 import McfhLogo from '../components/brand/McfhLogo';
+import NotificationBell from '../components/notifications/NotificationBell';
 import { projectApi } from '../api/projectApi';
 
 const ProjectLayout = () => {
@@ -13,7 +14,6 @@ const ProjectLayout = () => {
   const wid = Number(workspaceId);
   const projectId = Number(id);
   const location = useLocation();
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [projectKeyword, setProjectKeyword] = useState<string | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
@@ -145,21 +145,7 @@ const ProjectLayout = () => {
               <Download size={16} /> <span className="hidden sm:inline">Báo cáo</span>
             </Link>
 
-            {/* Noti */}
-            <div className="relative">
-              <button 
-                onClick={() => setIsNotifOpen(!isNotifOpen)} 
-                onBlur={() => setTimeout(() => setIsNotifOpen(false), 200)}
-                className="p-2 text-gray-400 hover:text-white relative"
-              >
-                <Bell size={22} /><span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF7575] rounded-full animate-pulse"></span>
-              </button>
-              {isNotifOpen && (
-                <div className="absolute top-full right-0 mt-2 w-80 bg-[#151B2B] border border-white/10 rounded-xl shadow-2xl p-4 z-50">
-                  <p className="text-sm text-gray-400">Không có thông báo mới.</p>
-                </div>
-              )}
-            </div>
+            <NotificationBell />
           </div>
         </header>
 

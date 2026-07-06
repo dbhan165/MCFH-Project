@@ -22,6 +22,7 @@ public class ProjectExtendedController : ControllerBase
     private readonly ProjectReportService _reportService;
     private readonly BespokeReportService _bespokeService;
     private readonly MentionFilterService _mentionFilters;
+    private readonly MentionManagementService _mentionManagement;
 
     public ProjectExtendedController(
         McfhDbContext db,
@@ -32,6 +33,7 @@ public class ProjectExtendedController : ControllerBase
         _aiAnalysisService = aiAnalysisService;
         _analyticsService = new ProjectAnalyticsService(db);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
+        _mentionManagement = new MentionManagementService(db);
         _reportService = new ProjectReportService(db, _analyticsService);
         _bespokeService = new BespokeReportService(db, _analyticsService);
     }
@@ -62,7 +64,8 @@ public class ProjectExtendedController : ControllerBase
     public async Task<IActionResult> GetMentions(
         int workspaceId, int projectId,
         [FromQuery] string? platform, [FromQuery] string? sentiment,
-        [FromQuery] string? search, [FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo)
+        [FromQuery] string? search, [FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo,
+        [FromQuery] bool excludeMuted = true)
     {
         var userId = GetUserId();
         var project = await _projectService.GetByIdAsync(workspaceId, projectId, userId);
@@ -74,9 +77,60 @@ public class ProjectExtendedController : ControllerBase
             Sentiment = sentiment,
             Search = search,
             DateFrom = dateFrom,
-            DateTo = dateTo
+            DateTo = dateTo,
+            ExcludeMuted = excludeMuted
         };
         return Ok(await _analyticsService.GetMentionsAsync(workspaceId, projectId, userId, filter));
+    }
+
+    [HttpGet("{projectId}/mention-tags")]
+    public async Task<IActionResult> ListMentionTags(int workspaceId, int projectId) =>
+        Ok(await _mentionManagement.ListTagsAsync(workspaceId, projectId, GetUserId()));
+
+    [HttpPost("{projectId}/mention-tags")]
+    public async Task<IActionResult> CreateMentionTag(int workspaceId, int projectId, [FromBody] CreateMentionTagDto dto)
+    {
+        var result = await _mentionManagement.CreateTagAsync(workspaceId, projectId, GetUserId(), dto);
+        if (result == null) return BadRequest(new { message = "Không thể tạo tag." });
+        return Ok(result);
+    }
+
+    [HttpPut("{projectId}/analytics/mentions/{feedbackId}/tags")]
+    public async Task<IActionResult> AssignMentionTags(
+        int workspaceId, int projectId, int feedbackId, [FromBody] AssignMentionTagsDto dto)
+    {
+        var ok = await _mentionManagement.AssignTagsAsync(workspaceId, projectId, GetUserId(), feedbackId, dto);
+        if (!ok) return NotFound();
+        return Ok(new { message = "Đã gán tag." });
+    }
+
+    [HttpPut("{projectId}/analytics/mentions/{feedbackId}/sentiment")]
+    public async Task<IActionResult> UpdateMentionSentiment(
+        int workspaceId, int projectId, int feedbackId, [FromBody] UpdateMentionSentimentDto dto)
+    {
+        var ok = await _mentionManagement.UpdateSentimentAsync(workspaceId, projectId, GetUserId(), feedbackId, dto);
+        if (!ok) return BadRequest(new { message = "Không thể cập nhật sentiment." });
+        return Ok(new { message = "Đã cập nhật sentiment." });
+    }
+
+    [HttpGet("{projectId}/muted-sources")]
+    public async Task<IActionResult> ListMutedSources(int workspaceId, int projectId) =>
+        Ok(await _mentionManagement.ListMutedAsync(workspaceId, projectId, GetUserId()));
+
+    [HttpPost("{projectId}/muted-sources")]
+    public async Task<IActionResult> MuteSource(int workspaceId, int projectId, [FromBody] MuteMentionSourceDto dto)
+    {
+        var result = await _mentionManagement.MuteSourceAsync(workspaceId, projectId, GetUserId(), dto);
+        if (result == null) return BadRequest(new { message = "Không thể mute nguồn này." });
+        return Ok(result);
+    }
+
+    [HttpDelete("{projectId}/muted-sources/{muteId}")]
+    public async Task<IActionResult> UnmuteSource(int workspaceId, int projectId, int muteId)
+    {
+        var ok = await _mentionManagement.UnmuteAsync(workspaceId, projectId, GetUserId(), muteId);
+        if (!ok) return NotFound();
+        return Ok(new { message = "Đã bỏ mute." });
     }
 
     [HttpDelete("{projectId}/analytics/mentions/{feedbackId}")]

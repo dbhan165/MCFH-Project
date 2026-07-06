@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, Check, Loader2, Mail } from 'lucide-react';
+import { Bell, Check, Loader2, Mail, AlertTriangle } from 'lucide-react';
 import { meApi, type AppNotification } from '../../api/meApi';
 import { formatWorkspaceDateTime } from '../../utils/workspaceHelpers';
 
@@ -61,6 +61,12 @@ const NotificationBell = () => {
     if (notification.type === 'workspace_invite') {
       setOpen(false);
       navigate('/invitations');
+      return;
+    }
+
+    if (notification.type === 'crisis_alert' && notification.workspaceId && notification.projectId) {
+      setOpen(false);
+      navigate(`/workspace/${notification.workspaceId}/project/${notification.projectId}/sentiment`);
     }
   };
 
@@ -120,6 +126,8 @@ const NotificationBell = () => {
                     <div className="mt-0.5 w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
                       {n.type === 'workspace_invite' ? (
                         <Mail className="w-4 h-4 text-[#FF7575]" />
+                      ) : n.type === 'crisis_alert' ? (
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
                       ) : (
                         <Check className="w-4 h-4 text-emerald-400" />
                       )}

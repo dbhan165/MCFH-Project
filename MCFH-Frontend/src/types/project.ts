@@ -46,6 +46,12 @@ export interface ProjectOverviewStats {
   platformBreakdown: Record<string, number>;
 }
 
+export interface MentionTag {
+  tagId: number;
+  name: string;
+  color: string | null;
+}
+
 export interface ProjectMention {
   feedbackId: number;
   authorName: string | null;
@@ -61,6 +67,9 @@ export interface ProjectMention {
   comments: string[];
   isAnalyzed: boolean;
   analyzedAt: string | null;
+  tags: MentionTag[];
+  isSentimentOverridden: boolean;
+  isCrisisAlert: boolean;
 }
 
 export interface SentimentSummary {

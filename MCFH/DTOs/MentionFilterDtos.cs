@@ -7,6 +7,7 @@ public class MentionQueryDto
     public string? Search { get; set; }
     public DateTime? DateFrom { get; set; }
     public DateTime? DateTo { get; set; }
+    public bool ExcludeMuted { get; set; } = true;
 }
 
 public class SavedFilterDto

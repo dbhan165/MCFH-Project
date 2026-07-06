@@ -102,7 +102,25 @@ public class ProjectAnalyticsService
         await ProjectFeedbackQueryHelper.BackfillProjectIdsAsync(_context, projectId);
         var query = ProjectFeedbackQueryHelper.ForProject(_context, projectId)
             .Include(f => f.AiAnalysis)
+            .Include(f => f.Tags)
             .AsQueryable();
+
+        var mutedAuthors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var mutedPlatforms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (filter?.ExcludeMuted != false)
+        {
+            var muted = await _context.MutedEntities
+                .AsNoTracking()
+                .Where(m => m.ProjectId == projectId)
+                .ToListAsync();
+            foreach (var item in muted)
+            {
+                if (item.EntityType.Equals("author", StringComparison.OrdinalIgnoreCase))
+                    mutedAuthors.Add(item.EntityValue);
+                else if (item.EntityType.Equals("platform", StringComparison.OrdinalIgnoreCase))
+                    mutedPlatforms.Add(item.EntityValue);
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(filter?.Platform) && filter.Platform != "all")
         {
@@ -138,20 +156,6 @@ public class ProjectAnalyticsService
 
         var rows = await query
             .OrderByDescending(f => f.ScrapedAt)
-            .Select(f => new
-            {
-                f.FeedbackId,
-                f.AuthorName,
-                Platform = f.Platform ?? "unknown",
-                f.Content,
-                Sentiment = f.AiAnalysis != null ? f.AiAnalysis.MainSentiment : null,
-                ConfidenceScore = f.AiAnalysis != null ? f.AiAnalysis.ConfidenceScore : null,
-                f.OriginalUrl,
-                CommentsCount = f.CommentsCount ?? 0,
-                f.ScrapedAt,
-                f.PostedAt,
-                f.CommentsFileUrl
-            })
             .ToListAsync();
 
         var mentions = new List<MentionDto>();
@@ -159,13 +163,24 @@ public class ProjectAnalyticsService
 
         foreach (var row in rows)
         {
+            if (filter?.ExcludeMuted != false)
+            {
+                var author = row.AuthorName?.Trim();
+                var platform = (row.Platform ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(author) && mutedAuthors.Contains(author))
+                    continue;
+                if (!string.IsNullOrWhiteSpace(platform) && mutedPlatforms.Contains(platform))
+                    continue;
+            }
+
             var bundle = await CommentBundleStorage.LoadAsync(row.FeedbackId, row.CommentsFileUrl);
-            var isAnalyzed = row.Sentiment != null;
+            var sentiment = row.AiAnalysis?.MainSentiment;
+            var isAnalyzed = sentiment != null;
             var aiSummary = bundle.AiSummary;
             var comments = bundle.Comments;
 
             // DB lệch file (dữ liệu cũ / file mất / AI ghi summary khi chưa có file)
-            if (comments.Count == 0 && row.CommentsCount > 0)
+            if (comments.Count == 0 && (row.CommentsCount ?? 0) > 0)
                 repairedIds.Add(row.FeedbackId);
 
             var commentsCount = comments.Count;
@@ -173,18 +188,18 @@ public class ProjectAnalyticsService
             if (string.IsNullOrWhiteSpace(aiSummary) && isAnalyzed)
             {
                 aiSummary = bundle.Comments.Count > 0
-                    ? BuildFallbackAiSummary(row.Sentiment, bundle.Comments.Count)
-                    : $"Phân tích từ nội dung bài: thái độ chủ đạo là {FormatSentimentVi(row.Sentiment)}.";
+                    ? BuildFallbackAiSummary(sentiment, bundle.Comments.Count)
+                    : $"Phân tích từ nội dung bài: thái độ chủ đạo là {FormatSentimentVi(sentiment)}.";
             }
 
             mentions.Add(new MentionDto
             {
                 FeedbackId = row.FeedbackId,
                 AuthorName = row.AuthorName,
-                Platform = row.Platform,
+                Platform = row.Platform ?? "unknown",
                 Content = row.Content,
-                Sentiment = row.Sentiment,
-                ConfidenceScore = row.ConfidenceScore,
+                Sentiment = sentiment,
+                ConfidenceScore = row.AiAnalysis?.ConfidenceScore,
                 OriginalUrl = row.OriginalUrl,
                 CommentsCount = commentsCount,
                 ScrapedAt = row.ScrapedAt,
@@ -192,7 +207,18 @@ public class ProjectAnalyticsService
                 AiSummary = aiSummary,
                 Comments = comments,
                 IsAnalyzed = isAnalyzed,
-                AnalyzedAt = bundle.AnalyzedAt
+                AnalyzedAt = bundle.AnalyzedAt,
+                Tags = row.Tags
+                    .OrderBy(t => t.Name)
+                    .Select(t => new MentionTagDto
+                    {
+                        TagId = t.TagId,
+                        Name = t.Name,
+                        Color = t.Color
+                    })
+                    .ToList(),
+                IsSentimentOverridden = row.AiAnalysis?.SentimentOverrideBy != null,
+                IsCrisisAlert = row.AiAnalysis?.IsCrisisAlert == true
             });
         }
 

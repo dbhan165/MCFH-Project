@@ -10,6 +10,7 @@ public class AiAnalysisService
 {
     private readonly McfhDbContext _context;
     private readonly IGeminiSentimentService _geminiSentimentService;
+    private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
 
     private static readonly string[] PositiveWords =
@@ -25,10 +26,12 @@ public class AiAnalysisService
     public AiAnalysisService(
         McfhDbContext context,
         IGeminiSentimentService geminiSentimentService,
+        ProjectAlertService alertService,
         ILogger<AiAnalysisService> logger)
     {
         _context = context;
         _geminiSentimentService = geminiSentimentService;
+        _alertService = alertService;
         _logger = logger;
     }
 
@@ -76,6 +79,7 @@ public class AiAnalysisService
         var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
         var analyzed = 0;
         var geminiCount = 0;
+        var crisisCountInBatch = 0;
 
         foreach (var feedback in pending)
         {
@@ -107,6 +111,7 @@ public class AiAnalysisService
                 });
 
                 analyzed++;
+                if (analysis.IsCrisisAlert) crisisCountInBatch++;
                 if (analysis.UsedGemini) geminiCount++;
             }
             catch (Exception ex)
@@ -116,7 +121,10 @@ public class AiAnalysisService
         }
 
         if (analyzed > 0)
+        {
             await _context.SaveChangesAsync();
+            await _alertService.NotifyAfterAnalysisAsync(projectId, crisisCountInBatch);
+        }
 
         var engine = geminiCount > 0 ? "Gemini" : "rule-based";
         return new AnalyzeProjectResultDto
@@ -181,6 +189,7 @@ public class AiAnalysisService
             });
 
             await _context.SaveChangesAsync();
+            await _alertService.NotifyAfterAnalysisAsync(projectId, analysis.IsCrisisAlert ? 1 : 0);
 
             var engine = analysis.UsedGemini ? "Gemini" : "rule-based";
             return new AnalyzeProjectResultDto

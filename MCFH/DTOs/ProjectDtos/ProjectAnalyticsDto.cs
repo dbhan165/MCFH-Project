@@ -31,6 +31,9 @@
         public List<string> Comments { get; set; } = new();
         public bool IsAnalyzed { get; set; }
         public DateTime? AnalyzedAt { get; set; }
+        public List<MentionTagDto> Tags { get; set; } = new();
+        public bool IsSentimentOverridden { get; set; }
+        public bool IsCrisisAlert { get; set; }
     }
 
     public class SentimentSummaryDto
