@@ -26,6 +26,14 @@ public class ScrapeJobRunner
         if (project?.WorkspaceId == null)
             return null;
 
+        // Chặn cào nếu workspace đã bị xóa mềm.
+        var workspaceActive = await db.Workspaces
+            .AsNoTracking()
+            .AnyAsync(w => w.WorkspaceId == project.WorkspaceId && w.IsDeleted != true);
+
+        if (!workspaceActive)
+            return null;
+
         var isMember = await db.WorkspaceMembers
             .AnyAsync(m => m.WorkspaceId == project.WorkspaceId && m.UserId == userId);
 

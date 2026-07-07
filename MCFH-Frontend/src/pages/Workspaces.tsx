@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Building2,
@@ -15,12 +15,15 @@ import {
   Crown,
   LayoutGrid,
   CalendarDays,
+  MoreVertical,
+  Trash2,
 } from 'lucide-react';
 import { workspaceApi } from '../api/workspaceApi';
 import { meApi } from '../api/meApi';
 import type { Workspace } from '../types/workspace';
 import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { formatWorkspaceDate, getRoleBadgeClass, getRoleLabel, isWorkspaceOwner } from '../utils/workspaceHelpers';
+import { useAppModal } from '../contexts/AppModalContext';
 
 const CARD_GRADIENTS = [
   'from-[#FF7575]/20 via-[#FF7575]/5 to-transparent',
@@ -47,10 +50,21 @@ function pickGradientIndex(name: string, mod: number) {
 function WorkspaceCard({
   ws,
   onEnter,
+  onDelete,
+  isMenuOpen,
+  onToggleMenu,
+  menuRef,
+  isDeleting,
 }: {
   ws: Workspace;
   onEnter: (id: number) => void;
+  onDelete: (ws: Workspace) => void;
+  isMenuOpen: boolean;
+  onToggleMenu: () => void;
+  menuRef: React.RefObject<HTMLDivElement | null> | undefined;
+  isDeleting: boolean;
 }) {
+  const isOwner = isWorkspaceOwner(ws.myRole);
   const idx = pickGradientIndex(ws.name, CARD_GRADIENTS.length);
   const cardGradient = CARD_GRADIENTS[idx];
   const avatarGradient = AVATAR_GRADIENTS[idx];
@@ -70,9 +84,50 @@ function WorkspaceCard({
           >
             {initial}
           </div>
-          <span className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border shrink-0 ${getRoleBadgeClass(ws.myRole)}`}>
-            {getRoleLabel(ws.myRole)}
-          </span>
+          <div className="flex items-start gap-2 shrink-0">
+            <span className={`px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border shrink-0 ${getRoleBadgeClass(ws.myRole)}`}>
+              {getRoleLabel(ws.myRole)}
+            </span>
+            {isOwner && (
+              <div className="relative" ref={isMenuOpen ? menuRef : undefined}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleMenu();
+                  }}
+                  disabled={isDeleting}
+                  className="p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40"
+                  aria-label="Tùy chọn workspace"
+                >
+                  {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <MoreVertical size={18} />}
+                </button>
+                {isMenuOpen && (
+                  <div className="absolute right-0 top-10 w-48 bg-[#1A2235] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
+                    <Link
+                      to={`/workspace/${ws.workspaceId}/settings`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5"
+                    >
+                      <Settings size={16} className="text-[#00B4D8]" />
+                      Cài đặt
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(ws);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    >
+                      <Trash2 size={16} />
+                      Xóa workspace
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <h3 className="text-xl font-bold text-white mb-1 line-clamp-1 group-hover:text-[#FF7575] transition-colors">
@@ -101,7 +156,7 @@ function WorkspaceCard({
         </div>
 
         <div className="mt-auto pt-4 border-t border-white/10 flex items-center justify-between gap-3">
-          {isWorkspaceOwner(ws.myRole) ? (
+          {isOwner ? (
             <Link
               to={`/workspace/${ws.workspaceId}/settings`}
               onClick={(e) => e.stopPropagation()}
@@ -136,6 +191,10 @@ const Workspaces = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { confirm } = useAppModal();
 
   const loadWorkspaces = useCallback(async () => {
     setIsLoading(true);
@@ -156,8 +215,40 @@ const Workspaces = () => {
     loadWorkspaces();
   }, [loadWorkspaces]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleEnterWorkspace = (workspaceId: number) => {
     navigate(`/workspace/${workspaceId}/projects`);
+  };
+
+  const handleDeleteWorkspace = async (ws: Workspace) => {
+    const confirmed = await confirm({
+      title: 'Xóa workspace',
+      message: `Bạn có chắc muốn xóa «${ws.name}»?\nToàn bộ project và dữ liệu liên quan sẽ bị ẩn.`,
+      confirmText: 'Xóa workspace',
+      cancelText: 'Hủy',
+      type: 'danger',
+    });
+    if (!confirmed) return;
+
+    setOpenMenuId(null);
+    setDeletingId(ws.workspaceId);
+    try {
+      await workspaceApi.delete(ws.workspaceId);
+      setWorkspaces((prev) => prev.filter((item) => item.workspaceId !== ws.workspaceId));
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể xóa workspace.'));
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const filteredWorkspaces = useMemo(() => {
@@ -312,7 +403,16 @@ const Workspaces = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredWorkspaces.map((ws) => (
-            <WorkspaceCard key={ws.workspaceId} ws={ws} onEnter={handleEnterWorkspace} />
+            <WorkspaceCard
+              key={ws.workspaceId}
+              ws={ws}
+              onEnter={handleEnterWorkspace}
+              onDelete={handleDeleteWorkspace}
+              isMenuOpen={openMenuId === ws.workspaceId}
+              onToggleMenu={() => setOpenMenuId(openMenuId === ws.workspaceId ? null : ws.workspaceId)}
+              menuRef={openMenuId === ws.workspaceId ? menuRef : undefined}
+              isDeleting={deletingId === ws.workspaceId}
+            />
           ))}
 
           {filteredWorkspaces.length === 0 && searchQuery && (

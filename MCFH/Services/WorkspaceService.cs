@@ -65,6 +65,10 @@ namespace MCFH.Services
                     WorkspaceId = w.WorkspaceId,
                     Name = w.Name,
                     OwnerName = w.Owner.FullName,
+                    MyRole = w.WorkspaceMembers
+                        .Where(m => m.UserId == userId)
+                        .Select(m => m.Role.RoleName)
+                        .FirstOrDefault(),
                     MemberCount = w.WorkspaceMembers.Count,
                     ProjectCount = w.Projects.Count(p => p.IsDeleted != true),
                     CreatedAt = w.CreatedAt
@@ -83,6 +87,10 @@ namespace MCFH.Services
                     WorkspaceId = w.WorkspaceId,
                     Name = w.Name,
                     OwnerName = w.Owner.FullName,
+                    MyRole = w.WorkspaceMembers
+                        .Where(m => m.UserId == userId)
+                        .Select(m => m.Role.RoleName)
+                        .FirstOrDefault(),
                     MemberCount = w.WorkspaceMembers.Count,
                     ProjectCount = w.Projects.Count(p => p.IsDeleted != true),
                     CreatedAt = w.CreatedAt
@@ -167,6 +175,21 @@ namespace MCFH.Services
             workspace.IsDeleted = true;
             workspace.DeletedAt = DateTime.Now;
             await _context.SaveChangesAsync();
+
+            // Khi xóa workspace, cần xóa mềm tất cả project thuộc workspace đó.
+            // Nếu không, Hangfire scheduler vẫn có thể cào tiếp vì project còn tồn tại.
+            var projects = await _context.Projects
+                .Where(p => p.WorkspaceId == workspaceId && p.IsDeleted != true)
+                .ToListAsync();
+            if (projects.Count > 0)
+            {
+                foreach (var p in projects)
+                {
+                    p.IsDeleted = true;
+                    p.DeletedAt = DateTime.Now;
+                }
+                await _context.SaveChangesAsync();
+            }
 
             await LogActivityAsync(workspaceId, userId,
                 actionType: "DELETE_WORKSPACE",

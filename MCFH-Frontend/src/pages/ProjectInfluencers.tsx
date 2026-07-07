@@ -345,7 +345,7 @@ const ProjectInfluencers = () => {
           <div className="max-w-3xl">
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <Users className="text-[#00B4D8] w-8 h-8" />
-              KOL & Influencer
+              KOL & Người ảnh hưởng
             </h2>
             <p className="text-gray-400 text-sm mt-3 leading-relaxed">
               Xếp hạng creator và nguồn tin theo SOV, bình luận và sentiment — gồm Tin tức.

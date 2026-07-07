@@ -37,6 +37,7 @@ public class ScrapingJobService
 
         var projectIds = await _db.Projects
             .Where(p => p.IsDeleted != true
+                        && p.Workspace.IsDeleted != true
                         && (p.EnableFacebook == true || p.EnableYoutube == true || p.EnableTiktok == true
                             || p.DataSources.Any(d => d.Platform == "news" && d.Status == "active")))
             .Select(p => p.ProjectId)
