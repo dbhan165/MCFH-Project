@@ -17,6 +17,8 @@ import {
   Radio,
   Hash,
   ChevronLeft,
+  GitCompare,
+  Check,
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { projectApi } from '../api/projectApi';
@@ -80,6 +82,9 @@ function ProjectCard({
   isMenuOpen,
   isBusy,
   menuRef,
+  compareMode = false,
+  isCompareSelected = false,
+  onToggleCompare,
   onToggleMenu,
   onEnter,
   onRescrape,
@@ -93,6 +98,9 @@ function ProjectCard({
   isMenuOpen: boolean;
   isBusy: boolean;
   menuRef: React.RefObject<HTMLDivElement | null> | undefined;
+  compareMode?: boolean;
+  isCompareSelected?: boolean;
+  onToggleCompare?: () => void;
   onToggleMenu: () => void;
   onEnter: () => void;
   onRescrape: () => void;
@@ -105,10 +113,38 @@ function ProjectCard({
 
   return (
     <article
-      onClick={onEnter}
-      className="group relative overflow-hidden rounded-3xl border border-white/10 bg-[#151B2B] cursor-pointer transition-all duration-300 hover:border-[#FF7575]/35 hover:shadow-[0_16px_40px_rgba(255,117,117,0.1)] hover:-translate-y-0.5"
+      onClick={() => {
+        if (compareMode) {
+          onToggleCompare?.();
+          return;
+        }
+        onEnter();
+      }}
+      className={`group relative overflow-hidden rounded-3xl border bg-[#151B2B] cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
+        compareMode && isCompareSelected
+          ? 'border-[#4FD1C5]/60 shadow-[0_16px_40px_rgba(79,209,197,0.15)]'
+          : 'border-white/10 hover:border-[#FF7575]/35 hover:shadow-[0_16px_40px_rgba(255,117,117,0.1)]'
+      }`}
     >
       <div className={`absolute inset-0 bg-gradient-to-br ${gradient} pointer-events-none`} />
+
+      {compareMode && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCompare?.();
+          }}
+          className={`absolute top-4 left-4 z-20 w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${
+            isCompareSelected
+              ? 'bg-[#4FD1C5] border-[#4FD1C5] text-[#0A101D]'
+              : 'bg-[#0A101D]/80 border-white/20 text-transparent hover:border-[#4FD1C5]/50'
+          }`}
+          aria-label={isCompareSelected ? 'Bỏ chọn' : 'Chọn để so sánh'}
+        >
+          <Check size={14} className={isCompareSelected ? 'opacity-100' : 'opacity-0'} />
+        </button>
+      )}
 
       <div className="relative p-6 flex flex-col min-h-[260px]">
         <div className="flex items-start justify-between gap-3 mb-4">
@@ -129,6 +165,7 @@ function ProjectCard({
           </div>
 
           <div className="relative shrink-0" ref={isMenuOpen ? menuRef : undefined}>
+            {!compareMode && (
             <button
               type="button"
               onClick={(e) => {
@@ -141,8 +178,9 @@ function ProjectCard({
             >
               {isBusy ? <Loader2 size={18} className="animate-spin" /> : <MoreVertical size={18} />}
             </button>
+            )}
 
-            {isMenuOpen && (
+            {isMenuOpen && !compareMode && (
               <div className="absolute right-0 top-10 w-52 bg-[#1A2235] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
                 <button
                   type="button"
@@ -309,6 +347,8 @@ const Projects = () => {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [actionProjectId, setActionProjectId] = useState<number | null>(null);
   const [orderByProject, setOrderByProject] = useState<Record<number, ScrapeOrder>>({});
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<number[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
@@ -465,6 +505,36 @@ const Projects = () => {
     navigate(`/workspace/${workspaceId}/project/${projectId}`);
   };
 
+  const toggleCompareSelection = (projectId: number) => {
+    setSelectedCompareIds((prev) => {
+      if (prev.includes(projectId)) return prev.filter((id) => id !== projectId);
+      if (prev.length >= 2) return [prev[1], projectId];
+      return [...prev, projectId];
+    });
+  };
+
+  const exitCompareMode = () => {
+    setCompareMode(false);
+    setSelectedCompareIds([]);
+    setOpenMenuId(null);
+  };
+
+  const handleStartCompare = () => {
+    if (selectedCompareIds.length !== 2) return;
+    const [leftId, rightId] = selectedCompareIds;
+    navigate(`/workspace/${wid}/project/${leftId}/comparison`, {
+      state: { compareWith: rightId },
+    });
+  };
+
+  const selectedCompareProjects = useMemo(
+    () =>
+      selectedCompareIds
+        .map((id) => projectList.find((p) => p.projectId === id))
+        .filter((p): p is Project => Boolean(p)),
+    [selectedCompareIds, projectList]
+  );
+
   return (
     <div className="animate-in fade-in duration-500 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-16 space-y-8">
       {/* Hero */}
@@ -505,6 +575,23 @@ const Projects = () => {
               <UserPlus size={16} />
               Thành viên
             </Link>
+            {projectList.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (compareMode) exitCompareMode();
+                  else setCompareMode(true);
+                }}
+                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold border transition-colors ${
+                  compareMode
+                    ? 'bg-[#4FD1C5]/15 text-[#4FD1C5] border-[#4FD1C5]/30'
+                    : 'text-gray-300 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <GitCompare size={16} />
+                {compareMode ? 'Hủy so sánh' : 'So sánh dự án'}
+              </button>
+            )}
             <Link
               to={`/create-project?wid=${workspaceId}`}
               className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
@@ -538,6 +625,38 @@ const Projects = () => {
           </div>
         )}
       </div>
+
+      {compareMode && projectList.length >= 2 && (
+        <div className="rounded-2xl border border-[#4FD1C5]/25 bg-[#4FD1C5]/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-sm text-[#a7f3ec]">
+            <span className="font-semibold text-white">Chế độ so sánh:</span> chọn đúng{' '}
+            <span className="font-bold text-[#4FD1C5]">2 dự án</span> ({selectedCompareIds.length}/2)
+            {selectedCompareProjects.length > 0 && (
+              <span className="block sm:inline sm:ml-2 text-[#7dd3fc] mt-1 sm:mt-0">
+                {selectedCompareProjects.map((p) => p.name).join(' vs ')}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={exitCompareMode}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-300 border border-white/10 hover:bg-white/5"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleStartCompare}
+              disabled={selectedCompareIds.length !== 2}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-[#4FD1C5] hover:bg-[#3dbfb3] text-[#0A101D] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <GitCompare size={16} />
+              So sánh ngay
+            </button>
+          </div>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="bg-red-500/10 border border-red-500/20 text-red-300 p-4 rounded-2xl flex items-center gap-3 text-sm">
@@ -611,6 +730,9 @@ const Projects = () => {
               project={project}
               activeOrder={orderByProject[project.projectId]}
               workspaceId={workspaceId}
+              compareMode={compareMode}
+              isCompareSelected={selectedCompareIds.includes(project.projectId)}
+              onToggleCompare={() => toggleCompareSelection(project.projectId)}
               isMenuOpen={openMenuId === project.projectId}
               isBusy={actionProjectId === project.projectId}
               menuRef={openMenuId === project.projectId ? menuRef : undefined}

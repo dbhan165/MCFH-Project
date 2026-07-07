@@ -32,6 +32,54 @@ export interface AdminUser {
   createdAt: string | null;
 }
 
+export interface AdminUserDetail {
+  userId: number;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  avatarUrl: string | null;
+  authProvider: string;
+  systemRole: string;
+  isBanned: boolean;
+  isVerified: boolean;
+  verifiedAt: string | null;
+  bannedAt: string | null;
+  createdAt: string | null;
+  stats: {
+    ownedWorkspaces: number;
+    memberWorkspaces: number;
+    totalProjects: number;
+    bespokeAsClient: number;
+    bespokeAsReporter: number;
+    unreadNotifications: number;
+  };
+  workspaces: {
+    workspaceId: number;
+    name: string;
+    membershipRole: string;
+    isOwner: boolean;
+    projectCount: number;
+    subscriptionPlan: string | null;
+    subscriptionStatus: string | null;
+    createdAt: string | null;
+  }[];
+  bespokeRequests: {
+    requestId: number;
+    title: string;
+    status: string;
+    involvement: string;
+    submittedAt: string | null;
+  }[];
+  recentPayments: {
+    paymentId: number;
+    amount: number;
+    status: string | null;
+    type: string | null;
+    planName: string | null;
+    createdAt: string | null;
+  }[];
+}
+
 export interface FbSource {
   fbSourceId: number;
   groupUrl: string;
@@ -161,6 +209,69 @@ export const adminApi = {
       isVerified: pickField(u, 'isVerified', 'IsVerified') === true,
       createdAt: pickNullableString(u, 'createdAt', 'CreatedAt'),
     } as AdminUser;
+  },
+
+  getUserDetail: async (userId: number): Promise<AdminUserDetail> => {
+    const res = await axiosClient.get<Record<string, unknown>>(`/api/admin/users/${userId}`);
+    const d = res.data;
+    const stats = (pickField<Record<string, unknown>>(d, 'stats', 'Stats') ?? {}) as Record<string, unknown>;
+    const workspaces = (pickField<unknown[]>(d, 'workspaces', 'Workspaces') ?? []) as Record<string, unknown>[];
+    const bespokeRequests = (pickField<unknown[]>(d, 'bespokeRequests', 'BespokeRequests') ?? []) as Record<
+      string,
+      unknown
+    >[];
+    const recentPayments = (pickField<unknown[]>(d, 'recentPayments', 'RecentPayments') ?? []) as Record<
+      string,
+      unknown
+    >[];
+
+    return {
+      userId: pickNumber(d, 'userId', 'UserId'),
+      fullName: pickString(d, 'fullName', 'FullName'),
+      email: pickString(d, 'email', 'Email'),
+      phone: pickNullableString(d, 'phone', 'Phone'),
+      avatarUrl: pickNullableString(d, 'avatarUrl', 'AvatarUrl'),
+      authProvider: pickString(d, 'authProvider', 'AuthProvider'),
+      systemRole: pickString(d, 'systemRole', 'SystemRole'),
+      isBanned: pickField(d, 'isBanned', 'IsBanned') === true,
+      isVerified: pickField(d, 'isVerified', 'IsVerified') === true,
+      verifiedAt: pickNullableString(d, 'verifiedAt', 'VerifiedAt'),
+      bannedAt: pickNullableString(d, 'bannedAt', 'BannedAt'),
+      createdAt: pickNullableString(d, 'createdAt', 'CreatedAt'),
+      stats: {
+        ownedWorkspaces: pickNumber(stats, 'ownedWorkspaces', 'OwnedWorkspaces'),
+        memberWorkspaces: pickNumber(stats, 'memberWorkspaces', 'MemberWorkspaces'),
+        totalProjects: pickNumber(stats, 'totalProjects', 'TotalProjects'),
+        bespokeAsClient: pickNumber(stats, 'bespokeAsClient', 'BespokeAsClient'),
+        bespokeAsReporter: pickNumber(stats, 'bespokeAsReporter', 'BespokeAsReporter'),
+        unreadNotifications: pickNumber(stats, 'unreadNotifications', 'UnreadNotifications'),
+      },
+      workspaces: workspaces.map((w) => ({
+        workspaceId: pickNumber(w, 'workspaceId', 'WorkspaceId'),
+        name: pickString(w, 'name', 'Name'),
+        membershipRole: pickString(w, 'membershipRole', 'MembershipRole'),
+        isOwner: pickField(w, 'isOwner', 'IsOwner') === true,
+        projectCount: pickNumber(w, 'projectCount', 'ProjectCount'),
+        subscriptionPlan: pickNullableString(w, 'subscriptionPlan', 'SubscriptionPlan'),
+        subscriptionStatus: pickNullableString(w, 'subscriptionStatus', 'SubscriptionStatus'),
+        createdAt: pickNullableString(w, 'createdAt', 'CreatedAt'),
+      })),
+      bespokeRequests: bespokeRequests.map((r) => ({
+        requestId: pickNumber(r, 'requestId', 'RequestId'),
+        title: pickString(r, 'title', 'Title'),
+        status: pickString(r, 'status', 'Status'),
+        involvement: pickString(r, 'involvement', 'Involvement'),
+        submittedAt: pickNullableString(r, 'submittedAt', 'SubmittedAt'),
+      })),
+      recentPayments: recentPayments.map((p) => ({
+        paymentId: pickNumber(p, 'paymentId', 'PaymentId'),
+        amount: Number(pickField(p, 'amount', 'Amount') ?? 0),
+        status: pickNullableString(p, 'status', 'Status'),
+        type: pickNullableString(p, 'type', 'Type'),
+        planName: pickNullableString(p, 'planName', 'PlanName'),
+        createdAt: pickNullableString(p, 'createdAt', 'CreatedAt'),
+      })),
+    };
   },
 
   getBespokeRequests: async (): Promise<PortalBespokeRequest[]> => {
