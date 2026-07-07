@@ -790,7 +790,7 @@ const ProjectMentions = () => {
           <div className="max-w-3xl">
             <h2 className="text-3xl font-bold text-white flex items-center gap-3">
               <MessageCircle className="text-[#FF7575] w-8 h-8" />
-              Mentions
+              Lượt nhắc
             </h2>
             <p className="text-gray-400 text-sm mt-3 leading-relaxed">
               Toàn bộ bài đăng và bài báo đã thu thập — lọc theo nền tảng, sentiment hoặc từ khóa.

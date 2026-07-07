@@ -64,6 +64,22 @@ public class ScrapeByKeywordService
             return result;
         }
 
+        if (project.IsDeleted == true)
+        {
+            result.ErrorMessage = "Project đã bị xóa.";
+            return result;
+        }
+
+        // Nếu workspace đã xóa mềm thì không được cào tiếp.
+        var workspace = await _db.Workspaces
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.WorkspaceId == project.WorkspaceId && w.IsDeleted != true);
+        if (workspace == null)
+        {
+            result.ErrorMessage = "Workspace đã bị xóa.";
+            return result;
+        }
+
         if (string.IsNullOrWhiteSpace(project.SearchQuery))
         {
             result.ErrorMessage = "Project chưa setup keyword (search_query rỗng).";

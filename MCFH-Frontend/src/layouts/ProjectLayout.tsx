@@ -51,9 +51,9 @@ const ProjectLayout = () => {
 
   const menuItems = [
     { path: '', icon: <LayoutDashboard size={20} />, label: 'Tổng quan', exact: true },
-    { path: 'mentions', icon: <MessageCircle size={20} />, label: 'Mentions' },
-    { path: 'sentiment', icon: <PieChart size={20} />, label: 'Sentiment' },
-    { path: 'influencers', icon: <Users size={20} />, label: 'KOL & Influencer' },
+    { path: 'mentions', icon: <MessageCircle size={20} />, label: 'Lượt nhắc' },
+    { path: 'sentiment', icon: <PieChart size={20} />, label: 'Cảm xúc' },
+    { path: 'influencers', icon: <Users size={20} />, label: 'KOL & Người ảnh hưởng' },
     { path: 'channel', icon: <Share2 size={20} />, label: 'So sánh kênh' },
     { path: 'aspect', icon: <BarChart2 size={20} />, label: 'Khía cạnh' },
     { path: 'reports', icon: <FileText size={20} />, label: 'Báo cáo' },
@@ -99,7 +99,7 @@ const ProjectLayout = () => {
             )}
           </div>
 
-          <p className="text-xs font-bold text-gray-500 mb-4 tracking-wider uppercase">Dashboard</p>
+          <p className="text-xs font-bold text-gray-500 mb-4 tracking-wider uppercase">Bảng điều khiển</p>
           <nav className="space-y-2">
             {menuItems.map((item) => {
               // CẬP NHẬT: Sinh ra đường dẫn đầy đủ chứa cả workspaceId
@@ -135,7 +135,7 @@ const ProjectLayout = () => {
         
         <header className="h-20 bg-[#0A101D]/80 backdrop-blur-md border-b border-white/5 px-8 flex items-center justify-between shrink-0 z-20">
           <div>
-            <h1 className="text-xl font-bold text-white hidden sm:block">{activePage?.label ?? 'Dashboard'}</h1>
+            <h1 className="text-xl font-bold text-white hidden sm:block">{activePage?.label ?? 'Bảng điều khiển'}</h1>
           </div>
           <div className="flex items-center gap-4">
             <Link
