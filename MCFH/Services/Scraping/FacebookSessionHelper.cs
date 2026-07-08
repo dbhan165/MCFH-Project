@@ -1,5 +1,6 @@
 ﻿using Microsoft.Playwright;
 using MCFH.Models.Scraping;
+using MCFH.Services;
 using System.Text.Json;
 
 namespace MCFH.Services.Scraping;
@@ -8,14 +9,16 @@ public static class FacebookSessionHelper
 {
     public static string CookiePath => ScrapeCookiePaths.FacebookCookiePath;
 
-    public static bool CookieFileExists() => File.Exists(CookiePath);
+    public static bool CookieFileExists(string? cookieFilePath = null) =>
+        File.Exists(cookieFilePath ?? CookiePath);
 
     public static async Task LoadCookiesAsync(IBrowserContext context)
     {
-        if (!CookieFileExists())
-            throw new FileNotFoundException($"Cookie file không tồn tại tại: {CookiePath}");
+        var cookiePath = await ResolveCookiePathAsync();
+        if (!File.Exists(cookiePath))
+            throw new FileNotFoundException($"Cookie file không tồn tại tại: {cookiePath}");
 
-        var json = await File.ReadAllTextAsync(CookiePath);
+        var json = await File.ReadAllTextAsync(cookiePath);
         var entries = JsonSerializer.Deserialize<List<CookieEditorEntry>>(json)
             ?? throw new InvalidOperationException("Cookie file rỗng hoặc không hợp lệ.");
 
@@ -38,6 +41,32 @@ public static class FacebookSessionHelper
         }).ToList();
 
         await context.AddCookiesAsync(cookies);
-        Console.WriteLine($"[FB Session] Loaded {cookies.Count} cookies.");
+        Console.WriteLine($"[FB Session] Loaded {cookies.Count} cookies từ {cookiePath}.");
+        await TryTouchLastUsedAsync();
+    }
+
+    private static async Task<string> ResolveCookiePathAsync()
+    {
+        try
+        {
+            return await PlatformCookieRuntime.Provider.ResolveFullPathAsync("facebook")
+                   ?? CookiePath;
+        }
+        catch (InvalidOperationException)
+        {
+            return CookiePath;
+        }
+    }
+
+    private static async Task TryTouchLastUsedAsync()
+    {
+        try
+        {
+            await PlatformCookieRuntime.Provider.TouchLastUsedAsync("facebook");
+        }
+        catch (InvalidOperationException)
+        {
+            // Chưa khởi tạo runtime (unit test / tool) — bỏ qua.
+        }
     }
 }
