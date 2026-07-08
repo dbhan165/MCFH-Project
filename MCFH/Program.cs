@@ -108,6 +108,8 @@ namespace MCFH
             builder.Services.AddScoped<ProxyRotationService>();
             builder.Services.AddScoped<ProxyAdminService>();
             builder.Services.AddScoped<FbSourceAdminService>();
+            builder.Services.AddSingleton<IPlatformCookiePathProvider, PlatformCookiePathProvider>();
+            builder.Services.AddScoped<PlatformCookieAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();
             builder.Services.AddSingleton<ScrapeJobRunner>();
 
@@ -121,6 +123,9 @@ namespace MCFH
             builder.Services.AddScoped<ScrapingJobService>();
 
             var app = builder.Build();
+
+            PlatformCookieRuntime.Initialize(app.Services.GetRequiredService<IPlatformCookiePathProvider>());
+
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {

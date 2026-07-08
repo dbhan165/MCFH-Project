@@ -2,6 +2,7 @@ using Microsoft.Playwright;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MCFH.Models.Scraping;
+using MCFH.Services;
 
 namespace MCFH.Services.Scraping;
 
@@ -15,11 +16,13 @@ public static class TikTokSessionHelper
 
     public static string CookiePath => ScrapeCookiePaths.TikTokCookiePath;
 
-    public static bool CookieFileExists() => File.Exists(CookiePath);
+    public static bool CookieFileExists(string? cookieFilePath = null) =>
+        File.Exists(cookieFilePath ?? CookiePath);
 
     public static async Task LoadCookiesIfExistsAsync(IBrowserContext context)
     {
-        if (!CookieFileExists())
+        var cookiePath = await ResolveCookiePathAsync();
+        if (!File.Exists(cookiePath))
         {
             Console.WriteLine("[TikTok Session] No cookie file — continuing without login.");
             return;
@@ -27,14 +30,15 @@ public static class TikTokSessionHelper
 
         try
         {
-            var json = await File.ReadAllTextAsync(CookiePath);
+            var json = await File.ReadAllTextAsync(cookiePath);
             var entries = JsonSerializer.Deserialize<List<CookieEditorEntry>>(json);
             if (entries == null || entries.Count == 0) return;
 
             var cookies = entries.Select(ToPlaywrightCookie).ToList();
 
             await context.AddCookiesAsync(cookies);
-            Console.WriteLine($"[TikTok Session] Loaded {cookies.Count} cookies.");
+            Console.WriteLine($"[TikTok Session] Loaded {cookies.Count} cookies từ {cookiePath}.");
+            await TryTouchLastUsedAsync();
         }
         catch (Exception ex)
         {
@@ -46,6 +50,7 @@ public static class TikTokSessionHelper
     {
         try
         {
+            var cookiePath = await ResolveCookiePathAsync();
             var cookies = await context.CookiesAsync();
             var tiktokCookies = cookies
                 .Where(c => c.Domain.Contains("tiktok", StringComparison.OrdinalIgnoreCase))
@@ -54,15 +59,17 @@ public static class TikTokSessionHelper
             if (tiktokCookies.Count == 0)
                 return;
 
-            if (CookieFileExists())
+            if (File.Exists(cookiePath))
             {
-                File.Copy(CookiePath, ScrapeCookiePaths.TikTokCookieBackupPath, overwrite: true);
-                Console.WriteLine($"[TikTok Session] Backup cookie → {ScrapeCookiePaths.TikTokCookieBackupPath}");
+                var backupPath = await ResolveBackupPathAsync(cookiePath);
+                File.Copy(cookiePath, backupPath, overwrite: true);
+                Console.WriteLine($"[TikTok Session] Backup cookie → {backupPath}");
             }
 
             var entries = tiktokCookies.Select(ToCookieEditorEntry).ToList();
-            await File.WriteAllTextAsync(CookiePath, JsonSerializer.Serialize(entries, JsonOptions));
-            Console.WriteLine($"[TikTok Session] Saved {entries.Count} cookies → {CookiePath}");
+            await File.WriteAllTextAsync(cookiePath, JsonSerializer.Serialize(entries, JsonOptions));
+            Console.WriteLine($"[TikTok Session] Saved {entries.Count} cookies → {cookiePath}");
+            await TryTouchLastUsedAsync();
         }
         catch (Exception ex)
         {
@@ -94,6 +101,45 @@ public static class TikTokSessionHelper
         }
 
         await SaveCookiesAsync(context);
+    }
+
+    private static async Task<string> ResolveCookiePathAsync()
+    {
+        try
+        {
+            return await PlatformCookieRuntime.Provider.ResolveFullPathAsync("tiktok")
+                   ?? CookiePath;
+        }
+        catch (InvalidOperationException)
+        {
+            return CookiePath;
+        }
+    }
+
+    private static async Task<string> ResolveBackupPathAsync(string cookiePath)
+    {
+        try
+        {
+            var provider = PlatformCookieRuntime.Provider;
+            var relative = Path.GetRelativePath(provider.ContentRoot, cookiePath).Replace('\\', '/');
+            var backupRelative = provider.GetBackupRelativePath("tiktok", relative);
+            return provider.ToFullPath(backupRelative);
+        }
+        catch (InvalidOperationException)
+        {
+            return ScrapeCookiePaths.TikTokCookieBackupPath;
+        }
+    }
+
+    private static async Task TryTouchLastUsedAsync()
+    {
+        try
+        {
+            await PlatformCookieRuntime.Provider.TouchLastUsedAsync("tiktok");
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private static Microsoft.Playwright.Cookie ToPlaywrightCookie(CookieEditorEntry e) => new()
