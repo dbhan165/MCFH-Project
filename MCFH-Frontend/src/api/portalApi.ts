@@ -49,6 +49,40 @@ export interface UpsertFbSource {
   enabled: boolean;
 }
 
+export interface PlatformCookie {
+  platformCookieId: number;
+  platform: string;
+  filePath: string;
+  status: string;
+  note?: string | null;
+  cookieCount: number;
+  expiresAt?: string | null;
+  uploadedAt?: string | null;
+  lastUsedAt?: string | null;
+  fileExists: boolean;
+  fileMissing: boolean;
+  isExpiringSoon: boolean;
+  backupFilePath?: string | null;
+  backupExists: boolean;
+  requiredCookiesPresent?: Record<string, boolean> | null;
+}
+
+export interface UpdatePlatformCookieMeta {
+  status?: string;
+  note?: string;
+  filePath?: string;
+}
+
+export interface PlatformCookieContentResult {
+  message: string;
+  platform: string;
+  filePath: string;
+  cookieCount: number;
+  expiresAt?: string | null;
+  uploadedAt?: string | null;
+  backupCreated: boolean;
+}
+
 export interface PortalBespokeRequest {
   requestId: number;
   title: string;
@@ -285,6 +319,89 @@ export const adminApi = {
 
   deleteFbSource: async (fbSourceId: number) => {
     await axiosClient.delete(`/api/admin/fb-sources/${fbSourceId}`);
+  },
+
+  getPlatformCookies: async (): Promise<PlatformCookie[]> => {
+    const res = await axiosClient.get<unknown[]>('/api/admin/platform-cookies');
+    return (res.data ?? []).map((item) => {
+      const s = item as Record<string, unknown>;
+      const required = pickField<Record<string, unknown>>(s, 'requiredCookiesPresent', 'RequiredCookiesPresent');
+      return {
+        platformCookieId: pickNumber(s, 'platformCookieId', 'PlatformCookieId'),
+        platform: pickString(s, 'platform', 'Platform'),
+        filePath: pickString(s, 'filePath', 'FilePath'),
+        status: pickString(s, 'status', 'Status'),
+        note: pickNullableString(s, 'note', 'Note'),
+        cookieCount: pickNumber(s, 'cookieCount', 'CookieCount'),
+        expiresAt: pickNullableString(s, 'expiresAt', 'ExpiresAt'),
+        uploadedAt: pickNullableString(s, 'uploadedAt', 'UploadedAt'),
+        lastUsedAt: pickNullableString(s, 'lastUsedAt', 'LastUsedAt'),
+        fileExists: pickField(s, 'fileExists', 'FileExists') === true,
+        fileMissing: pickField(s, 'fileMissing', 'FileMissing') === true,
+        isExpiringSoon: pickField(s, 'isExpiringSoon', 'IsExpiringSoon') === true,
+        backupFilePath: pickNullableString(s, 'backupFilePath', 'BackupFilePath'),
+        backupExists: pickField(s, 'backupExists', 'BackupExists') === true,
+        requiredCookiesPresent: required
+          ? Object.fromEntries(
+              Object.entries(required).map(([k, v]) => [k, v === true])
+            )
+          : null,
+      };
+    });
+  },
+
+  getPlatformCookie: async (platform: string): Promise<PlatformCookie> => {
+    const res = await axiosClient.get<Record<string, unknown>>(`/api/admin/platform-cookies/${platform}`);
+    const s = res.data;
+    const required = pickField<Record<string, unknown>>(s, 'requiredCookiesPresent', 'RequiredCookiesPresent');
+    return {
+      platformCookieId: pickNumber(s, 'platformCookieId', 'PlatformCookieId'),
+      platform: pickString(s, 'platform', 'Platform'),
+      filePath: pickString(s, 'filePath', 'FilePath'),
+      status: pickString(s, 'status', 'Status'),
+      note: pickNullableString(s, 'note', 'Note'),
+      cookieCount: pickNumber(s, 'cookieCount', 'CookieCount'),
+      expiresAt: pickNullableString(s, 'expiresAt', 'ExpiresAt'),
+      uploadedAt: pickNullableString(s, 'uploadedAt', 'UploadedAt'),
+      lastUsedAt: pickNullableString(s, 'lastUsedAt', 'LastUsedAt'),
+      fileExists: pickField(s, 'fileExists', 'FileExists') === true,
+      fileMissing: pickField(s, 'fileMissing', 'FileMissing') === true,
+      isExpiringSoon: pickField(s, 'isExpiringSoon', 'IsExpiringSoon') === true,
+      backupFilePath: pickNullableString(s, 'backupFilePath', 'BackupFilePath'),
+      backupExists: pickField(s, 'backupExists', 'BackupExists') === true,
+      requiredCookiesPresent: required
+        ? Object.fromEntries(Object.entries(required).map(([k, v]) => [k, v === true]))
+        : null,
+    };
+  },
+
+  updatePlatformCookieMeta: async (platform: string, payload: UpdatePlatformCookieMeta) => {
+    const res = await axiosClient.patch(`/api/admin/platform-cookies/${platform}`, payload);
+    return res.data;
+  },
+
+  updatePlatformCookieContent: async (
+    platform: string,
+    cookiesJson: string
+  ): Promise<PlatformCookieContentResult> => {
+    const res = await axiosClient.put<Record<string, unknown>>(
+      `/api/admin/platform-cookies/${platform}/content`,
+      { cookiesJson }
+    );
+    const d = res.data;
+    return {
+      message: pickString(d, 'message', 'Message'),
+      platform: pickString(d, 'platform', 'Platform'),
+      filePath: pickString(d, 'filePath', 'FilePath'),
+      cookieCount: pickNumber(d, 'cookieCount', 'CookieCount'),
+      expiresAt: pickNullableString(d, 'expiresAt', 'ExpiresAt'),
+      uploadedAt: pickNullableString(d, 'uploadedAt', 'UploadedAt'),
+      backupCreated: pickField(d, 'backupCreated', 'BackupCreated') === true,
+    };
+  },
+
+  clearPlatformCookieContent: async (platform: string) => {
+    await axiosClient.delete(`/api/admin/platform-cookies/${platform}/content`);
   },
 
   getSettings: async () => {

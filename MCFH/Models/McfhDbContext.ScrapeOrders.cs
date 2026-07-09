@@ -47,5 +47,44 @@ public partial class McfhDbContext
                 .HasForeignKey(d => d.PaymentId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
         });
+
+        modelBuilder.Entity<PlatformCookie>(entity =>
+        {
+            entity.HasKey(e => e.PlatformCookieId);
+            entity.ToTable("PLATFORM_COOKIES");
+
+            entity.HasIndex(e => e.Platform, "UQ_PlatformCookies_Platform").IsUnique();
+
+            entity.Property(e => e.PlatformCookieId).HasColumnName("platform_cookie_id");
+            entity.Property(e => e.Platform)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("platform");
+            entity.Property(e => e.FilePath)
+                .HasMaxLength(500)
+                .HasColumnName("file_path");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("active")
+                .HasColumnName("status");
+            entity.Property(e => e.Note)
+                .HasMaxLength(1000)
+                .HasColumnName("note");
+            entity.Property(e => e.CookieCount).HasColumnName("cookie_count");
+            entity.Property(e => e.ExpiresAt)
+                .HasColumnType("datetime")
+                .HasColumnName("expires_at");
+            entity.Property(e => e.UploadedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("uploaded_at");
+            entity.Property(e => e.LastUsedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("last_used_at");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("created_at");
+        });
     }
 }

@@ -6,6 +6,7 @@ import {
   CreditCard,
   Server,
   Globe,
+  Cookie,
   Activity,
   Settings,
   User,
@@ -22,6 +23,7 @@ const navItems = [
   { label: 'Subscription Plans', icon: CreditCard, href: '/admin/subscriptions' },
   { label: 'Proxy Management', icon: Server, href: '/admin/proxies' },
   { label: 'Facebook Sources', icon: Globe, href: '/admin/fb-sources' },
+  { label: 'Platform Cookies', icon: Cookie, href: '/admin/cookies' },
   { label: 'Scraping Monitor', icon: Activity, href: '/admin/scraping' },
   { label: 'System Settings', icon: Settings, href: '/admin/settings' },
 ];
