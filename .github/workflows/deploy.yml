@@ -1,0 +1,167 @@
+name: Build and Deploy MCFH
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcfh-production-deploy
+  cancel-in-progress: true
+
+env:
+  BACKEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/mcfh-backend
+  FRONTEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/mcfh-frontend
+
+jobs:
+  build-and-deploy:
+    name: Build Linux images and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # =====================================================
+      # CHECKOUT
+      # =====================================================
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # =====================================================
+      # ENABLE MULTI-ARCHITECTURE BUILD
+      # Hỗ trợ linux/amd64 và linux/arm64
+      # =====================================================
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # =====================================================
+      # LOGIN DOCKER HUB
+      # =====================================================
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # =====================================================
+      # BUILD AND PUSH BACKEND
+      # =====================================================
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./MCFH
+          file: ./MCFH/Dockerfile
+
+          # Hỗ trợ Ubuntu server Intel/AMD và ARM
+          platforms: |
+            linux/amd64
+            linux/arm64
+
+          push: true
+
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+          labels: |
+            org.opencontainers.image.title=MCFH Backend
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+          cache-from: type=gha,scope=mcfh-backend
+          cache-to: type=gha,mode=max,scope=mcfh-backend
+
+      # =====================================================
+      # BUILD AND PUSH FRONTEND
+      # =====================================================
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./MCFH-Frontend
+          file: ./MCFH-Frontend/Dockerfile
+
+          platforms: |
+            linux/amd64
+            linux/arm64
+
+          push: true
+
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+
+          labels: |
+            org.opencontainers.image.title=MCFH Frontend
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+          cache-from: type=gha,scope=mcfh-frontend
+          cache-to: type=gha,mode=max,scope=mcfh-frontend
+
+      # =====================================================
+      # DEPLOY TO UBUNTU VPS
+      # =====================================================
+      - name: Deploy to Ubuntu VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          envs: DOCKER_USERNAME,DOCKER_PASSWORD
+          script: |
+            set -Eeuo pipefail
+
+            PROJECT_DIR="/home/mcfh/mcfh"
+
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "Không tìm thấy thư mục $PROJECT_DIR"
+              exit 1
+            fi
+
+            cd "$PROJECT_DIR"
+
+            echo "Đăng nhập Docker Hub..."
+            echo "$DOCKER_PASSWORD" | docker login \
+              --username "$DOCKER_USERNAME" \
+              --password-stdin
+
+            echo "Kiểm tra cấu hình Docker Compose..."
+            docker compose config --quiet
+
+            echo "Tải image mới..."
+            docker compose pull backend frontend
+
+            echo "Khởi tạo SQL Server và database..."
+            docker compose up -d sqlserver
+
+            echo "Chạy service tạo database..."
+            docker compose up sqlserver-migration
+
+            echo "Khởi động backend và frontend..."
+            docker compose up -d \
+              --no-build \
+              --remove-orphans \
+              backend frontend
+
+            echo "Kiểm tra trạng thái container..."
+            docker compose ps
+
+            echo "Hiển thị log backend gần nhất..."
+            docker compose logs --tail=50 backend
+
+            echo "Xóa image không còn sử dụng..."
+            docker image prune -f
+
+            docker logout

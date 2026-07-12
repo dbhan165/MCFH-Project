@@ -1,0 +1,1 @@
+// "MyCnn": "Server=localhost;Database=MCFH_DB;Trusted_Connection=True;Encrypt=True;TrustServerCertificate=True"
