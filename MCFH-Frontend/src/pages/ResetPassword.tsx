@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { authApi } from '../api/authApi';
 import { extractApiError } from '../utils/authStorage';
+import { getPasswordValidationError, PASSWORD_REQUIREMENT_MESSAGE } from '../utils/passwordValidation';
 import McfhLogo from '../components/brand/McfhLogo';
 
 const ResetPassword = () => {
@@ -24,6 +25,12 @@ const ResetPassword = () => {
     }
     if (password !== confirmPassword) {
       setErrorMessage('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
+    const passwordError = getPasswordValidationError(password);
+    if (passwordError) {
+      setErrorMessage(passwordError);
       return;
     }
 
@@ -76,12 +83,13 @@ const ResetPassword = () => {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Ví dụ: MatKhau@1"
                   className="w-full pl-10 pr-4 py-3 bg-[#0A101D] text-white rounded-xl border-0"
                   required
-                  minLength={6}
                   disabled={isLoading}
                 />
               </div>
+              <p className="mt-2 text-xs text-gray-500 leading-relaxed">{PASSWORD_REQUIREMENT_MESSAGE}</p>
             </div>
             <div>
               <label className="text-sm font-semibold text-gray-700">Xác nhận mật khẩu</label>
@@ -93,7 +101,6 @@ const ResetPassword = () => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-[#0A101D] text-white rounded-xl border-0"
                   required
-                  minLength={6}
                   disabled={isLoading}
                 />
               </div>
