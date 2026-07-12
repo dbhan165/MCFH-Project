@@ -1,0 +1,57 @@
+# Build results
+bin/
+obj/
+out/
+publish/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Runtime-generated directories
+Logs/
+Reports/
+Uploads/
+Temp/
+Cookies/
+Playwright/
+Export/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local configuration
+appsettings.Development.json
+appsettings.Local.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation files not required at runtime
+*.docx
+*.pdf
+
+# Logs
+*.log
