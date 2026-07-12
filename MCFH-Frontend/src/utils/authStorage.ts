@@ -89,29 +89,55 @@ export function getAvatarFallback(name: string) {
 }
 
 export function extractApiError(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-
-  const err = error as { response?: { status?: number; data?: Record<string, unknown> } };
+  const err = error as {
+    response?: { status?: number; data?: Record<string, unknown> };
+    message?: string;
+  };
   const data = err.response?.data;
   const status = err.response?.status;
 
-  if (status === 404) {
-    return 'API chưa sẵn sàng. Hãy restart backend (dotnet run) rồi đăng nhập lại.';
-  }
-  if (status === 401) {
-    return 'Phiên đăng nhập hết hạn. Vui lòng đăng xuất và đăng nhập lại.';
+  if (data?.message && typeof data.message === 'string') {
+    return data.message;
   }
 
-  if (data?.message && typeof data.message === 'string') return data.message;
-  if (data?.title && typeof data.title === 'string') return data.title;
+  if (data?.detail && typeof data.detail === 'string') {
+    return data.detail;
+  }
 
   if (data?.errors && typeof data.errors === 'object') {
     const messages = Object.values(data.errors as Record<string, string[]>)
       .flat()
       .filter(Boolean);
-    if (messages.length > 0) return messages.join(' ');
+    if (messages.length > 0) {
+      return messages.join(' ');
+    }
+  }
+
+  if (data?.title && typeof data.title === 'string') {
+    const title = data.title.trim();
+    if (title && title !== 'One or more validation errors occurred.') {
+      return title;
+    }
+  }
+
+  if (status === 400) {
+    return fallback;
+  }
+  if (status === 401) {
+    return 'Phiên đăng nhập đã hết hạn hoặc thông tin đăng nhập không chính xác.';
+  }
+  if (status === 403) {
+    return 'Bạn không có quyền thực hiện thao tác này.';
+  }
+  if (status === 404) {
+    return fallback;
+  }
+  if (status === 500) {
+    return 'Lỗi máy chủ. Vui lòng thử lại sau.';
+  }
+
+  if (err.message && !/request failed with status code \d+/i.test(err.message)) {
+    return err.message;
   }
 
   return fallback;
