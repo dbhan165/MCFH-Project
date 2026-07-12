@@ -44,6 +44,67 @@ public class AdminUserItemDto
     public DateTime? CreatedAt { get; set; }
 }
 
+public class AdminUserDetailDto
+{
+    public int UserId { get; set; }
+    public string FullName { get; set; } = null!;
+    public string Email { get; set; } = null!;
+    public string? Phone { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string AuthProvider { get; set; } = null!;
+    public string SystemRole { get; set; } = null!;
+    public bool IsBanned { get; set; }
+    public bool IsVerified { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public DateTime? BannedAt { get; set; }
+    public DateTime? CreatedAt { get; set; }
+    public AdminUserActivityStatsDto Stats { get; set; } = new();
+    public List<AdminUserWorkspaceDto> Workspaces { get; set; } = new();
+    public List<AdminUserBespokeDto> BespokeRequests { get; set; } = new();
+    public List<AdminUserPaymentDto> RecentPayments { get; set; } = new();
+}
+
+public class AdminUserActivityStatsDto
+{
+    public int OwnedWorkspaces { get; set; }
+    public int MemberWorkspaces { get; set; }
+    public int TotalProjects { get; set; }
+    public int BespokeAsClient { get; set; }
+    public int BespokeAsReporter { get; set; }
+    public int UnreadNotifications { get; set; }
+}
+
+public class AdminUserWorkspaceDto
+{
+    public int WorkspaceId { get; set; }
+    public string Name { get; set; } = null!;
+    public string MembershipRole { get; set; } = null!;
+    public bool IsOwner { get; set; }
+    public int ProjectCount { get; set; }
+    public string? SubscriptionPlan { get; set; }
+    public string? SubscriptionStatus { get; set; }
+    public DateTime? CreatedAt { get; set; }
+}
+
+public class AdminUserBespokeDto
+{
+    public int RequestId { get; set; }
+    public string Title { get; set; } = null!;
+    public string Status { get; set; } = null!;
+    public string Involvement { get; set; } = null!;
+    public DateTime? SubmittedAt { get; set; }
+}
+
+public class AdminUserPaymentDto
+{
+    public int PaymentId { get; set; }
+    public decimal Amount { get; set; }
+    public string? Status { get; set; }
+    public string? Type { get; set; }
+    public string? PlanName { get; set; }
+    public DateTime? CreatedAt { get; set; }
+}
+
 public class UpdateAdminUserDto
 {
     public string? SystemRole { get; set; }

@@ -453,3 +453,4 @@ MCFH/cookies/
 
 # Playwright browser binaries (~300MB)
 **/.playwright/
+**/.playwright-temp/
