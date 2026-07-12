@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, type AdminUser } from '../../api/portalApi';
 import { extractApiError, getAvatarFallback } from '../../utils/authStorage';
@@ -156,13 +157,22 @@ const UserManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleBanToggle(user)}
-                        className="text-xs font-semibold text-red-500 hover:text-red-700"
-                      >
-                        {user.isBanned ? 'Unban' : 'Ban'}
-                      </button>
+                      <div className="inline-flex items-center gap-3">
+                        <Link
+                          to={`/admin/users/${user.userId}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#6b7280] hover:text-[#111827]"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Chi tiết
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleBanToggle(user)}
+                          className="text-xs font-semibold text-red-500 hover:text-red-700"
+                        >
+                          {user.isBanned ? 'Unban' : 'Ban'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

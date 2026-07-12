@@ -10,6 +10,7 @@ import Pricing from './pages/Pricing';
 // Admin + Reporter (remote)
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
+import AdminUserDetail from './pages/admin/AdminUserDetail';
 import SubscriptionPlans from './pages/admin/SubscriptionPlans';
 import ProxyManagement from './pages/admin/ProxyManagement';
 import FbSourceManagement from './pages/admin/FbSourceManagement';
@@ -47,6 +48,7 @@ import ProjectChannel from './pages/ProjectChannel';
 import ProjectAspect from './pages/ProjectAspect';
 import ProjectReports from './pages/ProjectReports';
 import ProjectCreateBespoke from './pages/ProjectCreateBespoke';
+import ProjectComparison from './pages/ProjectComparison';
 import { AppModalProvider } from './contexts/AppModalContext';
 import { ScrapeJobProvider } from './contexts/ScrapeJobContext';
 
@@ -73,6 +75,7 @@ function AppRoutes() {
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/admin/users/:userId" element={<AdminUserDetail />} />
           <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
           <Route path="/admin/proxies" element={<ProxyManagement />} />
           <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
@@ -138,6 +141,7 @@ function AppRoutes() {
         <Route path="/create-project" element={<CreateProject />} />
         <Route path="/workspace/:workspaceId/orders/:orderId" element={<ScrapeOrderTracking />} />
         <Route path="/workspace/:workspaceId/project/:projectId/edit" element={<EditProject />} />
+        <Route path="/workspace/:workspaceId/project/:id/comparison" element={<ProjectComparison />} />
 
         {/* Project analytics */}
         <Route path="/workspace/:workspaceId/project/:id" element={<ProjectLayout />}>
