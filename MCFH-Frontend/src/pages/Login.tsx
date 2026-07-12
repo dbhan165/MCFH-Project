@@ -5,6 +5,7 @@ import { GoogleLogin } from '@react-oauth/google';
 import { authApi } from '../api/authApi';
 import { saveAuthSession, markEmailPendingVerification, clearEmailPendingVerification, isEmailPendingVerification, extractApiError } from '../utils/authStorage';
 import { resolvePostLoginPath } from '../utils/onboardingHelpers';
+import { getPasswordValidationError, PASSWORD_REQUIREMENT_MESSAGE } from '../utils/passwordValidation';
 import loginImage from '../assets/login.png';
 import McfhLogo from '../components/brand/McfhLogo';
 
@@ -51,6 +52,12 @@ const Login = () => {
         }
 
       } else if (mode === 'register') {
+        const passwordError = getPasswordValidationError(password);
+        if (passwordError) {
+          setErrorMessage(passwordError);
+          return;
+        }
+
         const response = await authApi.register(fullName, email, phone, password);
         markEmailPendingVerification(email);
         setSuccessMessage(response.data.message || "Đăng ký thành công! Vui lòng kiểm tra email để lấy mã xác thực.");
@@ -68,9 +75,16 @@ const Login = () => {
         setSuccessMessage(response.data.message || "Hệ thống đã gửi link khôi phục. Vui lòng kiểm tra hộp thư!");
       }
     } catch (error: unknown) {
-      const message = extractApiError(error, 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend đang chạy (port 5254).');
+      const fallbacks: Record<AuthMode, string> = {
+        login: 'Đăng nhập thất bại. Vui lòng kiểm tra email và mật khẩu.',
+        register: 'Đăng ký thất bại. Vui lòng kiểm tra lại thông tin.',
+        'verify-otp': 'Xác thực OTP thất bại. Vui lòng kiểm tra lại mã.',
+        forgot: 'Không thể gửi yêu cầu khôi phục mật khẩu.',
+      };
+      const message = extractApiError(error, fallbacks[mode]);
       setErrorMessage(message);
       if (mode === 'login' && message.includes('chưa được xác thực')) {
+        markEmailPendingVerification(email);
         setMode('verify-otp');
       }
     } finally {
@@ -88,12 +102,8 @@ const Login = () => {
     try {
       const response = await authApi.resendOtp(email);
       setSuccessMessage(response.data.message || "Đã gửi lại mã OTP mới. Vui lòng kiểm tra hộp thư.");
-    } catch (error: any) {
-      if (error.response && error.response.data) {
-        setErrorMessage(error.response.data.message);
-      } else {
-        setErrorMessage('Lỗi khi gửi lại mã OTP.');
-      }
+    } catch (error: unknown) {
+      setErrorMessage(extractApiError(error, 'Không thể gửi lại mã OTP. Vui lòng thử lại.'));
     } finally {
       setIsLoading(false);
     }
@@ -254,8 +264,21 @@ const Login = () => {
                       <label className="text-[13px] font-bold text-gray-700 tracking-wider">Mật khẩu</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div>
-                        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm" required disabled={isLoading} />
+                        <input
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder={mode === 'register' ? 'Ví dụ: MatKhau@1' : '••••••••'}
+                          className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm"
+                          required
+                          disabled={isLoading}
+                        />
                       </div>
+                      {mode === 'register' && (
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          {PASSWORD_REQUIREMENT_MESSAGE}
+                        </p>
+                      )}
                     </div>
                   )}
                 </>
