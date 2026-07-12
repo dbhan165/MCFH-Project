@@ -1,0 +1,148 @@
+services:
+  frontend:
+    container_name: mcfh-frontend
+    image: truongnhat2102/mcfh-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./MCFH-Frontend
+      dockerfile: Dockerfile
+      platforms:
+          - linux/amd64
+          - linux/arm64
+    ports:
+      - "5173:5173"
+
+    depends_on:
+      backend:
+        condition: service_started
+
+    restart: unless-stopped
+
+    networks:
+      - mcfh-network
+
+  backend:
+    container_name: mcfh-backend
+    image: truongnhat2102/mcfh-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ./MCFH
+      dockerfile: Dockerfile
+      platforms:
+          - linux/amd64
+          - linux/arm64
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      TZ: Asia/Ho_Chi_Minh
+
+      ConnectionStrings__MyCnn: >-
+        Server=sqlserver,1433;
+        Database=MCFH_DB;
+        User Id=sa;
+        Password=MCFH@2026;
+        Encrypt=False;
+        TrustServerCertificate=True;
+
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+    volumes:
+      - backend_logs:/app/Logs
+      - backend_reports:/app/Reports
+      - backend_uploads:/app/Uploads
+      - backend_temp:/app/Temp
+      - backend_cookies:/app/Cookies
+      - backend_exports:/app/Export
+
+    restart: unless-stopped
+
+    networks:
+      - mcfh-network
+
+  sqlserver:
+    container_name: mcfh-sqlserver
+
+    image: mcr.microsoft.com/mssql/server:2022-latest
+
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "MCFH@2026"
+      MSSQL_PID: "Developer"
+
+    ports:
+      - "1433:1433"
+
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'MCFH@2026' -C -Q 'SELECT 1' || exit 1"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+    restart: unless-stopped
+
+    networks:
+      - mcfh-network
+  
+  sqlserver-init:
+    container_name: mcfh-sqlserver-init
+    image: mcr.microsoft.com/mssql/server:2022-latest
+
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+    environment:
+      MSSQL_SA_PASSWORD: "MCFH@2026"
+
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        echo "Checking database MCFH_DB..."
+
+        /opt/mssql-tools18/bin/sqlcmd \
+          -S sqlserver,1433 \
+          -U sa \
+          -P "$$MSSQL_SA_PASSWORD" \
+          -C \
+          -Q "
+          IF DB_ID(N'MCFH_DB') IS NULL
+          BEGIN
+            PRINT 'Database MCFH_DB does not exist. Creating...';
+            CREATE DATABASE [MCFH_DB];
+          END
+          ELSE
+          BEGIN
+            PRINT 'Database MCFH_DB already exists.';
+          END
+          "
+
+    restart: "no"
+
+    networks:
+      - mcfh-network
+
+networks:
+  mcfh-network:
+    driver: bridge
+
+volumes:
+  sqlserver_data:
+  backend_logs:
+  backend_reports:
+  backend_uploads:
+  backend_temp:
+  backend_cookies:
+  backend_exports:
