@@ -27,6 +27,8 @@ namespace MCFH
             builder.Services.AddDbContext<McfhDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));
             builder.Services.AddTransient<IEmailService, EmailService>();
+            builder.Services.AddHttpClient(nameof(EmailService));
+            builder.Services.AddSingleton<IAuthEmailTemplateService, AuthEmailTemplateService>();
             // 2. Kích hoạt xác thực bằng JWT Bearer
             var jwtKey = builder.Configuration["Jwt:Key"]!;
             builder.Services.AddAuthentication(options =>
@@ -95,6 +97,7 @@ namespace MCFH
             builder.Services.AddScoped<IProjectService, ProjectService>();
 
             builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
+            builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
             builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
             builder.Services.Configure<SerpApiOptions>(builder.Configuration.GetSection(SerpApiOptions.SectionName));
             builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
