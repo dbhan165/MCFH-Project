@@ -102,6 +102,169 @@ public class AdminPortalService
         };
     }
 
+    public async Task<AdminUserDetailDto?> GetUserDetailAsync(int adminUserId, int targetUserId)
+    {
+        if (!await IsAdminAsync(adminUserId)) return null;
+
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == targetUserId);
+        if (user == null) return null;
+
+        var ownedWorkspaces = await _context.Workspaces
+            .AsNoTracking()
+            .Where(w => w.OwnerId == targetUserId && w.IsDeleted != true)
+            .Include(w => w.Projects)
+            .Include(w => w.Subscriptions)
+            .ThenInclude(s => s.Plan)
+            .ToListAsync();
+
+        var memberRows = await _context.WorkspaceMembers
+            .AsNoTracking()
+            .Include(m => m.Workspace)
+            .ThenInclude(w => w.Projects)
+            .Include(m => m.Workspace)
+            .ThenInclude(w => w.Subscriptions)
+            .ThenInclude(s => s.Plan)
+            .Include(m => m.Role)
+            .Where(m => m.UserId == targetUserId && m.Workspace.IsDeleted != true)
+            .ToListAsync();
+
+        var ownedIds = ownedWorkspaces.Select(w => w.WorkspaceId).ToHashSet();
+        var workspaceDtos = new List<AdminUserWorkspaceDto>();
+
+        foreach (var ws in ownedWorkspaces)
+        {
+            var activeSub = ws.Subscriptions
+                .Where(s => s.Status == "active")
+                .OrderByDescending(s => s.StartDate)
+                .FirstOrDefault();
+
+            workspaceDtos.Add(new AdminUserWorkspaceDto
+            {
+                WorkspaceId = ws.WorkspaceId,
+                Name = ws.Name,
+                MembershipRole = "Owner",
+                IsOwner = true,
+                ProjectCount = ws.Projects.Count(p => p.IsDeleted != true),
+                SubscriptionPlan = activeSub?.Plan?.Name,
+                SubscriptionStatus = activeSub?.Status,
+                CreatedAt = ws.CreatedAt
+            });
+        }
+
+        foreach (var row in memberRows.Where(m => !ownedIds.Contains(m.WorkspaceId)))
+        {
+            var ws = row.Workspace;
+            var activeSub = ws.Subscriptions
+                .Where(s => s.Status == "active")
+                .OrderByDescending(s => s.StartDate)
+                .FirstOrDefault();
+
+            workspaceDtos.Add(new AdminUserWorkspaceDto
+            {
+                WorkspaceId = ws.WorkspaceId,
+                Name = ws.Name,
+                MembershipRole = row.Role.RoleName,
+                IsOwner = false,
+                ProjectCount = ws.Projects.Count(p => p.IsDeleted != true),
+                SubscriptionPlan = activeSub?.Plan?.Name,
+                SubscriptionStatus = activeSub?.Status,
+                CreatedAt = ws.CreatedAt
+            });
+        }
+
+        var workspaceIds = workspaceDtos.Select(w => w.WorkspaceId).Distinct().ToList();
+        var totalProjects = workspaceIds.Count == 0
+            ? 0
+            : await _context.Projects.CountAsync(p =>
+                workspaceIds.Contains(p.WorkspaceId) && p.IsDeleted != true);
+
+        var bespokeClient = await _context.BespokeRequests
+            .AsNoTracking()
+            .Where(r => r.ClientId == targetUserId)
+            .OrderByDescending(r => r.SubmittedAt ?? r.AssignedAt)
+            .Take(10)
+            .Select(r => new AdminUserBespokeDto
+            {
+                RequestId = r.RequestId,
+                Title = r.Title,
+                Status = r.Status ?? "pending",
+                Involvement = "Client",
+                SubmittedAt = r.SubmittedAt
+            })
+            .ToListAsync();
+
+        var bespokeReporter = await _context.BespokeRequests
+            .AsNoTracking()
+            .Where(r => r.ReporterId == targetUserId)
+            .OrderByDescending(r => r.AssignedAt ?? r.SubmittedAt)
+            .Take(10)
+            .Select(r => new AdminUserBespokeDto
+            {
+                RequestId = r.RequestId,
+                Title = r.Title,
+                Status = r.Status ?? "pending",
+                Involvement = "Reporter",
+                SubmittedAt = r.AssignedAt ?? r.SubmittedAt
+            })
+            .ToListAsync();
+
+        var bespokeRequests = bespokeClient
+            .Concat(bespokeReporter)
+            .OrderByDescending(r => r.SubmittedAt)
+            .Take(10)
+            .ToList();
+
+        var recentPayments = await _context.Payments
+            .AsNoTracking()
+            .Include(p => p.Plan)
+            .Where(p => p.CreatedBy == targetUserId)
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(10)
+            .Select(p => new AdminUserPaymentDto
+            {
+                PaymentId = p.PaymentId,
+                Amount = p.Amount,
+                Status = p.Status,
+                Type = p.Type,
+                PlanName = p.Plan != null ? p.Plan.Name : null,
+                CreatedAt = p.CreatedAt
+            })
+            .ToListAsync();
+
+        var bespokeAsClient = await _context.BespokeRequests.CountAsync(r => r.ClientId == targetUserId);
+        var bespokeAsReporter = await _context.BespokeRequests.CountAsync(r => r.ReporterId == targetUserId);
+        var unreadNotifications = await _context.Notifications.CountAsync(n =>
+            n.UserId == targetUserId && n.IsRead != true);
+
+        return new AdminUserDetailDto
+        {
+            UserId = user.UserId,
+            FullName = user.FullName,
+            Email = user.Email,
+            Phone = user.Phone,
+            AvatarUrl = user.AvatarUrl,
+            AuthProvider = user.AuthProvider,
+            SystemRole = user.SystemRole,
+            IsBanned = user.IsBanned == true,
+            IsVerified = user.IsVerified == true,
+            VerifiedAt = user.VerifiedAt,
+            BannedAt = user.BannedAt,
+            CreatedAt = user.CreatedAt,
+            Stats = new AdminUserActivityStatsDto
+            {
+                OwnedWorkspaces = ownedWorkspaces.Count,
+                MemberWorkspaces = memberRows.Count(m => !ownedIds.Contains(m.WorkspaceId)),
+                TotalProjects = totalProjects,
+                BespokeAsClient = bespokeAsClient,
+                BespokeAsReporter = bespokeAsReporter,
+                UnreadNotifications = unreadNotifications
+            },
+            Workspaces = workspaceDtos.OrderByDescending(w => w.CreatedAt).ToList(),
+            BespokeRequests = bespokeRequests,
+            RecentPayments = recentPayments
+        };
+    }
+
     public async Task<AdminUserItemDto?> UpdateUserAsync(
         int adminUserId, int targetUserId, UpdateAdminUserDto dto)
     {

@@ -49,6 +49,14 @@ public class AdminPortalController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("users/{userId}")]
+    public async Task<IActionResult> GetUserDetail(int userId)
+    {
+        var result = await _admin.GetUserDetailAsync(GetUserId(), userId);
+        if (result == null) return NotFound(new { message = "Không tìm thấy user hoặc không có quyền." });
+        return Ok(result);
+    }
+
     [HttpPatch("users/{userId}")]
     public async Task<IActionResult> UpdateUser(int userId, [FromBody] UpdateAdminUserDto dto)
     {
