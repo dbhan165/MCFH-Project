@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Lock, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { authApi } from '../api/authApi';
 import { extractApiError, getAvatarFallback, loadProfileFromStorage, normalizeProfile, saveUserProfile, type UserProfile } from '../utils/authStorage';
+import { getPasswordValidationError, PASSWORD_REQUIREMENT_MESSAGE } from '../utils/passwordValidation';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -103,6 +104,17 @@ const Profile = () => {
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       setErrorMessage('Vui lòng điền đầy đủ thông tin mật khẩu.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
+    const passwordError = getPasswordValidationError(newPassword);
+    if (passwordError) {
+      setErrorMessage(passwordError);
       return;
     }
 
@@ -249,9 +261,10 @@ const Profile = () => {
                     autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Mật khẩu mới"
+                    placeholder="Ví dụ: MatKhau@1"
                     className="w-full bg-[#151B2B] border border-white/10 rounded-lg px-4 py-3 text-white focus:border-[#FF7575] focus:outline-none"
                   />
+                  <p className="text-xs text-gray-500 leading-relaxed">{PASSWORD_REQUIREMENT_MESSAGE}</p>
                   <input
                     type="password"
                     name="confirmPassword"

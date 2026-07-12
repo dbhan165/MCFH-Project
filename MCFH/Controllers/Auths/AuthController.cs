@@ -1,8 +1,10 @@
 ﻿using MCFH.Models; // Đổi lại đúng namespace của folder Models của bạn
+using MCFH.Configuration;
 using MCFH.Services;
 using MCFHBackend.DTOs.AuthDtos;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -19,12 +21,21 @@ namespace MCFH.Controllers
         private readonly McfhDbContext _context; // Đổi tên Class Context cho đúng với dự án của bạn
         private readonly IConfiguration _config;
         private readonly IEmailService _emailService;
+        private readonly IAuthEmailTemplateService _emailTemplates;
+        private readonly AuthOptions _authOptions;
 
-        public AuthController(McfhDbContext context, IConfiguration config, IEmailService emailService)
+        public AuthController(
+            McfhDbContext context,
+            IConfiguration config,
+            IEmailService emailService,
+            IAuthEmailTemplateService emailTemplates,
+            IOptions<AuthOptions> authOptions)
         {
             _context = context;
             _config = config;
-            _emailService = emailService; // Nạp Service thật vào
+            _emailService = emailService;
+            _emailTemplates = emailTemplates;
+            _authOptions = authOptions.Value;
         }
 
         // ==========================================
@@ -35,6 +46,11 @@ namespace MCFH.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto model)
         {
+            if (!PasswordValidator.IsValid(model.Password, out var passwordError))
+            {
+                return BadRequest(new { message = passwordError });
+            }
+
             // 1. Tìm xem email này đã từng xuất hiện trong DB chưa
             var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == model.Email);
 
@@ -91,78 +107,35 @@ namespace MCFH.Controllers
                 old.IsUsed = true; // Đánh dấu là đã bỏ qua
             }
 
-            // 3. Sinh mã OTP và Token mới
-            string randomOtp = new Random().Next(100000, 999999).ToString();
-            string randomToken = Guid.NewGuid().ToString();
+            // 3. Sinh mã OTP mới
+            string randomOtp = AuthOtpHelper.GenerateCode();
 
             var emailVerification = new EmailVerification
             {
                 UserId = targetUserId,
                 OtpCode = randomOtp,
-                VerificationToken = randomToken,
-                ExpiredAt = DateTime.Now.AddMinutes(15),
+                VerificationToken = null,
+                ExpiredAt = DateTime.UtcNow.AddMinutes(_authOptions.OtpExpiryMinutes),
                 IsUsed = false,
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.EmailVerifications.Add(emailVerification);
             await _context.SaveChangesAsync();
 
-            // 4. Tiến hành gửi Email thật
-            // --- ĐOẠN FIX LỖI TÊN & ĐỒNG BỘ GIAO DIỆN BRAND CHO EMAIL ĐĂNG KÝ ---
             string displayName = string.IsNullOrWhiteSpace(model.FullName) ? "Thành viên MCFH" : model.FullName;
-            string emailSubject = "MCFH Hub - Xác thực tài khoản đăng ký mới";
-            string activationLink = $"https://localhost:7000/api/auth/verify-email?token={randomToken}";
-
-            string emailBody = $@"
-<div style='font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; padding: 40px 20px; color: #334155;'>
-    <div style='max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); border: 1px solid #e2e8f0;'>
-        
-        <!-- Header Brand -->
-        <div style='background-color: #1e3a8a; padding: 30px 20px; text-align: center;'>
-            <h2 style='color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;'>MCFH SYSTEM HUB</h2>
-            <p style='color: #93c5fd; margin: 6px 0 0 0; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;'>Multichannel Customer Feedback & Sentiment Analysis</p>
-        </div>
-
-        <!-- Body Content -->
-        <div style='padding: 35px 30px; line-height: 1.6; font-size: 15px;'>
-            <p style='margin-top: 0; font-size: 16px;'>Xin chào <b>{displayName}</b>,</p>
-            <p>Chào mừng bạn đến với hệ thống lắng nghe mạng xã hội MCFH! Hệ thống đã ghi nhận yêu cầu khởi tạo tài khoản của bạn.</p>
-            <p>Vui lòng sử dụng mã OTP gồm 6 chữ số dưới đây để hoàn tất bước xác thực tài khoản:</p>
-            
-            <!-- Khung hiển thị OTP nổi bật -->
-            <div style='text-align: center; margin: 30px 0;'>
-                <div style='display: inline-block; background-color: #f8fafc; border: 2px dashed #cbd5e1; padding: 14px 40px; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #1e3a8a; border-radius: 8px;'>
-                    {randomOtp}
-                </div>
-            </div>
-
-            <!-- Banner Cảnh báo bảo mật -->
-            <div style='background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 25px 0; border-radius: 6px;'>
-                <p style='margin: 0; font-size: 13.5px; color: #b45309; line-height: 1.5;'>
-                    ⚠️ <b>Thời hạn mã:</b> Mã OTP này chỉ có hiệu lực sử dụng trong vòng <b>15 minutes</b>. Tuyệt đối không chia sẻ mã này với bất kỳ ai để tránh mất an toàn thông tin tài khoản.
-                </p>
-            </div>
-
-            <!-- Link kích hoạt nhanh thay thế -->
-            <p style='font-size: 13px; color: #64748b; text-align: center; margin-top: 25px;'>
-                Hoặc bạn có thể click vào đường link sau để kích hoạt nhanh tài khoản:<br/>
-                <a href='{activationLink}' style='color: #2563eb; text-decoration: underline; font-weight: 500;'>Kích hoạt tài khoản ngay</a>
-            </p>
-        </div>
-
-        <!-- Footer -->
-        <div style='background-color: #f8fafc; padding: 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8;'>
-            <p style='margin: 0;'>Đây là email tự động thông báo từ nền tảng hỗ trợ Social Listening MCFH.</p>
-            <p style='margin: 6px 0 0 0;'>© {DateTime.Now.Year} MCFH Project Team. Mọi quyền được bảo lưu.</p>
-        </div>
-    </div>
-</div>";
-
-            // Thực hiện gửi qua SMTP Gmail thật
-            await _emailService.SendEmailAsync(model.Email, emailSubject, emailBody);
-
-            await _emailService.SendEmailAsync(model.Email, emailSubject, emailBody);
+            var email = _emailTemplates.BuildRegistrationVerificationEmail(displayName, randomOtp);
+            try
+            {
+                await _emailService.SendEmailAsync(model.Email, email.Subject, email.HtmlBody);
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "Đăng ký đã lưu nhưng chưa gửi được email OTP. Vui lòng kiểm tra cấu hình Brevo hoặc bấm Gửi lại mã."
+                });
+            }
 
             return Ok(new
             {
@@ -197,76 +170,35 @@ namespace MCFH.Controllers
                 old.IsUsed = true;
             }
 
-            // 3. Tạo mã OTP / Token mới hoàn toàn
-            string randomOtp = new Random().Next(100000, 999999).ToString();
-            string randomToken = Guid.NewGuid().ToString();
+            // 3. Tạo mã OTP mới
+            string randomOtp = AuthOtpHelper.GenerateCode();
 
             var emailVerification = new EmailVerification
             {
                 UserId = user.UserId,
                 OtpCode = randomOtp,
-                VerificationToken = randomToken,
-                ExpiredAt = DateTime.Now.AddMinutes(15),
+                VerificationToken = null,
+                ExpiredAt = DateTime.UtcNow.AddMinutes(_authOptions.OtpExpiryMinutes),
                 IsUsed = false,
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.EmailVerifications.Add(emailVerification);
             await _context.SaveChangesAsync();
 
-            // 4. Gửi email thông báo mã mới
-            // --- ĐOẠN FIX LỖI TÊN & ĐỒNG BỘ GIAO DIỆN BRAND CHO EMAIL GỬI LẠI MÃ ---
             string displayName = string.IsNullOrWhiteSpace(user.FullName) ? "Thành viên MCFH" : user.FullName;
-            string emailSubject = "MCFH Hub - Gửi lại mã xác thực tài khoản";
-            string activationLink = $"https://localhost:7000/api/auth/verify-email?token={randomToken}";
-
-            string emailBody = $@"
-<div style='font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; padding: 40px 20px; color: #334155;'>
-    <div style='max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); border: 1px solid #e2e8f0;'>
-        
-        <!-- Header Brand -->
-        <div style='background-color: #1e3a8a; padding: 30px 20px; text-align: center;'>
-            <h2 style='color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;'>MCFH SYSTEM HUB</h2>
-            <p style='color: #93c5fd; margin: 6px 0 0 0; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;'>Multichannel Customer Feedback & Sentiment Analysis</p>
-        </div>
-
-        <!-- Body Content -->
-        <div style='padding: 35px 30px; line-height: 1.6; font-size: 15px;'>
-            <p style='margin-top: 0; font-size: 16px;'>Xin chào <b>{displayName}</b>,</p>
-            <p>Hệ thống nhận được yêu cầu <b>Gửi lại mã xác thực OTP</b> từ bạn cho tài khoản đăng ký trên hệ thống MCFH.</p>
-            <p>Dưới đây là mã OTP mới được tạo lập lại của bạn:</p>
-            
-            <!-- Khung hiển thị OTP nổi bật -->
-            <div style='text-align: center; margin: 30px 0;'>
-                <div style='display: inline-block; background-color: #f8fafc; border: 2px dashed #cbd5e1; padding: 14px 40px; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #1e3a8a; border-radius: 8px;'>
-                    {randomOtp}
-                </div>
-            </div>
-
-            <!-- Banner Cảnh báo bảo mật -->
-            <div style='background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 25px 0; border-radius: 6px;'>
-                <p style='margin: 0; font-size: 13.5px; color: #b45309; line-height: 1.5;'>
-                    ⚠️ <b>Lưu ý:</b> Mã OTP cũ của bạn đã bị vô hiệu hóa trên hệ thống. Mã OTP mới này sẽ tiếp tục có hiệu lực trong vòng <b>15 minutes</b>.
-                </p>
-            </div>
-
-            <!-- Link kích hoạt nhanh thay thế -->
-            <p style='font-size: 13px; color: #64748b; text-align: center; margin-top: 25px;'>
-                Hoặc click vào đường link sau để thực hiện kích hoạt nhanh:<br/>
-                <a href='{activationLink}' style='color: #2563eb; text-decoration: underline; font-weight: 500;'>Kích hoạt tài khoản ngay</a>
-            </p>
-        </div>
-
-        <!-- Footer -->
-        <div style='background-color: #f8fafc; padding: 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8;'>
-            <p style='margin: 0;'>Đây là email tự động thông báo từ nền tảng hỗ trợ Social Listening MCFH.</p>
-            <p style='margin: 6px 0 0 0;'>© {DateTime.Now.Year} MCFH Project Team. Mọi quyền được bảo lưu.</p>
-        </div>
-    </div>
-</div>";
-
-            // Thực hiện gửi qua SMTP Gmail thật
-            await _emailService.SendEmailAsync(user.Email, emailSubject, emailBody);
+            var email = _emailTemplates.BuildResendOtpEmail(displayName, randomOtp);
+            try
+            {
+                await _emailService.SendEmailAsync(user.Email, email.Subject, email.HtmlBody);
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "Không thể gửi lại mã OTP. Vui lòng kiểm tra cấu hình email Brevo và thử lại."
+                });
+            }
 
             return Ok(new { message = "Hệ thống đã gửi lại mã OTP mới. Vui lòng kiểm tra hộp thư." });
         }
@@ -301,26 +233,30 @@ namespace MCFH.Controllers
             }
 
             // 3. Kiểm tra thời hạn mã
-            if (verification.ExpiredAt < DateTime.Now)
+            if (verification.ExpiredAt < DateTime.UtcNow)
             {
                 return BadRequest(new { message = "Mã xác thực đã hết hạn. Vui lòng bấm gửi lại mã mới." });
             }
 
-            // 4. Kiểm tra tính hợp lệ của dữ liệu gửi lên (Hỗ trợ cả OTP và Token Link)
-            bool isValid = false;
-
-            if (!string.IsNullOrEmpty(model.OtpCode))
+            // 4. Kiểm tra tính hợp lệ của dữ liệu gửi lên
+            if (string.IsNullOrWhiteSpace(model.OtpCode) && string.IsNullOrWhiteSpace(model.VerificationToken))
             {
-                isValid = (verification.OtpCode == model.OtpCode);
-            }
-            else if (!string.IsNullOrEmpty(model.VerificationToken))
-            {
-                isValid = (verification.VerificationToken == model.VerificationToken);
+                return BadRequest(new { message = "Vui lòng nhập mã OTP gồm 6 chữ số." });
             }
 
-            if (!isValid)
+            if (!string.IsNullOrWhiteSpace(model.OtpCode))
             {
-                return BadRequest(new { message = "Mã xác thực hoặc token không chính xác." });
+                if (verification.OtpCode != model.OtpCode.Trim())
+                {
+                    return BadRequest(new { message = "Mã OTP không chính xác. Vui lòng kiểm tra lại hoặc gửi lại mã mới." });
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(model.VerificationToken))
+            {
+                if (verification.VerificationToken != model.VerificationToken)
+                {
+                    return BadRequest(new { message = "Liên kết xác thực không hợp lệ hoặc đã hết hạn." });
+                }
             }
 
             // 5. Cập nhật trạng thái xác thực thành công
@@ -359,6 +295,11 @@ namespace MCFH.Controllers
             if (!isPasswordValid)
             {
                 return Unauthorized(new { message = "Tài khoản hoặc mật khẩu không chính xác." });
+            }
+
+            if (user.AuthProvider == "local" && user.IsVerified != true)
+            {
+                return BadRequest(new { message = "Tài khoản chưa được xác thực. Vui lòng nhập mã OTP để kích hoạt." });
             }
 
             // 4. Kiểm tra tài khoản có bị khóa (Banned) hay không
@@ -420,11 +361,13 @@ namespace MCFH.Controllers
             {
                 // TRƯỜNG HỢP 1: Xác thực tính chính thống của mã Token gửi từ Google
                 // Thư viện sẽ tự động liên kết server Google để kiểm tra tính toàn vẹn và thời hạn
-                var payload = await GoogleJsonWebSignature.ValidateAsync(model.IdToken, new GoogleJsonWebSignature.ValidationSettings
+                var validationSettings = new GoogleJsonWebSignature.ValidationSettings();
+                if (!string.IsNullOrWhiteSpace(_authOptions.GoogleClientId))
                 {
-                    // Nếu sau này bạn có Google Client ID ở Frontend, hãy điền vào đây để tăng bảo mật:
-                    // Audience = new[] { "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com" }
-                });
+                    validationSettings.Audience = new[] { _authOptions.GoogleClientId };
+                }
+
+                var payload = await GoogleJsonWebSignature.ValidateAsync(model.IdToken, validationSettings);
 
                 if (payload == null)
                 {
@@ -500,9 +443,9 @@ namespace MCFH.Controllers
                 // Bắt chính xác lỗi nếu Frontend truyền lên Token fake, chế, hoặc Token đã hết hạn từ hôm qua
                 return BadRequest(new { message = "Mã xác thực Google không hợp lệ hoặc đã hết hạn sử dụng." });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Lỗi hệ thống khi xử lý xác thực Google.", error = ex.Message });
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Lỗi hệ thống khi xử lý xác thực Google." });
             }
         }
 
@@ -541,66 +484,27 @@ namespace MCFH.Controllers
             {
                 UserId = user.UserId,
                 ResetToken = resetToken,
-                ExpiredAt = DateTime.Now.AddMinutes(15), // Token có hiệu lực trong 15 phút
+                ExpiredAt = DateTime.UtcNow.AddMinutes(_authOptions.OtpExpiryMinutes),
                 IsUsed = false,
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.PasswordResetTokens.Add(passwordResetToken);
             await _context.SaveChangesAsync();
 
-            // ========================================================
-            // ĐOẠN FIX LỖI "CHÀO USER" & ĐỒNG BỘ GIAO DIỆN BRAND CHUẨN
-            // ========================================================
-
-            // Fix lỗi: Nếu FullName bị null hoặc trống, hệ thống tự fallback thành "Thành viên MCFH" hoặc "bạn"
-            string displayName = string.IsNullOrWhiteSpace(user.FullName) ? "Thành viên MCFH" : user.FullName;
-
-            string emailSubject = "MCFH Hub - Yêu cầu đặt lại mật khẩu tài khoản";
-            string resetLink = $"http://localhost:3000/reset-password?token={resetToken}"; // Đường dẫn FrontEnd React sau này
-
-            // Sử dụng giao diện mẫu Card-Layout chuyên nghiệp đồng bộ với hệ thống Email thông báo
-            string emailBody = $@"
-    <div style='font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; padding: 40px 20px; color: #334155;'>
-        <div style='max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); border: 1px solid #e2e8f0;'>
-            
-            <div style='background-color: #1e3a8a; padding: 30px 20px; text-align: center;'>
-                <h2 style='color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;'>MCFH SYSTEM HUB</h2>
-                <p style='color: #93c5fd; margin: 6px 0 0 0; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;'>Multichannel Customer Feedback & Sentiment Analysis</p>
-            </div>
-
-            <div style='padding: 35px 30px; line-height: 1.6; font-size: 15px;'>
-                <p style='margin-top: 0; font-size: 16px;'>Xin chào,</p>
-                <p>Hệ thống ghi nhận một yêu cầu thay đổi và khôi phục mật khẩu bảo mật phát ra từ tài khoản của bạn.</p>
-                <p>Vui lòng bấm vào nút xác nhận bên dưới để truy cập vào trang thiết lập mật khẩu mới cho tài khoản:</p>
-                
-                <div style='text-align: center; margin: 32px 0;'>
-                    <a href='{resetLink}' style='display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); font-size: 15px; transition: background-color 0.2s;'>
-                        Đặt Lại Mật Khẩu
-                    </a>
-                </div>
-
-                <div style='background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px; margin: 25px 0; border-radius: 6px;'>
-                    <p style='margin: 0; font-size: 13.5px; color: #b45309; line-height: 1.5;'>
-                        ⚠️ <b>Lưu ý thời hạn:</b> Liên kết khôi phục này có giá trị sử dụng duy nhất trong vòng <b>15 phút</b>. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua thư này để bảo vệ tài khoản an toàn.
-                    </p>
-                </div>
-
-                <p style='font-size: 12.5px; color: #64748b; margin-bottom: 0; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px dashed #cbd5e1;'>
-                    Nếu không tương tác được với nút bấm, bạn có thể sao chép liên kết dưới đây dán trực tiếp vào thanh địa chỉ trình duyệt:<br/>
-                    <a href='{resetLink}' style='color: #2563eb; word-break: break-all; text-decoration: underline;'>{resetLink}</a>
-                </p>
-            </div>
-
-            <div style='background-color: #f8fafc; padding: 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8;'>
-                <p style='margin: 0;'>Đây là email tự động thông báo từ nền tảng hỗ trợ Social Listening MCFH.</p>
-                <p style='margin: 6px 0 0 0;'>© {DateTime.Now.Year} MCFH Project Team. Mọi quyền được bảo lưu.</p>
-            </div>
-        </div>
-    </div>";
-
-            // Thực hiện gửi qua SMTP Gmail thật
-            await _emailService.SendEmailAsync(model.Email, emailSubject, emailBody);
+            string resetLink = $"{_authOptions.FrontendBaseUrl.TrimEnd('/')}/reset-password?token={resetToken}";
+            var email = _emailTemplates.BuildPasswordResetEmail(resetLink);
+            try
+            {
+                await _emailService.SendEmailAsync(model.Email, email.Subject, email.HtmlBody);
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "Không thể gửi email khôi phục mật khẩu. Vui lòng kiểm tra cấu hình Brevo và thử lại."
+                });
+            }
 
             return Ok(new { message = "Hệ thống đã gửi link khôi phục mật khẩu vào hòm thư của bạn." });
         }
@@ -617,11 +521,16 @@ namespace MCFH.Controllers
                 return BadRequest(new { message = "Mật khẩu mới và mật khẩu xác nhận không trùng khớp." });
             }
 
+            if (!PasswordValidator.IsValid(model.NewPassword, out var passwordError))
+            {
+                return BadRequest(new { message = passwordError });
+            }
+
             // 2. Tìm kiếm và kiểm tra tính hợp lệ của Token
             var tokenRecord = await _context.PasswordResetTokens
                 .FirstOrDefaultAsync(t => t.ResetToken == model.Token);
 
-            if (tokenRecord == null || tokenRecord.IsUsed == true || tokenRecord.ExpiredAt < DateTime.Now)
+            if (tokenRecord == null || tokenRecord.IsUsed == true || tokenRecord.ExpiredAt < DateTime.UtcNow)
             {
                 return BadRequest(new { message = "Liên kết khôi phục không hợp lệ, đã được sử dụng hoặc đã hết hạn." });
             }
@@ -661,6 +570,11 @@ namespace MCFH.Controllers
             if (model.NewPassword != model.ConfirmPassword)
             {
                 return BadRequest(new { message = "Mật khẩu mới và mật khẩu xác nhận không trùng khớp." });
+            }
+
+            if (!PasswordValidator.IsValid(model.NewPassword, out var passwordError))
+            {
+                return BadRequest(new { message = passwordError });
             }
 
             // 1. Lấy thông tin UserId ra từ các Claims nằm trong JWT Token của người dùng đang gọi API
