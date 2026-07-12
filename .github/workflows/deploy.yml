@@ -3,7 +3,7 @@ name: Build and Deploy MCFH
 on:
   push:
     branches:
-      - develop
+      - main
 
   workflow_dispatch:
 
