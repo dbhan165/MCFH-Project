@@ -1,21 +1,27 @@
 import axios from 'axios';
 
-// Khởi tạo một instance của axios với cấu hình mặc định
+/**
+ * Dev: gọi backend local :5254
+ * Production build: cùng origin (nginx proxy /api → backend)
+ * Override: VITE_API_BASE_URL (không có trailing slash)
+ */
+const baseURL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
+  (import.meta.env.DEV ? 'http://localhost:5254' : '');
+
 const axiosClient = axios.create({
-    // Thay đổi cổng này nếu Backend của bạn chạy cổng khác
-    baseURL: 'http://localhost:5254', 
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  baseURL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Bạn có thể thêm Interceptors ở đây sau này (ví dụ: tự động đính kèm Token khi gửi request)
 axiosClient.interceptors.request.use((config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
+  const token = localStorage.getItem('accessToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export default axiosClient;
