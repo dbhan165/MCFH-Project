@@ -136,6 +136,10 @@ export function extractApiError(error: unknown, fallback: string): string {
     return 'Lỗi máy chủ. Vui lòng thử lại sau.';
   }
 
+  if (err.message === 'Network Error' || /network error/i.test(err.message ?? '')) {
+    return 'Không kết nối được máy chủ. Vui lòng thử lại sau.';
+  }
+
   if (err.message && !/request failed with status code \d+/i.test(err.message)) {
     return err.message;
   }

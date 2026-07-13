@@ -5,16 +5,15 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files trước để tận dụng cache
 COPY package*.json ./
-
-# Nếu dùng pnpm hoặc yarn thì thay đổi tương ứng
 RUN npm ci
 
-# Copy source
 COPY . .
 
-# Build production
+# Production: để trống → browser gọi cùng origin (/api/...), nginx proxy sang backend
+ARG VITE_API_BASE_URL=
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 RUN npm run build
 
 # ===========================
@@ -22,13 +21,11 @@ RUN npm run build
 # ===========================
 FROM nginx:1.27-alpine
 
-# Xóa default html
 RUN rm -rf /usr/share/nginx/html/*
 
-# Copy build output
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# SPA routing (React Router)
+# SPA + proxy API/Swagger/Hangfire tới service backend trong docker network
 RUN printf '%s\n' \
 'server {' \
 '    listen 80;' \
@@ -37,13 +34,39 @@ RUN printf '%s\n' \
 '    root /usr/share/nginx/html;' \
 '    index index.html;' \
 '' \
-'    location / {' \
-'        try_files $uri $uri/ /index.html;' \
+'    location /api/ {' \
+'        proxy_pass http://backend:8080/api/;' \
+'        proxy_http_version 1.1;' \
+'        proxy_set_header Host $host;' \
+'        proxy_set_header X-Real-IP $remote_addr;' \
+'        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+'        proxy_set_header X-Forwarded-Proto $scheme;' \
+'        proxy_set_header Authorization $http_authorization;' \
+'        proxy_pass_header Authorization;' \
+'    }' \
+'' \
+'    location /swagger {' \
+'        proxy_pass http://backend:8080/swagger;' \
+'        proxy_http_version 1.1;' \
+'        proxy_set_header Host $host;' \
+'        proxy_set_header X-Forwarded-Proto $scheme;' \
+'    }' \
+'' \
+'    location /hangfire {' \
+'        proxy_pass http://backend:8080/hangfire;' \
+'        proxy_http_version 1.1;' \
+'        proxy_set_header Host $host;' \
+'        proxy_set_header X-Forwarded-Proto $scheme;' \
 '    }' \
 '' \
 '    location /assets/ {' \
 '        expires 1y;' \
 '        add_header Cache-Control "public, immutable";' \
+'        try_files $uri =404;' \
+'    }' \
+'' \
+'    location / {' \
+'        try_files $uri $uri/ /index.html;' \
 '    }' \
 '}' \
 > /etc/nginx/conf.d/default.conf

@@ -9,7 +9,7 @@ services:
           - linux/amd64
           - linux/arm64
     ports:
-      - "5173:5173"
+      - "5173:80"
 
     depends_on:
       backend:
@@ -37,6 +37,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       TZ: Asia/Ho_Chi_Minh
+
+      Auth__FrontendBaseUrl: https://mcfh.io.vn
 
       ConnectionStrings__MyCnn: >-
         Server=sqlserver,1433;
