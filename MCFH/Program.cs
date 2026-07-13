@@ -15,10 +15,19 @@ namespace MCFH
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Playwright: dùng thư mục cố định trong project (tránh sandbox/temp của IDE).
-            var playwrightBrowsers = Path.Combine(builder.Environment.ContentRootPath, ".playwright");
-            Directory.CreateDirectory(playwrightBrowsers);
-            Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", playwrightBrowsers);
+            // Local: browsers trong .playwright (playwright.ps1 install).
+            // Docker: giữ path mặc định của image mcr.microsoft.com/playwright/dotnet (đã có Chromium).
+            var runningInContainer = string.Equals(
+                Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+            if (!runningInContainer &&
+                string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH")))
+            {
+                var playwrightBrowsers = Path.Combine(builder.Environment.ContentRootPath, ".playwright");
+                Directory.CreateDirectory(playwrightBrowsers);
+                Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", playwrightBrowsers);
+            }
 
             ScrapeCookiePaths.Initialize(builder.Environment.ContentRootPath);
 

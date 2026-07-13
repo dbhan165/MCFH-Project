@@ -25,7 +25,8 @@ RUN dotnet publish "./MCFHBackend.csproj" \
 # ==========================================================
 # RUNTIME STAGE
 # ==========================================================
-FROM mcr.microsoft.com/playwright/dotnet:v1.54.0-jammy AS runtime
+# Phải khớp Microsoft.Playwright trong MCFHBackend.csproj (hiện 1.60.0).
+FROM mcr.microsoft.com/playwright/dotnet:v1.60.0-jammy AS runtime
 
 WORKDIR /app
 
