@@ -26,7 +26,8 @@ RUN dotnet publish "./MCFHBackend.csproj" \
 # RUNTIME STAGE
 # ==========================================================
 # Phải khớp Microsoft.Playwright trong MCFHBackend.csproj (hiện 1.60.0).
-FROM mcr.microsoft.com/playwright/dotnet:v1.60.0-jammy AS runtime
+# Từ 1.60 MCR không còn tag -jammy cho playwright/dotnet; dùng -noble (Ubuntu 24.04).
+FROM mcr.microsoft.com/playwright/dotnet:v1.60.0-noble AS runtime
 
 WORKDIR /app
 
