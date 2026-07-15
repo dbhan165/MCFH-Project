@@ -20,9 +20,10 @@ import {
   Tag,
   VolumeX,
   AlertTriangle,
+  BrainCircuit,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { MentionTag, ProjectMention } from '../types/project';
+import type { AiAnalysisProgress, ProjectMention, MentionTag } from '../api/projectApi';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
@@ -424,12 +425,14 @@ const ProjectMentions = () => {
   const [activePlatform, setActivePlatform] = useState<MentionPlatformFilter>('all');
   const [activeSentiment, setActiveSentiment] = useState<MentionSentimentFilter>('all');
   const [searchText, setSearchText] = useState('');
+  const [showCrisisOnly, setShowCrisisOnly] = useState(false);
   const [savedFilters, setSavedFilters] = useState<{ filterId: number; name: string }[]>([]);
   const [filterName, setFilterName] = useState('');
   const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
   const [expandedContent, setExpandedContent] = useState<Record<number, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiProgress, setAiProgress] = useState<AiAnalysisProgress>({ isAnalyzing: false, progressPercent: 0 });
+  const wasAnalyzing = useRef(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [analyzeMessage, setAnalyzeMessage] = useState('');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -461,6 +464,7 @@ const ProjectMentions = () => {
         platform: activePlatform !== 'all' ? activePlatform : undefined,
         sentiment: activeSentiment !== 'all' ? activeSentiment : undefined,
         search: searchText.trim() || undefined,
+        isCrisisAlert: showCrisisOnly || undefined,
       });
       setMentions(data);
 
@@ -474,7 +478,34 @@ const ProjectMentions = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [wid, projectId, activePlatform, activeSentiment, searchText]);
+  }, [wid, projectId, activePlatform, activeSentiment, searchText, showCrisisOnly]);
+
+  const loadAiProgress = useCallback(async () => {
+    if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
+    try {
+      const progress = await projectApi.getAnalyzeProgress(wid, projectId);
+      setAiProgress(progress);
+      if (wasAnalyzing.current && !progress.isAnalyzing) {
+        loadMentions();
+      }
+      wasAnalyzing.current = progress.isAnalyzing;
+    } catch {
+      /* ignore */
+    }
+  }, [wid, projectId, loadMentions]);
+
+  useEffect(() => {
+    loadProjectTags();
+    loadMentions();
+  }, [loadProjectTags, loadMentions]);
+
+  useEffect(() => {
+    loadAiProgress();
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadAiProgress();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [loadAiProgress]);
 
   const loadSavedFilters = useCallback(async () => {
     if (!wid || !projectId) return;
@@ -487,16 +518,8 @@ const ProjectMentions = () => {
   }, [wid, projectId]);
 
   useEffect(() => {
-    loadMentions();
-  }, [loadMentions]);
-
-  useEffect(() => {
     loadSavedFilters();
   }, [loadSavedFilters]);
-
-  useEffect(() => {
-    loadProjectTags();
-  }, [loadProjectTags]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -517,7 +540,8 @@ const ProjectMentions = () => {
           platform: activePlatform,
           sentiment: activeSentiment,
           search: searchText.trim() || null,
-        },
+          isCrisisAlert: showCrisisOnly || undefined,
+        } as any,
       });
       setFilterName('');
       await loadSavedFilters();
@@ -535,17 +559,14 @@ const ProjectMentions = () => {
       return;
     }
 
-    setIsAnalyzing(true);
     setAnalyzeMessage(force ? 'Đang phân tích lại toàn bộ dữ liệu...' : 'Đang phân tích các mention chưa có AI...');
     setErrorMessage('');
     try {
       const result = await projectApi.analyze(wid, projectId, force);
       setAnalyzeMessage(result.message);
-      await loadMentions();
+      loadAiProgress();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể chạy phân tích AI.'));
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -599,12 +620,13 @@ const ProjectMentions = () => {
   );
 
   const hasActiveFilters =
-    activePlatform !== 'all' || activeSentiment !== 'all' || Boolean(searchText.trim());
+    activePlatform !== 'all' || activeSentiment !== 'all' || Boolean(searchText.trim()) || showCrisisOnly;
 
   const clearFilters = () => {
     setActivePlatform('all');
     setActiveSentiment('all');
     setSearchText('');
+    setShowCrisisOnly(false);
   };
 
   const toggleSentimentFilter = (filter: MentionSentimentFilter) => {
@@ -648,7 +670,6 @@ const ProjectMentions = () => {
     if (!wid || !projectId) return;
     setActionMentionId(item.feedbackId);
     setOpenMenuId(null);
-    setIsAnalyzing(true);
     setAnalyzeMessage('Đang phân tích mention này...');
     setErrorMessage('');
 
@@ -659,7 +680,6 @@ const ProjectMentions = () => {
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể phân tích mention.'));
     } finally {
-      setIsAnalyzing(false);
       setActionMentionId(null);
     }
   };
@@ -809,27 +829,66 @@ const ProjectMentions = () => {
             </button>
             <button
               type="button"
-              onClick={() => runAnalyze(false)}
-              disabled={isAnalyzing || isLoading || mentions.length === 0}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#FF7575] text-white text-sm font-semibold hover:bg-[#ff5c5c] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#FF7575]/20 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                runAnalyze(true);
+              }}
+              disabled={aiProgress.isAnalyzing || isLoading || mentions.length === 0}
+              className={`inline-flex items-center gap-2 px-3 lg:px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm
+                ${
+                  aiProgress.isAnalyzing || isLoading || mentions.length === 0
+                    ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/5'
+                    : 'bg-gradient-to-r from-[#FF7575] to-[#ff5252] hover:from-[#ff6262] hover:to-[#ff4242] text-white hover:shadow-[#FF7575]/25 hover:-translate-y-0.5'
+                }`}
             >
-              {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              Phân tích AI
+              {aiProgress.isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              <span className="hidden sm:inline">Phân tích lại toàn bộ</span>
+              <span className="sm:hidden">Phân tích</span>
             </button>
           </div>
         </div>
       </div>
 
-      {isAnalyzing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#151B2B] border border-white/10 rounded-2xl px-8 py-6 flex flex-col items-center gap-3 shadow-2xl">
-            <Loader2 className="w-10 h-10 animate-spin text-[#FF7575]" />
-            <p className="text-sm text-gray-300">Đang phân tích AI — vui lòng đợi...</p>
+      {aiProgress.isAnalyzing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0f1c]/80 backdrop-blur-md">
+          <div className="relative flex flex-col items-center p-8 rounded-3xl bg-[#151B2B]/80 border border-white/10 shadow-[0_0_80px_-20px_rgba(255,117,117,0.3)] overflow-hidden min-w-[320px]">
+            {/* Animated glowing background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#FF7575]/20 via-transparent to-transparent opacity-50 animate-pulse" />
+            
+            <div className="relative mb-6 mt-2">
+              <div className="absolute inset-0 bg-[#FF7575] blur-xl opacity-40 animate-pulse" />
+              <div className="relative bg-[#1a2133] p-5 rounded-2xl border border-white/10 shadow-inner">
+                <BrainCircuit className="w-12 h-12 text-[#FF7575] animate-pulse" />
+              </div>
+            </div>
+            
+            <h3 className="text-xl font-bold text-white mb-2 tracking-wide flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#FF7575]" />
+              AI Đang Làm Việc... {aiProgress.progressPercent}%
+            </h3>
+            
+            {/* Progress bar */}
+            <div className="w-full max-w-[280px] h-2 bg-white/10 rounded-full mt-2 mb-4 overflow-hidden relative">
+              <div 
+                className="h-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-300"
+                style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
+              />
+            </div>
+            
+            <p className="text-sm text-gray-400 text-center max-w-[280px] leading-relaxed">
+              Hệ thống đang đọc và tổng hợp cảm xúc từ các lượt nhắc. Vui lòng chờ trong giây lát.
+            </p>
+            
+            <div className="mt-8 mb-2 flex justify-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
           </div>
         </div>
       )}
 
-      {analyzeMessage && !isAnalyzing && (
+      {analyzeMessage && !aiProgress.isAnalyzing && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
           <Sparkles className="w-4 h-4 shrink-0" />
           {analyzeMessage}
@@ -949,6 +1008,19 @@ const ProjectMentions = () => {
                 {sentimentTabLabel(filter)}
               </button>
             ))}
+
+            <button
+              onClick={() => setShowCrisisOnly(prev => !prev)}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ml-auto ${
+                showCrisisOnly
+                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                  : 'border-white/5 bg-white/[0.03] text-gray-500 hover:text-amber-400/80 hover:border-amber-500/20'
+              }`}
+              title="Chỉ hiển thị các bài viết có cảnh báo khủng hoảng truyền thông"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              Chỉ hiện Khủng hoảng
+            </button>
           </div>
         </div>
 

@@ -8,6 +8,7 @@ import type {
   MentionTag,
   Project,
   ProjectMention,
+  AiAnalysisProgress,
   ProjectOverviewStats,
   ScrapeResult,
   ScrapeJobStatus,
@@ -136,6 +137,20 @@ export const projectApi = {
     return normalizeAnalyzeResult(response.data);
   },
 
+  getAnalyzeProgress: async (workspaceId: number, projectId: number): Promise<AiAnalysisProgress> => {
+    const response = await axiosClient.get<{ isAnalyzing: boolean; progressPercent: number }>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/progress`
+    );
+    return response.data;
+  },
+
+  getWorkspaceAnalyzeProgress: async (workspaceId: number): Promise<Record<number, AiAnalysisProgress>> => {
+    const response = await axiosClient.get<Record<number, AiAnalysisProgress>>(
+      `/api/workspaces/${workspaceId}/projects/analytics/progress`
+    );
+    return response.data;
+  },
+
   getOverview: async (workspaceId: number, projectId: number): Promise<ProjectOverviewStats> => {
     const response = await axiosClient.get<Record<string, unknown>>(
       `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/overview`
@@ -165,6 +180,7 @@ export const projectApi = {
       search?: string;
       dateFrom?: string;
       dateTo?: string;
+      isCrisisAlert?: boolean;
     }
   ): Promise<ProjectMention[]> => {
     const response = await axiosClient.get<unknown[]>(

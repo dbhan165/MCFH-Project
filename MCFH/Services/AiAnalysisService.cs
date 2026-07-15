@@ -3,6 +3,7 @@ using MCFH.Models;
 using MCFH.Models.Scraping;
 using MCFH.Services.Scraping;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace MCFH.Services;
 
@@ -12,6 +13,7 @@ public class AiAnalysisService
     private readonly IGeminiSentimentService _geminiSentimentService;
     private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
+    private readonly IMemoryCache _cache;
 
     private static readonly string[] PositiveWords =
     {
@@ -27,11 +29,13 @@ public class AiAnalysisService
         McfhDbContext context,
         IGeminiSentimentService geminiSentimentService,
         ProjectAlertService alertService,
+        IMemoryCache cache,
         ILogger<AiAnalysisService> logger)
     {
         _context = context;
         _geminiSentimentService = geminiSentimentService;
         _alertService = alertService;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -77,6 +81,11 @@ public class AiAnalysisService
             await ClearExistingAnalysesAsync(feedbacks);
 
         var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
+        var total = pending.Count;
+        
+        var cacheKey = $"Project:{projectId}:AiProgress";
+        _cache.Set(cacheKey, 0, TimeSpan.FromHours(1)); // Initialize progress
+
         var analyzed = 0;
         var geminiCount = 0;
         var crisisCountInBatch = 0;
@@ -111,6 +120,8 @@ public class AiAnalysisService
                 });
 
                 analyzed++;
+                _cache.Set(cacheKey, total > 0 ? (analyzed * 100 / total) : 100, TimeSpan.FromHours(1));
+
                 if (analysis.IsCrisisAlert) crisisCountInBatch++;
                 if (analysis.UsedGemini) geminiCount++;
             }
@@ -125,6 +136,8 @@ public class AiAnalysisService
             await _context.SaveChangesAsync();
             await _alertService.NotifyAfterAnalysisAsync(projectId, crisisCountInBatch);
         }
+
+        _cache.Remove(cacheKey);
 
         var engine = geminiCount > 0 ? "Gemini" : "rule-based";
         return new AnalyzeProjectResultDto

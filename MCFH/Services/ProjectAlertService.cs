@@ -34,6 +34,13 @@ public class ProjectAlertService
                 .Include(f => f.AiAnalysis)
                 .ToListAsync();
 
+            var muted = await _context.MutedEntities
+                .AsNoTracking()
+                .Where(m => m.ProjectId == projectId)
+                .ToListAsync();
+            var mutedAuthors = new HashSet<string>(muted.Where(m => m.EntityType == "author").Select(m => m.EntityValue), StringComparer.OrdinalIgnoreCase);
+            var mutedPlatforms = new HashSet<string>(muted.Where(m => m.EntityType == "platform").Select(m => m.EntityValue), StringComparer.OrdinalIgnoreCase);
+
             var positive = 0;
             var negative = 0;
             var neutral = 0;
@@ -41,6 +48,10 @@ public class ProjectAlertService
 
             foreach (var feedback in feedbacks)
             {
+                var author = feedback.AuthorName?.Trim();
+                var platform = (feedback.Platform ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(author) && mutedAuthors.Contains(author)) continue;
+                if (!string.IsNullOrWhiteSpace(platform) && mutedPlatforms.Contains(platform)) continue;
                 var sentiment = feedback.AiAnalysis?.MainSentiment?.ToLowerInvariant();
                 switch (sentiment)
                 {

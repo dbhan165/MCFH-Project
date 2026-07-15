@@ -1,4 +1,4 @@
-﻿using Hangfire;
+using Hangfire;
 using MCFH.Configuration;
 using MCFH.Models;
 using MCFH.Services;
@@ -32,6 +32,7 @@ namespace MCFH
             ScrapeCookiePaths.Initialize(builder.Environment.ContentRootPath);
 
             // Add services to the container.
+            builder.Services.AddMemoryCache();
             // 1. Cấu hình DbContext sử dụng DI
             builder.Services.AddDbContext<McfhDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));

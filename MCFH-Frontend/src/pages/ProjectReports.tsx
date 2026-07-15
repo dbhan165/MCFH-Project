@@ -14,6 +14,8 @@ import {
   UserCheck,
   Send,
   Play,
+  FileSpreadsheet,
+  FileCode2,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { BespokeCenter, BespokeRequestItem, ReportCenter, ReportTemplate } from '../types/project';
@@ -27,15 +29,18 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getReportFormat(type: string): 'pdf' | 'html' | 'csv' | 'json' | 'pptx' {
+function getReportFormat(type: string): 'pdf' | 'html' | 'xlsx' | 'json' | 'pptx' {
   if (type.includes('pdf')) return 'pdf';
+  if (type.includes('html')) return 'html';
+  if (type.includes('xlsx')) return 'xlsx';
   if (type.includes('pptx')) return 'pptx';
-  if (type.includes('csv')) return 'csv';
   if (type.includes('json')) return 'json';
   return 'html';
 }
 
-function getTypeIcon() {
+function getTypeIcon(format: string) {
+  if (format === 'json') return FileCode2;
+  if (format === 'xlsx') return FileSpreadsheet;
   return FileText;
 }
 
@@ -46,8 +51,8 @@ function getTypeBadgeClass(format: string) {
     case 'html':
       return 'bg-[#00B4D8]/10 text-[#00B4D8] border-[#00B4D8]/20';
     case 'json':
-      return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-    case 'csv':
+      return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+    case 'xlsx':
       return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'pptx':
       return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
@@ -212,7 +217,7 @@ const ProjectReports = () => {
   const filteredReports = useMemo(
     () =>
       (center?.reports ?? []).filter((report) =>
-        ['analytics-html', 'analytics-pdf', 'mentions-csv', 'analytics-pptx'].includes(report.type)
+        ['analytics-html', 'analytics-pdf', 'mentions-xlsx', 'analytics-pptx'].includes(report.type)
       ),
     [center]
   );
@@ -264,8 +269,8 @@ const ProjectReports = () => {
               <FileText className="text-[#FF7575] w-8 h-8" />
               Báo cáo
             </h2>
-            <p className="text-gray-400 text-sm mt-2">
-              Tạo và tải báo cáo HTML, PDF, CSV hoặc PPTX.
+            <p className="text-[#9ca3af] text-sm mt-1">
+              Tạo và tải báo cáo HTML, PDF, Excel (XLSX) hoặc PPTX.
             </p>
           </div>
 
@@ -378,7 +383,8 @@ const ProjectReports = () => {
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {center.templates.map((template) => {
-            const Icon = getTypeIcon();
+            const format = getReportFormat(template.key);
+            const Icon = getTypeIcon(format);
             const generating = isGenerating === template.key;
 
             return (
@@ -387,13 +393,13 @@ const ProjectReports = () => {
                 className="group relative overflow-hidden rounded-2xl border border-white/5 bg-[#151B2B] p-6 hover:border-[#FF7575]/30 transition-colors"
               >
                 <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${getTypeBadgeClass(template.format)}`}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${getTypeBadgeClass(format)}`}>
                     <Icon className="w-6 h-6" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-white text-sm">{template.name}</p>
                     <p className="text-xs text-gray-500 mt-1 leading-relaxed">{template.description}</p>
-                    <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-semibold border ${getTypeBadgeClass(template.format)}`}>
+                    <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-semibold border ${getTypeBadgeClass(format)}`}>
                       {template.typeLabel}
                     </span>
                   </div>
@@ -463,7 +469,7 @@ const ProjectReports = () => {
               <tbody className="divide-y divide-white/5">
                 {filteredReports.map((report) => {
                   const format = getReportFormat(report.type);
-                  const Icon = getTypeIcon();
+                  const Icon = getTypeIcon(format);
                   const downloading = downloadingId === report.reportId;
 
                   return (
@@ -535,8 +541,8 @@ const ProjectReports = () => {
         )}
       </div>
 
-      <p className="text-xs text-gray-600 text-center">
-        HTML để xem nhanh, PDF/PPTX để trình bày, CSV để phân tích sâu.
+      <p className="text-[#6b7280] mt-1 text-sm max-w-2xl">
+        HTML để xem nhanh, PDF/PPTX để trình bày, Excel để phân tích sâu.
       </p>
     </div>
   );

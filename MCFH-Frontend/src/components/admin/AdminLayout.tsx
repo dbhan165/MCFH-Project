@@ -16,6 +16,7 @@ import {
   Radio,
   HelpCircle,
 } from 'lucide-react';
+import NotificationBell from '../notifications/NotificationBell';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -103,10 +104,7 @@ const AdminLayout = ({
           </div>
 
           <div className="flex items-center gap-4 ml-6">
-            <button className="relative p-2 text-gray-500 hover:text-[#111827] hover:bg-gray-50 rounded-lg transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#ef4444] rounded-full" />
-            </button>
+            <NotificationBell theme="light" />
             <button className="p-2 text-gray-500 hover:text-[#111827] hover:bg-gray-50 rounded-lg transition-colors">
               <Radio className="w-5 h-5" />
             </button>

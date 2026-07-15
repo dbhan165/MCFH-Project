@@ -4,6 +4,7 @@ using MCFH.Models;
 using MCFH.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 
 namespace MCFH.Controllers.Projects;
@@ -24,13 +25,20 @@ public class ProjectExtendedController : ControllerBase
     private readonly MentionFilterService _mentionFilters;
     private readonly MentionManagementService _mentionManagement;
 
+    private readonly IMemoryCache _cache;
+    private readonly IServiceScopeFactory _scopeFactory;
+
     public ProjectExtendedController(
         McfhDbContext db,
         IProjectService projectService,
-        AiAnalysisService aiAnalysisService)
+        AiAnalysisService aiAnalysisService,
+        IMemoryCache cache,
+        IServiceScopeFactory scopeFactory)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
+        _cache = cache;
+        _scopeFactory = scopeFactory;
         _analyticsService = new ProjectAnalyticsService(db);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
@@ -43,12 +51,54 @@ public class ProjectExtendedController : ControllerBase
     private string GetUserName() => User.FindFirst(ClaimTypes.Name)?.Value ?? "Hệ thống";
 
     [HttpPost("{projectId}/analyze")]
-    public async Task<IActionResult> Analyze(int workspaceId, int projectId, [FromQuery] bool force = true)
+    public IActionResult Analyze(int workspaceId, int projectId, [FromQuery] bool force = true)
     {
         var userId = GetUserId();
-        var result = await _aiAnalysisService.AnalyzeProjectAsync(workspaceId, projectId, userId, force);
-        if (result == null)
-            return BadRequest(new { message = "Không thể phân tích project." });
+        
+        Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var aiService = scope.ServiceProvider.GetRequiredService<AiAnalysisService>();
+                await aiService.AnalyzeProjectAsync(workspaceId, projectId, userId, force);
+            }
+            catch (Exception ex)
+            {
+                // Task failed
+                var cacheKey = $"Project:{projectId}:AiProgress";
+                _cache.Remove(cacheKey);
+            }
+        });
+
+        return Ok(new { message = "Đã đưa vào hàng đợi phân tích AI.", status = "queued" });
+    }
+
+    [HttpGet("{projectId}/analytics/progress")]
+    public IActionResult GetAnalysisProgress(int workspaceId, int projectId)
+    {
+        var cacheKey = $"Project:{projectId}:AiProgress";
+        if (_cache.TryGetValue(cacheKey, out int percent))
+        {
+            return Ok(new { isAnalyzing = true, progressPercent = percent });
+        }
+        
+        return Ok(new { isAnalyzing = false, progressPercent = 0 });
+    }
+
+    [HttpGet("analytics/progress")]
+    public async Task<IActionResult> GetWorkspaceAnalysisProgress(int workspaceId)
+    {
+        var projects = await _projectService.GetProjectsAsync(workspaceId, GetUserId());
+        var result = new Dictionary<int, object>();
+        foreach (var p in projects)
+        {
+            var cacheKey = $"Project:{p.ProjectId}:AiProgress";
+            if (_cache.TryGetValue(cacheKey, out int percent))
+            {
+                result[p.ProjectId] = new { isAnalyzing = true, progressPercent = percent };
+            }
+        }
         return Ok(result);
     }
 
@@ -65,7 +115,7 @@ public class ProjectExtendedController : ControllerBase
         int workspaceId, int projectId,
         [FromQuery] string? platform, [FromQuery] string? sentiment,
         [FromQuery] string? search, [FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo,
-        [FromQuery] bool excludeMuted = true)
+        [FromQuery] bool excludeMuted = true, [FromQuery] bool? isCrisisAlert = null)
     {
         var userId = GetUserId();
         var project = await _projectService.GetByIdAsync(workspaceId, projectId, userId);
@@ -78,7 +128,8 @@ public class ProjectExtendedController : ControllerBase
             Search = search,
             DateFrom = dateFrom,
             DateTo = dateTo,
-            ExcludeMuted = excludeMuted
+            ExcludeMuted = excludeMuted,
+            IsCrisisAlert = isCrisisAlert
         };
         return Ok(await _analyticsService.GetMentionsAsync(workspaceId, projectId, userId, filter));
     }

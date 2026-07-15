@@ -5,6 +5,9 @@ using MCFH.Configuration;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Services.Scraping;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using MCFH.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace MCFH.Services;
 
@@ -25,6 +28,7 @@ public class GeminiSentimentService : IGeminiSentimentService
 {
     private readonly HttpClient _httpClient;
     private readonly GeminiOptions _options;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GeminiSentimentService> _logger;
 
     /// <summary>Sau khi mọi model đều 429, bỏ qua Gemini cho đến khi restart server.</summary>
@@ -38,24 +42,45 @@ public class GeminiSentimentService : IGeminiSentimentService
     public GeminiSentimentService(
         HttpClient httpClient,
         IOptions<GeminiOptions> options,
+        IServiceScopeFactory scopeFactory,
         ILogger<GeminiSentimentService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.ApiKey);
+    private async Task<(string ApiKey, string Model)> ResolveSettingsAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
+        
+        var settings = await db.SystemSettings
+            .Where(s => s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
+            .ToDictionaryAsync(s => s.SettingKey, s => s.SettingValue, ct);
+
+        settings.TryGetValue("GEMINI_API_KEY", out var dbKey);
+        settings.TryGetValue("GEMINI_MODEL", out var dbModel);
+
+        return (
+            !string.IsNullOrWhiteSpace(dbKey) ? dbKey : _options.ApiKey,
+            !string.IsNullOrWhiteSpace(dbModel) ? dbModel : _options.Model
+        );
+    }
+
+    public bool IsConfigured => true; // Tránh dùng biến tĩnh để check config vì config có thể đổi trong DB
 
     public async Task<GeminiTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsConfigured)
+        var (apiKey, model) = await ResolveSettingsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             return new GeminiTestResultDto
             {
                 Configured = false,
                 Success = false,
-                Message = "Chưa cấu hình Gemini:ApiKey trong appsettings."
+                Message = "Chưa cấu hình API Key trong System Settings."
             };
         }
 
@@ -65,7 +90,7 @@ public class GeminiSentimentService : IGeminiSentimentService
             {
                 Configured = true,
                 Success = false,
-                Message = "Gemini đang bị tạm khóa do hết quota — restart backend rồi thử lại."
+                Message = "AI Model đang bị tạm khóa do hết quota — restart backend rồi thử lại."
             };
         }
 
@@ -95,7 +120,7 @@ public class GeminiSentimentService : IGeminiSentimentService
                 Configured = true,
                 Success = true,
                 ModelUsed = _lastSuccessfulModel,
-                Message = $"Gemini hoạt động bình thường (model: {_lastSuccessfulModel}).",
+                Message = $"AI Model hoạt động bình thường (model: {_lastSuccessfulModel}).",
                 SampleSummary = result.Summary,
                 SampleSentiment = result.Sentiment
             };
@@ -106,7 +131,7 @@ public class GeminiSentimentService : IGeminiSentimentService
             Configured = true,
             Success = false,
             ModelUsed = _lastAttemptedModel,
-            Message = _lastErrorMessage ?? "Gọi Gemini thất bại — kiểm tra API key, quota hoặc log server."
+            Message = _lastErrorMessage ?? "Gọi AI Model thất bại — kiểm tra API key, quota hoặc log server."
         };
     }
 
@@ -122,7 +147,8 @@ public class GeminiSentimentService : IGeminiSentimentService
         string? combinedText = null,
         CancellationToken cancellationToken = default)
     {
-        if (!IsConfigured || _quotaExhausted)
+        var (apiKey, dynamicModel) = await ResolveSettingsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(apiKey) || _quotaExhausted)
             return null;
 
         var commentsBlock = comments.Count > 0
@@ -148,31 +174,33 @@ public class GeminiSentimentService : IGeminiSentimentService
             "- isCrisisAlert: true nếu có nguy cơ khủng hoảng truyền thông\n" +
             "- confidence: 0 đến 1";
 
-        var requestBody = new
-        {
-            contents = new[]
-            {
-                new { parts = new[] { new { text = prompt } } }
-            },
-            generationConfig = new
-            {
-                responseMimeType = "application/json",
-                temperature = 0.2
-            }
-        };
-
-        var models = GetModelCandidates().ToList();
+        var models = GetModelCandidates(dynamicModel).ToList();
         var quotaHits = 0;
 
         foreach (var model in models)
         {
             _lastAttemptedModel = model;
-            var url =
-                $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={Uri.EscapeDataString(_options.ApiKey)}";
+            var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl) ? "https://api.tokenrouter.com/v1" : _options.BaseUrl;
+            var url = $"{baseUrl.TrimEnd('/')}/chat/completions";
+
+            var requestBody = new
+            {
+                model = model,
+                messages = new[]
+                {
+                    new { role = "user", content = prompt }
+                },
+                response_format = new { type = "json_object" },
+                temperature = 0.2
+            };
 
             try
             {
-                using var response = await _httpClient.PostAsJsonAsync(url, requestBody, cancellationToken);
+                var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                request.Content = JsonContent.Create(requestBody);
+
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
                 var raw = await response.Content.ReadAsStringAsync(cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
@@ -182,22 +210,22 @@ public class GeminiSentimentService : IGeminiSentimentService
                     if ((int)response.StatusCode == 429)
                     {
                         quotaHits++;
-                        _logger.LogWarning("Gemini model {Model} hết quota — thử model khác.", model);
+                        _logger.LogWarning("AI model {Model} hết quota — thử model khác.", model);
                         continue;
                     }
 
-                    _logger.LogWarning("Gemini API lỗi {StatusCode} ({Model}): {Body}",
+                    _logger.LogWarning("AI API lỗi {StatusCode} ({Model}): {Body}",
                         response.StatusCode, model, raw);
                     continue;
                 }
 
-                var geminiResponse = JsonSerializer.Deserialize<GeminiGenerateResponse>(raw, JsonOptions);
-                var text = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
+                var openAiResponse = JsonSerializer.Deserialize<OpenAiChatResponse>(raw, JsonOptions);
+                var text = openAiResponse?.Choices?.FirstOrDefault()?.Message?.Content;
 
                 if (string.IsNullOrWhiteSpace(text))
                 {
-                    _lastErrorMessage = "Gemini trả về rỗng.";
-                    _logger.LogWarning("Gemini trả về rỗng (model {Model}).", model);
+                    _lastErrorMessage = "AI trả về rỗng.";
+                    _logger.LogWarning("AI trả về rỗng (model {Model}).", model);
                     continue;
                 }
 
@@ -220,20 +248,20 @@ public class GeminiSentimentService : IGeminiSentimentService
             catch (Exception ex)
             {
                 _lastErrorMessage = ex.Message;
-                _logger.LogError(ex, "Gọi Gemini sentiment thất bại (model {Model}).", model);
+                _logger.LogError(ex, "Gọi AI sentiment thất bại (model {Model}).", model);
             }
         }
 
         if (quotaHits > 0 && quotaHits >= models.Count)
         {
             _quotaExhausted = true;
-            _logger.LogWarning("Mọi model Gemini đều hết quota — chuyển rule-based cho các bài còn lại.");
+            _logger.LogWarning("Mọi model AI đều hết quota — chuyển rule-based cho các bài còn lại.");
         }
 
         return null;
     }
 
-    private IEnumerable<string> GetModelCandidates()
+    private IEnumerable<string> GetModelCandidates(string dynamicModel)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var list = new List<string>();
@@ -246,9 +274,10 @@ public class GeminiSentimentService : IGeminiSentimentService
                 list.Add(trimmed);
         }
 
+        Add(dynamicModel);
         Add(_options.Model);
-        foreach (var fallback in _options.FallbackModels ?? [])
-            Add(fallback);
+        foreach (var fb in _options.FallbackModels ?? Array.Empty<string>())
+            Add(fb);
 
         return list;
     }
@@ -258,9 +287,17 @@ public class GeminiSentimentService : IGeminiSentimentService
         try
         {
             using var doc = JsonDocument.Parse(raw);
-            if (doc.RootElement.TryGetProperty("error", out var error) &&
-                error.TryGetProperty("message", out var message))
-                return message.GetString();
+            if (doc.RootElement.TryGetProperty("error", out var error))
+            {
+                if (error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var message))
+                {
+                    return message.GetString();
+                }
+                else if (error.ValueKind == JsonValueKind.String)
+                {
+                    return error.GetString();
+                }
+            }
         }
         catch
         {
@@ -287,24 +324,19 @@ public class GeminiSentimentService : IGeminiSentimentService
         return Math.Clamp(value, 0, 1);
     }
 
-    private sealed class GeminiGenerateResponse
+    private sealed class OpenAiChatResponse
     {
-        public List<GeminiCandidate>? Candidates { get; set; }
+        public List<OpenAiChoice>? Choices { get; set; }
     }
 
-    private sealed class GeminiCandidate
+    private sealed class OpenAiChoice
     {
-        public GeminiContent? Content { get; set; }
+        public OpenAiMessage? Message { get; set; }
     }
 
-    private sealed class GeminiContent
+    private sealed class OpenAiMessage
     {
-        public List<GeminiPart>? Parts { get; set; }
-    }
-
-    private sealed class GeminiPart
-    {
-        public string? Text { get; set; }
+        public string? Content { get; set; }
     }
 
     private sealed class GeminiSentimentPayload

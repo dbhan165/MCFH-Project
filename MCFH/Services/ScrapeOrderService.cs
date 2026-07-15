@@ -222,7 +222,8 @@ public class ScrapeOrderService
                 $"Dự án «{project?.Name ?? order.ProjectId.ToString()}» — từ khóa «{order.Keyword}». {order.StatusMessage}",
                 "success",
                 "scrape_order",
-                order.OrderId);
+                order.OrderId,
+                order.ProjectId);
         }
         catch
         {
