@@ -66,8 +66,16 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      // Mock API call to avoid touching BE
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await projectApi.createBespokeRequest(wid, projectId, {
+        title,
+        keyword,
+        packageType,
+        requirements: requirements || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        modules,
+        format: 'html',
+      });
 
       onSuccess();
       onClose();
@@ -96,7 +104,7 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
         <div className="p-6 border-b border-white/5 shrink-0">
           <h2 className="text-2xl font-bold text-white mb-2">Yêu cầu Báo cáo Chuyên sâu</h2>
           <p className="text-gray-400 text-sm">
-            User gửi yêu cầu → Admin giao Reporter → Reporter biên soạn báo cáo theo nhu cầu của bạn.
+            Chọn gói dịch vụ — hệ thống gửi báo cáo cho bạn. Nếu chưa đủ, dùng Yêu cầu sửa để Reporter chỉnh lại.
           </p>
         </div>
 

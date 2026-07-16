@@ -3,11 +3,18 @@
 public class CreateBespokeRequestDto
 {
     public string Title { get; set; } = null!;
+    public string Keyword { get; set; } = null!;
+    public string PackageType { get; set; } = "basic";
     public string? Requirements { get; set; }
     public string? DateFrom { get; set; }
     public string? DateTo { get; set; }
     public List<string> Modules { get; set; } = new();
     public string Format { get; set; } = "html";
+}
+
+public class RequestBespokeRevisionDto
+{
+    public string Feedback { get; set; } = null!;
 }
 
 public class AssignBespokeReporterDto
@@ -32,6 +39,10 @@ public class BespokeRequestItemDto
     public string? DateFrom { get; set; }
     public string? DateTo { get; set; }
     public string Format { get; set; } = "html";
+    public string? Keyword { get; set; }
+    public string? PackageType { get; set; }
+    public decimal? PackagePrice { get; set; }
+    public decimal? AgreedPrice { get; set; }
     public bool HasDeliverable { get; set; }
     public int? DeliverableReportId { get; set; }
 }

@@ -284,10 +284,15 @@ namespace MCFH.Controllers
                 return Unauthorized(new { message = "Tài khoản hoặc mật khẩu không chính xác." });
             }
 
-            // 2. Kiểm tra nếu tài khoản đăng ký qua Google SSO mà cố login thủ công
-            if (user.AuthProvider == "google" && string.IsNullOrEmpty(user.PasswordHash))
+            // 2. Tài khoản chưa có mật khẩu cục bộ (Google SSO hoặc chưa set password)
+            if (string.IsNullOrEmpty(user.PasswordHash))
             {
-                return BadRequest(new { message = "Tài khoản này được đăng ký thông qua Google. Vui lòng đăng nhập bằng Google." });
+                if (user.AuthProvider == "google")
+                {
+                    return BadRequest(new { message = "Tài khoản này được đăng ký thông qua Google. Vui lòng đăng nhập bằng Google." });
+                }
+
+                return Unauthorized(new { message = "Tài khoản chưa có mật khẩu. Vui lòng dùng Quên mật khẩu để đặt mật khẩu mới." });
             }
 
             // 3. Kiểm tra tính chính xác của mật khẩu

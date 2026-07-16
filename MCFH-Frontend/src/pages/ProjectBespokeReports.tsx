@@ -5,7 +5,7 @@ import {
     UserCheck, Play, Send, Download, ArrowLeft, RefreshCw, Edit3, UploadCloud
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { BespokeCenter, BespokeRequestItem } from '../types/project';
+import type { BespokeCenter, BespokeRequestItem, ReporterOption } from '../types/project';
 import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { isSystemAdmin, isSystemReporter } from '../utils/workspaceHelpers';
 import ProjectCreateBespokeModal from './ProjectCreateBespoke';
@@ -17,8 +17,24 @@ function bespokeStatusClass(status: string) {
         case 'in_progress': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
         case 'assigned': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
         case 'gathering_data': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+        case 'quoted': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+        case 'quote_rejected': return 'bg-red-500/10 text-red-400 border-red-500/20';
         case 'revision_requested': return 'bg-pink-500/10 text-pink-400 border-pink-500/20';
         default: return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+    }
+}
+
+// Nhãn theo góc nhìn khách hàng (Client)
+function clientStatusLabel(status: string, fallback: string) {
+    switch (status) {
+        case 'pending': return 'Đã gửi yêu cầu';
+        case 'gathering_data':
+        case 'assigned':
+        case 'in_progress': return 'Đang xử lý';
+        case 'completed': return 'Đã chỉnh sửa';
+        case 'revision_requested': return 'Đang xử lý';
+        case 'cancelled': return 'Đã hủy';
+        default: return fallback;
     }
 }
 
@@ -39,12 +55,9 @@ const ProjectBespokeReports = () => {
     const [successMessage, setSuccessMessage] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-    // --- MOCK STATES ---
     const [revisionModalOpen, setRevisionModalOpen] = useState(false);
     const [uploadRevisionModalOpen, setUploadRevisionModalOpen] = useState(false);
     const [selectedReqId, setSelectedReqId] = useState<number | null>(null);
-    const [mockStatuses, setMockStatuses] = useState<Record<number, string>>({});
-    // -------------------
 
     const isAdmin = isSystemAdmin(userRole);
     const isReporter = isSystemReporter(userRole);
@@ -181,39 +194,39 @@ const ProjectBespokeReports = () => {
         }
     };
 
-    // --- MOCK HANDLERS ---
-    const handleMockRequestRevision = async (feedback: string) => {
-        if (!selectedReqId) return;
-        await new Promise(r => setTimeout(r, 800));
-        setMockStatuses(prev => ({ ...prev, [selectedReqId]: 'revision_requested' }));
-        setSuccessMessage('Đã gửi yêu cầu chỉnh sửa báo cáo.');
+    const handleRequestRevision = async (feedback: string) => {
+        if (!selectedReqId || !wid) return;
+        const projectId = getProjectIdForRequest(selectedReqId);
+        if (!projectId) return;
+        setBespokeActionId(selectedReqId);
+        try {
+            await projectApi.requestBespokeRevision(wid, projectId, selectedReqId, feedback);
+            setSuccessMessage('Đã gửi yêu cầu chỉnh sửa báo cáo.');
+            await loadBespokeData();
+        } catch (error) {
+            setErrorMessage(extractApiError(error, 'Không thể gửi yêu cầu chỉnh sửa.'));
+        } finally {
+            setBespokeActionId(null);
+        }
     };
 
-    const handleMockUploadRevision = async (file: File | null) => {
-        if (!selectedReqId) return;
-        await new Promise(r => setTimeout(r, 800));
-        setMockStatuses(prev => ({ ...prev, [selectedReqId]: 'completed' }));
-        setSuccessMessage('Đã upload bản sửa đổi thành công.');
+    const handleUploadRevision = async (file: File | null) => {
+        if (!selectedReqId || !wid || !file) return;
+        const projectId = getProjectIdForRequest(selectedReqId);
+        if (!projectId) return;
+        setBespokeActionId(selectedReqId);
+        try {
+            await projectApi.uploadBespokeRevision(wid, projectId, selectedReqId, file);
+            setSuccessMessage('Đã upload bản sửa đổi thành công.');
+            await loadBespokeData();
+        } catch (error) {
+            setErrorMessage(extractApiError(error, 'Không thể upload bản sửa đổi.'));
+        } finally {
+            setBespokeActionId(null);
+        }
     };
-    // ---------------------
 
-    const bespokeRequests = useMemo(() => {
-        const reqs = bespoke?.requests ?? [];
-        return reqs.map(r => {
-            if (mockStatuses[r.requestId]) {
-                const newStatus = mockStatuses[r.requestId];
-                let statusLabel = r.statusLabel;
-                if (newStatus === 'revision_requested') statusLabel = 'Chờ sửa đổi';
-                else if (newStatus === 'gathering_data') statusLabel = 'Đang thu thập DL';
-                return { ...r, status: newStatus, statusLabel };
-            }
-            // For mock demo, force the first 'pending' request to look like 'gathering_data' to show off the UI
-            if (r.status === 'pending' && reqs[0].requestId === r.requestId && !mockStatuses[r.requestId]) {
-                return { ...r, status: 'gathering_data', statusLabel: 'Đang thu thập DL & AI xử lý' };
-            }
-            return r;
-        });
-    }, [bespoke, mockStatuses]);
+    const bespokeRequests = useMemo(() => bespoke?.requests ?? [], [bespoke]);
     const backToReportsPath = `/workspace/${wid}/projects`;
 
     if (isLoading) {
@@ -254,10 +267,10 @@ const ProjectBespokeReports = () => {
                         </h2>
                         <p className="text-xs text-gray-400 mt-1">
                             {isReporter
-                                ? 'Reporter: nhận yêu cầu, biên soạn và nộp báo cáo theo yêu cầu khách hàng.'
+                                ? 'Reporter: xem báo cáo hệ thống đã gửi khách, đọc yêu cầu sửa và upload bản đã chỉnh.'
                                 : isAdmin
-                                    ? 'Admin: giao Reporter xử lý các yêu cầu báo cáo.'
-                                    : 'User: gửi yêu cầu báo cáo tùy chỉnh — Reporter sẽ làm báo cáo chuyên sâu.'}
+                                    ? 'Admin: giao Reporter — hệ thống tự gửi báo cáo cho khách; Reporter chỉ xử lý khi khách yêu cầu sửa.'
+                                    : 'Chọn gói & gửi yêu cầu. Khi báo cáo chưa đủ, dùng Yêu cầu sửa để Reporter chỉnh lại.'}
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -327,22 +340,44 @@ const ProjectBespokeReports = () => {
             <RequestRevisionModal 
                 isOpen={revisionModalOpen} 
                 onClose={() => setRevisionModalOpen(false)} 
-                onSubmit={handleMockRequestRevision} 
+                onSubmit={handleRequestRevision} 
             />
             
             <UploadRevisionModal 
                 isOpen={uploadRevisionModalOpen} 
                 onClose={() => setUploadRevisionModalOpen(false)} 
-                onSubmit={handleMockUploadRevision} 
+                onSubmit={handleUploadRevision} 
             />
         </div>
     );
 };
 
 // Giữ nguyên sub-component BespokeRequestRow
-function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assignReporterId, onAssignReporterChange, onAssign, onStart, onDeliver, onDownload, isBusy, isDownloading, onRequestRevision, onUploadRevision }: any) {
-    const canWork = req.status !== 'completed' && req.status !== 'revision_requested' && (isAdmin || (isReporter && req.reporterId === userId));
+interface BespokeRequestRowProps {
+    req: BespokeRequestItem;
+    isAdmin: boolean;
+    isReporter: boolean;
+    userId: number;
+    reporters: ReporterOption[];
+    assignReporterId?: number;
+    onAssignReporterChange: (rid: number) => void;
+    onAssign: () => void;
+    onStart: () => void;
+    onDeliver: () => void;
+    onDownload: () => void;
+    isBusy: boolean;
+    isDownloading: boolean;
+    onRequestRevision: () => void;
+    onUploadRevision: () => void;
+}
+
+function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assignReporterId, onAssignReporterChange, onAssign, onStart, onDeliver, onDownload, isBusy, isDownloading, onRequestRevision, onUploadRevision }: BespokeRequestRowProps) {
+    const canWork = ['assigned', 'in_progress'].includes(req.status)
+        && (isAdmin || (isReporter && req.reporterId === userId));
     const showAssign = isAdmin && req.status === 'pending';
+    const priceLabel = req.agreedPrice != null
+        ? `${req.agreedPrice.toLocaleString('vi-VN')} VND`
+        : null;
 
     return (
         <div className="p-6 hover:bg-white/[0.02] transition-colors">
@@ -351,13 +386,15 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                         <h4 className="font-bold text-white">{req.title}</h4>
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${bespokeStatusClass(req.status)}`}>
-                            {req.statusLabel}
+                            {isAdmin || isReporter ? req.statusLabel : clientStatusLabel(req.status, req.statusLabel)}
                         </span>
                     </div>
                     {req.requirements && <p className="text-sm text-gray-400 line-clamp-2 mb-2">{req.requirements}</p>}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                         <span>Khách hàng: {req.clientName ?? '—'}</span>
                         {req.reporterName && <span>Reporter: {req.reporterName}</span>}
+                        {priceLabel && <span className="text-amber-400">Gói: {priceLabel}</span>}
+                        {req.deadline && <span>Hạn: {req.deadline.slice(0, 10)}</span>}
                         {(req.dateFrom || req.dateTo) && <span>Giai đoạn: {req.dateFrom} → {req.dateTo}</span>}
                         <span>{req.modules.length} module</span>
                     </div>
@@ -372,7 +409,7 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                                 className="px-3 py-2 bg-[#0A101D] border border-white/10 rounded-lg text-sm text-white focus:border-purple-500 focus:outline-none"
                             >
                                 <option value="">Chọn Reporter</option>
-                                {reporters.map((r: any) => <option key={r.userId} value={r.userId}>{r.fullName}</option>)}
+                                {reporters.map((r) => <option key={r.userId} value={r.userId}>{r.fullName}</option>)}
                             </select>
                             <button type="button" onClick={onAssign} disabled={isBusy || !assignReporterId} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-purple-600/20 text-purple-300 hover:bg-purple-600 hover:text-white disabled:opacity-50">
                                 {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />} Giao Reporter

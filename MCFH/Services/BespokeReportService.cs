@@ -12,6 +12,10 @@ public class BespokeReportService
 {
     private readonly McfhDbContext _context;
     private readonly ProjectAnalyticsService _analytics;
+    private readonly IEmailService? _emailService;
+
+    private const decimal BasicPackagePrice = 500_000m;
+    private const decimal ProPackagePrice = 1_000_000m;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,10 +23,14 @@ public class BespokeReportService
         WriteIndented = false
     };
 
-    public BespokeReportService(McfhDbContext context, ProjectAnalyticsService analytics)
+    public BespokeReportService(
+        McfhDbContext context,
+        ProjectAnalyticsService analytics,
+        IEmailService? emailService = null)
     {
         _context = context;
         _analytics = analytics;
+        _emailService = emailService;
     }
 
     public async Task<BespokeCenterDto?> GetBespokeCenterAsync(int workspaceId, int projectId, int userId)
@@ -60,10 +68,19 @@ public class BespokeReportService
         var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
         if (user == null) return null;
 
+        if (string.IsNullOrWhiteSpace(dto.Keyword))
+            return null;
+
+        var packageType = NormalizePackageType(dto.PackageType);
+        var packagePrice = packageType == "pro" ? ProPackagePrice : BasicPackagePrice;
+
         var meta = new BespokeMeta
         {
             ProjectId = projectId,
             WorkspaceId = workspaceId,
+            Keyword = dto.Keyword.Trim(),
+            PackageType = packageType,
+            PackagePrice = packagePrice,
             DateFrom = dto.DateFrom,
             DateTo = dto.DateTo,
             Modules = dto.Modules.Count > 0 ? dto.Modules : DefaultModules(),
@@ -76,6 +93,7 @@ public class BespokeReportService
             Title = dto.Title.Trim(),
             Requirements = dto.Requirements?.Trim(),
             CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions),
+            AgreedPrice = packagePrice,
             Status = "pending",
             Deadline = ParseDate(dto.DateTo)?.AddDays(7)
         };
@@ -94,7 +112,7 @@ public class BespokeReportService
         if (admin == null || !IsAdmin(admin)) return null;
 
         var request = await GetProjectRequestAsync(projectId, requestId);
-        if (request == null) return null;
+        if (request == null || request.Status != "pending") return null;
 
         var reporter = await _context.Users
             .FirstOrDefaultAsync(u => u.UserId == reporterId && u.SystemRole == "Reporter");
@@ -106,8 +124,12 @@ public class BespokeReportService
         request.Status = "assigned";
         await _context.SaveChangesAsync();
 
+        // Tạo bản nháp hệ thống để Reporter tải về chỉnh — chưa gửi khách
+        await EnsureSystemDraftAsync(workspaceId, projectId, adminUserId, requestId);
+
         await _context.Entry(request).Reference(r => r.Reporter).LoadAsync();
         await _context.Entry(request).Reference(r => r.Client).LoadAsync();
+        await _context.Entry(request).Collection(r => r.BespokeReports).LoadAsync();
         return MapRequest(request, admin);
     }
 
@@ -119,6 +141,7 @@ public class BespokeReportService
 
         var request = await GetProjectRequestAsync(projectId, requestId);
         if (request == null || !CanWorkOnRequest(user, request)) return null;
+        if (request.Status?.ToLowerInvariant() != "assigned") return null;
 
         request.Status = "in_progress";
         await _context.SaveChangesAsync();
@@ -135,6 +158,9 @@ public class BespokeReportService
 
         var request = await GetProjectRequestAsync(projectId, requestId);
         if (request == null || !CanWorkOnRequest(user, request)) return null;
+        // Cho phép nộp lần đầu (assigned/in_progress) hoặc hệ thống auto-deliver sau assign
+        var status = request.Status?.ToLowerInvariant();
+        if (status is not ("assigned" or "in_progress")) return null;
 
         var meta = ParseMeta(request.CustomMetrics);
         var html = await BuildDeepReportHtmlAsync(workspaceId, projectId, userId, request, meta);
@@ -190,7 +216,147 @@ public class BespokeReportService
         if (!File.Exists(path)) return null;
 
         var bytes = await File.ReadAllBytesAsync(path);
-        return (bytes, $"bespoke-report-{requestId}.html");
+        var fileName = Path.GetFileName(path);
+        return (bytes, fileName);
+    }
+
+    public async Task<BespokeRequestItemDto?> RequestRevisionAsync(
+        int workspaceId, int projectId, int userId, int requestId, RequestBespokeRevisionDto dto)
+    {
+        var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+        if (user == null || IsAdmin(user) || IsReporter(user)) return null;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.Status != "completed") return null;
+        if (string.IsNullOrWhiteSpace(dto.Feedback)) return null;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        meta.RevisionFeedback = dto.Feedback.Trim();
+        request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
+        request.Status = "revision_requested";
+        await _context.SaveChangesAsync();
+
+        await LoadRequestNavigationsAsync(request);
+        return MapRequest(request, user);
+    }
+
+    public async Task<BespokeRequestItemDto?> UploadRevisionAsync(
+        int workspaceId, int projectId, int userId, int requestId, Stream fileStream, string fileName)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return null;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.Status is not ("revision_requested" or "assigned" or "in_progress" or "pending")) return null;
+        if (!CanWorkOnRequest(user, request))
+        {
+            // Cho phép Reporter nhận đơn pending chưa giao rồi upload
+            if (!(IsReporter(user)
+                && request.ReporterId == null
+                && string.Equals(request.Status, "pending", StringComparison.OrdinalIgnoreCase)))
+                return null;
+
+            request.ReporterId = userId;
+            request.AssignedAt = DateTime.Now;
+            request.Status = "in_progress";
+        }
+
+        var safeName = SanitizeFileName(fileName);
+        if (!IsAllowedDeliverableExtension(safeName)) return null;
+
+        var folder = GetBespokeFolder(requestId);
+        Directory.CreateDirectory(folder);
+        var storedName = $"revision-{DateTime.Now:yyyyMMddHHmmss}-{safeName}";
+        var filePath = Path.Combine(folder, storedName);
+        await using (var fs = File.Create(filePath))
+            await fileStream.CopyToAsync(fs);
+
+        var relativePath = Path.Combine("StorageData", "bespoke", requestId.ToString(), storedName);
+        var version = $"v{(request.BespokeReports.Count + 1):D2}";
+
+        _context.BespokeReports.Add(new BespokeReport
+        {
+            RequestId = requestId,
+            FileUrl = relativePath,
+            Version = version,
+            UploadedAt = DateTime.Now
+        });
+
+        request.Status = "completed";
+        request.SubmittedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        await LoadRequestNavigationsAsync(request);
+        await NotifyClientReportReadyAsync(request, projectId);
+        return MapRequest(request, user);
+    }
+
+    /// <summary>Tạo file báo cáo hệ thống (từ data đã cào) nhưng giữ status — chưa gửi khách.</summary>
+    private async Task EnsureSystemDraftAsync(int workspaceId, int projectId, int userId, int requestId)
+    {
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null) return;
+        if (request.BespokeReports.Count > 0) return;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        var html = await BuildDeepReportHtmlAsync(workspaceId, projectId, userId, request, meta);
+
+        var folder = GetBespokeFolder(requestId);
+        Directory.CreateDirectory(folder);
+        var fileName = $"system-draft-{requestId}.html";
+        var filePath = Path.Combine(folder, fileName);
+        await File.WriteAllTextAsync(filePath, html, Encoding.UTF8);
+
+        _context.BespokeReports.Add(new BespokeReport
+        {
+            RequestId = requestId,
+            FileUrl = Path.Combine("StorageData", "bespoke", requestId.ToString(), fileName),
+            Version = "v01-draft",
+            UploadedAt = DateTime.Now
+        });
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task NotifyClientReportReadyAsync(BespokeRequest request, int projectId)
+    {
+        const string title = "Báo cáo chuyên sâu đã sẵn sàng";
+        var body = $"Reporter đã gửi báo cáo «{request.Title}». Vào trang Bespoke để tải về.";
+        try
+        {
+            var notify = new NotificationService(_context);
+            await notify.NotifyAsync(
+                request.ClientId,
+                title,
+                body,
+                "bespoke_delivered",
+                "bespoke_request",
+                request.RequestId,
+                projectId);
+        }
+        catch
+        {
+            // không chặn luồng upload nếu notify lỗi
+        }
+
+        // Đăng ký bằng email (local) → gửi thêm mail
+        try
+        {
+            var client = request.Client ?? await _context.Users.FindAsync(request.ClientId);
+            if (_emailService != null
+                && client != null
+                && !string.IsNullOrWhiteSpace(client.Email)
+                && string.Equals(client.AuthProvider, "local", StringComparison.OrdinalIgnoreCase))
+            {
+                await _emailService.SendEmailAsync(
+                    client.Email,
+                    title,
+                    $"<p>{System.Net.WebUtility.HtmlEncode(body)}</p>");
+            }
+        }
+        catch
+        {
+            // không chặn luồng upload nếu email lỗi
+        }
     }
 
     private async Task<string> BuildDeepReportHtmlAsync(
@@ -414,6 +580,10 @@ public class BespokeReportService
             DateFrom = meta.DateFrom,
             DateTo = meta.DateTo,
             Format = meta.Format,
+            Keyword = meta.Keyword,
+            PackageType = meta.PackageType,
+            PackagePrice = meta.PackagePrice,
+            AgreedPrice = r.AgreedPrice,
             HasDeliverable = latestReport != null,
             DeliverableReportId = latestReport?.ReportId
         };
@@ -456,10 +626,14 @@ public class BespokeReportService
 
     private static string StatusLabel(string? status) => status?.ToLowerInvariant() switch
     {
-        "assigned" => "Đã giao Reporter",
-        "quoted" => "Đã báo giá",
-        "in_progress" => "Reporter đang làm",
-        "completed" => "Hoàn thành",
+        "gathering_data" => "Đang thu thập DL & AI xử lý",
+        "pending" => "Cần chỉnh sửa",
+        "assigned" => "Cần chỉnh sửa",
+        "quoted" => "Chờ khách chấp nhận báo giá",
+        "quote_rejected" => "Khách từ chối báo giá",
+        "in_progress" => "Đang xử lý",
+        "completed" => "Đã gửi khách",
+        "revision_requested" => "Cần chỉnh sửa",
         "cancelled" => "Đã hủy",
         _ => "Chờ xử lý"
     };
@@ -483,6 +657,16 @@ public class BespokeReportService
     private static string Esc(string? t) =>
         string.IsNullOrEmpty(t) ? "" : t.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
+    public static string GetDeliverableContentType(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".ppt" => "application/vnd.ms-powerpoint",
+            ".html" or ".htm" => "text/html; charset=utf-8",
+            _ => "application/octet-stream"
+        };
+
     // ——— Portal Admin / Reporter (không yêu cầu workspace member) ———
 
     public async Task<List<PortalBespokeRequestDto>> ListPortalRequestsAsync(int userId)
@@ -496,9 +680,11 @@ public class BespokeReportService
 
         if (!IsReporter(user)) return new();
 
+        // Reporter thấy: đơn đã giao cho mình + đơn khách mới gửi chưa ai nhận
         var mine = requests.Where(r =>
             r.ReporterId == userId ||
-            (r.Status == "pending" && r.ReporterId == null)).ToList();
+            (r.ReporterId == null && string.Equals(r.Status, "pending", StringComparison.OrdinalIgnoreCase))
+        ).ToList();
         return await MapPortalListAsync(mine);
     }
 
@@ -533,6 +719,10 @@ public class BespokeReportService
         request.Status = "assigned";
         await _context.SaveChangesAsync();
 
+        var ctx = ParseMeta(request.CustomMetrics);
+        if (ctx.WorkspaceId > 0 && ctx.ProjectId > 0)
+            await EnsureSystemDraftAsync(ctx.WorkspaceId, ctx.ProjectId, adminUserId, requestId);
+
         await LoadRequestNavigationsAsync(request);
         return MapRequest(request, admin);
     }
@@ -551,7 +741,13 @@ public class BespokeReportService
         if (request.ReporterId.HasValue && request.ReporterId != userId) return null;
 
         request.AgreedPrice = dto.AgreedPrice;
-        if (dto.Deadline.HasValue) request.Deadline = dto.Deadline;
+        if (dto.Deadline.HasValue)
+        {
+            var today = DateTime.Today;
+            if (dto.Deadline.Value.Date < today)
+                return null;
+            request.Deadline = dto.Deadline.Value.Date;
+        }
         if (!string.IsNullOrWhiteSpace(dto.Note))
         {
             request.Requirements = string.IsNullOrWhiteSpace(request.Requirements)
@@ -561,6 +757,41 @@ public class BespokeReportService
 
         request.Status = "quoted";
         if (!request.ReporterId.HasValue) request.ReporterId = userId;
+        await _context.SaveChangesAsync();
+
+        await LoadRequestNavigationsAsync(request);
+        return MapRequest(request, user);
+    }
+
+    public async Task<BespokeRequestItemDto?> AcceptQuoteAsync(
+        int workspaceId, int projectId, int userId, int requestId)
+    {
+        var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+        if (user == null || IsAdmin(user) || IsReporter(user)) return null;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.Status != "quoted") return null;
+        if (request.ClientId != userId) return null;
+
+        request.Status = "assigned";
+        if (!request.AssignedAt.HasValue) request.AssignedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        await LoadRequestNavigationsAsync(request);
+        return MapRequest(request, user);
+    }
+
+    public async Task<BespokeRequestItemDto?> RejectQuoteAsync(
+        int workspaceId, int projectId, int userId, int requestId)
+    {
+        var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+        if (user == null || IsAdmin(user) || IsReporter(user)) return null;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.Status != "quoted") return null;
+        if (request.ClientId != userId) return null;
+
+        request.Status = "quote_rejected";
         await _context.SaveChangesAsync();
 
         await LoadRequestNavigationsAsync(request);
@@ -585,7 +816,42 @@ public class BespokeReportService
     {
         var meta = await ResolveRequestContextAsync(requestId);
         if (meta == null) return null;
+
+        var user = await _context.Users.FindAsync(userId);
+        var request = await GetRequestWithNavigationsAsync(requestId);
+        if (user != null && request != null && IsReporter(user))
+        {
+            var st = request.Status?.ToLowerInvariant();
+
+            // Đơn pending chưa giao → Reporter nhận việc + tạo bản nháp hệ thống
+            if (st == "pending" && request.ReporterId == null)
+            {
+                request.ReporterId = userId;
+                request.AssignedAt = DateTime.Now;
+                request.Status = "assigned";
+                await _context.SaveChangesAsync();
+                await EnsureSystemDraftAsync(meta.Value.WorkspaceId, meta.Value.ProjectId, userId, requestId);
+                request = await GetRequestWithNavigationsAsync(requestId);
+                st = "assigned";
+            }
+
+            if (request != null && request.ReporterId == userId && st is "assigned" or "revision_requested")
+            {
+                request.Status = "in_progress";
+                await _context.SaveChangesAsync();
+            }
+        }
+
         return await DownloadDeliverableAsync(meta.Value.WorkspaceId, meta.Value.ProjectId, userId, requestId);
+    }
+
+    public async Task<BespokeRequestItemDto?> UploadRevisionByRequestIdAsync(
+        int userId, int requestId, Stream fileStream, string fileName)
+    {
+        var meta = await ResolveRequestContextAsync(requestId);
+        if (meta == null) return null;
+        return await UploadRevisionAsync(
+            meta.Value.WorkspaceId, meta.Value.ProjectId, userId, requestId, fileStream, fileName);
     }
 
     private async Task<(int WorkspaceId, int ProjectId)?> ResolveRequestContextAsync(int requestId)
@@ -614,7 +880,11 @@ public class BespokeReportService
 
     private static bool CanViewPortalRequest(User user, BespokeRequest request) =>
         IsAdmin(user) ||
-        (IsReporter(user) && (request.ReporterId == user.UserId || request.Status == "pending"));
+        (IsReporter(user) && (
+            request.ReporterId == user.UserId ||
+            (request.ReporterId == null &&
+             string.Equals(request.Status, "pending", StringComparison.OrdinalIgnoreCase))
+        ));
 
     private async Task<List<PortalBespokeRequestDto>> MapPortalListAsync(List<BespokeRequest> requests)
     {
@@ -664,7 +934,10 @@ public class BespokeReportService
             DateTo = meta.DateTo,
             AgreedPrice = r.AgreedPrice,
             HasDeliverable = latestReport != null,
-            DeliverableReportId = latestReport?.ReportId
+            DeliverableReportId = latestReport?.ReportId,
+            RevisionFeedback = meta.RevisionFeedback,
+            Keyword = meta.Keyword,
+            PackageType = meta.PackageType
         };
     }
 
@@ -672,9 +945,30 @@ public class BespokeReportService
     {
         public int ProjectId { get; set; }
         public int WorkspaceId { get; set; }
+        public string? Keyword { get; set; }
+        public string PackageType { get; set; } = "basic";
+        public decimal? PackagePrice { get; set; }
         public string? DateFrom { get; set; }
         public string? DateTo { get; set; }
         public List<string> Modules { get; set; } = new();
         public string Format { get; set; } = "html";
+        public string? RevisionFeedback { get; set; }
+    }
+
+    private static string NormalizePackageType(string? packageType) =>
+        packageType?.Trim().ToLowerInvariant() == "pro" ? "pro" : "basic";
+
+    private static bool IsAllowedDeliverableExtension(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext is ".html" or ".htm" or ".pdf" or ".pptx" or ".ppt";
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var name = Path.GetFileName(fileName);
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        return string.IsNullOrWhiteSpace(name) ? "report.bin" : name;
     }
 }

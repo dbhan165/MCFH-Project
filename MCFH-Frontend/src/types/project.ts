@@ -192,6 +192,7 @@ export interface BespokeRequestItem {
   dateFrom: string | null;
   dateTo: string | null;
   format: string;
+  agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
 }
@@ -210,6 +211,8 @@ export interface BespokeCenter {
 
 export interface CreateBespokePayload {
   title: string;
+  keyword: string;
+  packageType: string;
   requirements?: string;
   dateFrom?: string;
   dateTo?: string;
