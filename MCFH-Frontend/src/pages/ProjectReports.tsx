@@ -307,7 +307,7 @@ const ProjectReports = () => {
         </div>
       )}
 
-      {/* Báo cáo chuyên sâu (Bespoke) */}
+      {/* Báo cáo chuyên sâu (Bespoke)
       <div className="bg-[#151B2B] border border-purple-500/20 rounded-3xl overflow-hidden">
         <div className="p-6 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-purple-500/5 to-transparent">
           <div>
@@ -368,7 +368,7 @@ const ProjectReports = () => {
             ))}
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* Quick generate templates */}
       <div>
