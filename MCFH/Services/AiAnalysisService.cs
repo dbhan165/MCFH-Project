@@ -10,7 +10,7 @@ namespace MCFH.Services;
 public class AiAnalysisService
 {
     private readonly McfhDbContext _context;
-    private readonly IGeminiSentimentService _geminiSentimentService;
+    private readonly IAiSentimentService _aiSentimentService;
     private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
     private readonly IMemoryCache _cache;
@@ -27,13 +27,13 @@ public class AiAnalysisService
 
     public AiAnalysisService(
         McfhDbContext context,
-        IGeminiSentimentService geminiSentimentService,
+        IAiSentimentService aiSentimentService,
         ProjectAlertService alertService,
         IMemoryCache cache,
         ILogger<AiAnalysisService> logger)
     {
         _context = context;
-        _geminiSentimentService = geminiSentimentService;
+        _aiSentimentService = aiSentimentService;
         _alertService = alertService;
         _cache = cache;
         _logger = logger;
@@ -87,7 +87,7 @@ public class AiAnalysisService
         _cache.Set(cacheKey, 0, TimeSpan.FromHours(1)); // Initialize progress
 
         var analyzed = 0;
-        var geminiCount = 0;
+        var aiModelCount = 0;
         var crisisCountInBatch = 0;
 
         foreach (var feedback in pending)
@@ -123,7 +123,7 @@ public class AiAnalysisService
                 _cache.Set(cacheKey, total > 0 ? (analyzed * 100 / total) : 100, TimeSpan.FromHours(1));
 
                 if (analysis.IsCrisisAlert) crisisCountInBatch++;
-                if (analysis.UsedGemini) geminiCount++;
+                if (analysis.UsedAiModel) aiModelCount++;
             }
             catch (Exception ex)
             {
@@ -139,7 +139,7 @@ public class AiAnalysisService
 
         _cache.Remove(cacheKey);
 
-        var engine = geminiCount > 0 ? "Gemini" : "rule-based";
+        var engine = aiModelCount > 0 ? "AI Model" : "rule-based";
         return new AnalyzeProjectResultDto
         {
             ProjectId = projectId,
@@ -204,7 +204,7 @@ public class AiAnalysisService
             await _context.SaveChangesAsync();
             await _alertService.NotifyAfterAnalysisAsync(projectId, analysis.IsCrisisAlert ? 1 : 0);
 
-            var engine = analysis.UsedGemini ? "Gemini" : "rule-based";
+            var engine = analysis.UsedAiModel ? "AI Model" : "rule-based";
             return new AnalyzeProjectResultDto
             {
                 ProjectId = projectId,
@@ -254,17 +254,17 @@ public class AiAnalysisService
     {
         var combinedText = CommentBundleStorage.BuildCombinedAnalysisText(feedback.Content, comments);
 
-        if (_geminiSentimentService.IsConfigured)
+        if (_aiSentimentService.IsConfigured)
         {
-            var geminiResult = await _geminiSentimentService.AnalyzeAsync(
+            var aiResult = await _aiSentimentService.AnalyzeAsync(
                 feedback.Platform ?? "unknown",
                 feedback.AuthorName,
                 feedback.Content,
                 comments,
                 combinedText);
 
-            if (geminiResult != null && !string.IsNullOrWhiteSpace(geminiResult.Summary))
-                return geminiResult;
+            if (aiResult != null && !string.IsNullOrWhiteSpace(aiResult.Summary))
+                return aiResult;
         }
 
         return AnalyzeWithRules(combinedText, comments.Count);
@@ -279,7 +279,7 @@ public class AiAnalysisService
             Confidence = sentiment == "neutral" ? 0.55 : 0.82,
             IsCrisisAlert = sentiment == "negative",
             Summary = BuildFallbackSummary(combinedText, commentCount, sentiment),
-            UsedGemini = false
+            UsedAiModel = false
         };
     }
 

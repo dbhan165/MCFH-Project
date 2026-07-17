@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MCFH.Services;
 
-public interface IGeminiSentimentService
+public interface IAiSentimentService
 {
     bool IsConfigured { get; }
     Task<SentimentAnalysisResult?> AnalyzeAsync(
@@ -21,17 +21,17 @@ public interface IGeminiSentimentService
         IReadOnlyList<string> comments,
         string? combinedText = null,
         CancellationToken cancellationToken = default);
-    Task<GeminiTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default);
+    Task<AiModelTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default);
 }
 
-public class GeminiSentimentService : IGeminiSentimentService
+public class AiSentimentService : IAiSentimentService
 {
     private readonly HttpClient _httpClient;
-    private readonly GeminiOptions _options;
+    private readonly AiModelOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<GeminiSentimentService> _logger;
+    private readonly ILogger<AiSentimentService> _logger;
 
-    /// <summary>Sau khi mọi model đều 429, bỏ qua Gemini cho đến khi restart server.</summary>
+    /// <summary>Sau khi mọi model đều 429, bỏ qua AI model cho đến khi restart server.</summary>
     private static volatile bool _quotaExhausted;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -39,11 +39,11 @@ public class GeminiSentimentService : IGeminiSentimentService
         PropertyNameCaseInsensitive = true
     };
 
-    public GeminiSentimentService(
+    public AiSentimentService(
         HttpClient httpClient,
-        IOptions<GeminiOptions> options,
+        IOptions<AiModelOptions> options,
         IServiceScopeFactory scopeFactory,
-        ILogger<GeminiSentimentService> logger)
+        ILogger<AiSentimentService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
@@ -56,12 +56,19 @@ public class GeminiSentimentService : IGeminiSentimentService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
         
+        // Giữ key cũ GEMINI_* trong DB để không phá dữ liệu SystemSettings đã có.
         var settings = await db.SystemSettings
-            .Where(s => s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
+            .Where(s => s.SettingKey == "AI_MODEL_API_KEY" || s.SettingKey == "AI_MODEL_NAME"
+                     || s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
             .ToDictionaryAsync(s => s.SettingKey, s => s.SettingValue, ct);
 
-        settings.TryGetValue("GEMINI_API_KEY", out var dbKey);
-        settings.TryGetValue("GEMINI_MODEL", out var dbModel);
+        settings.TryGetValue("AI_MODEL_API_KEY", out var dbKey);
+        if (string.IsNullOrWhiteSpace(dbKey))
+            settings.TryGetValue("GEMINI_API_KEY", out dbKey);
+
+        settings.TryGetValue("AI_MODEL_NAME", out var dbModel);
+        if (string.IsNullOrWhiteSpace(dbModel))
+            settings.TryGetValue("GEMINI_MODEL", out dbModel);
 
         return (
             !string.IsNullOrWhiteSpace(dbKey) ? dbKey : _options.ApiKey,
@@ -71,12 +78,12 @@ public class GeminiSentimentService : IGeminiSentimentService
 
     public bool IsConfigured => true; // Tránh dùng biến tĩnh để check config vì config có thể đổi trong DB
 
-    public async Task<GeminiTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default)
+    public async Task<AiModelTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
         var (apiKey, model) = await ResolveSettingsAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            return new GeminiTestResultDto
+            return new AiModelTestResultDto
             {
                 Configured = false,
                 Success = false,
@@ -86,7 +93,7 @@ public class GeminiSentimentService : IGeminiSentimentService
 
         if (_quotaExhausted)
         {
-            return new GeminiTestResultDto
+            return new AiModelTestResultDto
             {
                 Configured = true,
                 Success = false,
@@ -113,9 +120,9 @@ public class GeminiSentimentService : IGeminiSentimentService
             combined,
             cancellationToken);
 
-        if (result?.UsedGemini == true)
+        if (result?.UsedAiModel == true)
         {
-            return new GeminiTestResultDto
+            return new AiModelTestResultDto
             {
                 Configured = true,
                 Success = true,
@@ -126,7 +133,7 @@ public class GeminiSentimentService : IGeminiSentimentService
             };
         }
 
-        return new GeminiTestResultDto
+        return new AiModelTestResultDto
         {
             Configured = true,
             Success = false,
@@ -229,7 +236,7 @@ public class GeminiSentimentService : IGeminiSentimentService
                     continue;
                 }
 
-                var parsed = JsonSerializer.Deserialize<GeminiSentimentPayload>(text, JsonOptions);
+                var parsed = JsonSerializer.Deserialize<AiSentimentPayload>(text, JsonOptions);
                 if (parsed == null)
                     continue;
 
@@ -242,7 +249,7 @@ public class GeminiSentimentService : IGeminiSentimentService
                     Confidence = ClampConfidence(parsed.Confidence),
                     IsCrisisAlert = parsed.IsCrisisAlert,
                     Summary = parsed.Summary,
-                    UsedGemini = true
+                    UsedAiModel = true
                 };
             }
             catch (Exception ex)
@@ -339,7 +346,7 @@ public class GeminiSentimentService : IGeminiSentimentService
         public string? Content { get; set; }
     }
 
-    private sealed class GeminiSentimentPayload
+    private sealed class AiSentimentPayload
     {
         [JsonPropertyName("sentiment")]
         public string? Sentiment { get; set; }

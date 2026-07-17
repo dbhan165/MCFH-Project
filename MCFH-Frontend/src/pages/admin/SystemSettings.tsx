@@ -9,7 +9,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { adminApi, geminiApi } from '../../api/portalApi';
+import { adminApi, aiModelApi } from '../../api/portalApi';
 
 type SettingsTab = 'api' | 'payment' | 'notifications' | 'thresholds';
 
@@ -31,36 +31,39 @@ const defaultModelValue = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
 const SystemSettings = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('api');
   const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKey, setApiKey] = useState('sk-gemini-xxxxxxxxxxxxxxxxxxxx');
+  const [apiKey, setApiKey] = useState('sk-xxxxxxxxxxxxxxxxxxxx');
   const [defaultModel, setDefaultModel] = useState(defaultModelValue);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [isTestingGemini, setIsTestingGemini] = useState(false);
-  const [geminiTestMessage, setGeminiTestMessage] = useState('');
+  const [isTestingAiModel, setIsTestingAiModel] = useState(false);
+  const [aiModelTestMessage, setAiModelTestMessage] = useState('');
 
   useEffect(() => {
     adminApi.getSettings().then((settings) => {
-      const gemini = settings.find((s) => s.settingKey === 'GEMINI_API_KEY');
-      if (gemini?.settingValue) setApiKey(gemini.settingValue);
-      const model = settings.find((s) => s.settingKey === 'GEMINI_MODEL');
+      // Ưu tiên key mới AI_MODEL_*, fallback key cũ GEMINI_* còn trong DB.
+      const key = settings.find((s) => s.settingKey === 'AI_MODEL_API_KEY')
+        ?? settings.find((s) => s.settingKey === 'GEMINI_API_KEY');
+      if (key?.settingValue) setApiKey(key.settingValue);
+      const model = settings.find((s) => s.settingKey === 'AI_MODEL_NAME')
+        ?? settings.find((s) => s.settingKey === 'GEMINI_MODEL');
       if (model?.settingValue) setDefaultModel(model.settingValue);
     }).catch(() => undefined);
   }, []);
 
-  const handleTestGemini = async () => {
-    setIsTestingGemini(true);
-    setGeminiTestMessage('');
+  const handleTestAiModel = async () => {
+    setIsTestingAiModel(true);
+    setAiModelTestMessage('');
     try {
-      const result = await geminiApi.test();
+      const result = await aiModelApi.test();
       const detail = result.sampleSummary
         ? ` Sentiment mẫu: ${result.sampleSentiment ?? '—'}. Tóm tắt: ${result.sampleSummary}`
         : '';
-      setGeminiTestMessage(`${result.message}${detail}`);
+      setAiModelTestMessage(`${result.message}${detail}`);
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { message?: string } } };
-      setGeminiTestMessage(apiErr.response?.data?.message ?? 'Không thể kết nối Gemini — kiểm tra API key và restart backend.');
+      setAiModelTestMessage(apiErr.response?.data?.message ?? 'Không thể kết nối AI Model — kiểm tra API key và restart backend.');
     } finally {
-      setIsTestingGemini(false);
+      setIsTestingAiModel(false);
     }
   };
 
@@ -69,8 +72,8 @@ const SystemSettings = () => {
     setSaveMessage('');
     try {
       await adminApi.updateSettings({
-        GEMINI_API_KEY: apiKey,
-        GEMINI_MODEL: defaultModel,
+        AI_MODEL_API_KEY: apiKey,
+        AI_MODEL_NAME: defaultModel,
         VNPAY_TMN_CODE: null,
         VNPAY_SECRET_KEY: null,
       });
@@ -180,11 +183,11 @@ const SystemSettings = () => {
                 <div className="flex flex-wrap justify-end gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={handleTestGemini}
-                    disabled={isTestingGemini}
+                    onClick={handleTestAiModel}
+                    disabled={isTestingAiModel}
                     className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors"
                   >
-                    {isTestingGemini ? 'Đang test AI...' : 'Test AI Model'}
+                    {isTestingAiModel ? 'Đang test AI...' : 'Test AI Model'}
                   </button>
                   <button
                     type="submit"
@@ -195,9 +198,9 @@ const SystemSettings = () => {
                   </button>
                 </div>
               </form>
-              {geminiTestMessage && (
-                <p className={`mt-4 text-sm ${geminiTestMessage.includes('hoạt động') ? 'text-emerald-600' : 'text-amber-700'}`}>
-                  {geminiTestMessage}
+              {aiModelTestMessage && (
+                <p className={`mt-4 text-sm ${aiModelTestMessage.includes('hoạt động') ? 'text-emerald-600' : 'text-amber-700'}`}>
+                  {aiModelTestMessage}
                 </p>
               )}
               {saveMessage && <p className="mt-4 text-sm text-emerald-600">{saveMessage}</p>}
