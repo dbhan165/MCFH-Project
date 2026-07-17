@@ -33,7 +33,8 @@ public class ProjectExtendedController : ControllerBase
         IProjectService projectService,
         AiAnalysisService aiAnalysisService,
         IMemoryCache cache,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IEmailService emailService)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
@@ -43,7 +44,7 @@ public class ProjectExtendedController : ControllerBase
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
         _reportService = new ProjectReportService(db, _analyticsService);
-        _bespokeService = new BespokeReportService(db, _analyticsService);
+        _bespokeService = new BespokeReportService(db, _analyticsService, emailService);
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -329,6 +330,46 @@ public class ProjectExtendedController : ControllerBase
     {
         var file = await _bespokeService.DownloadDeliverableAsync(workspaceId, projectId, GetUserId(), requestId);
         if (file == null) return NotFound();
-        return File(file.Value.Content, "text/html; charset=utf-8", file.Value.FileName);
+        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+        return File(file.Value.Content, contentType, file.Value.FileName);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/accept-quote")]
+    public async Task<IActionResult> AcceptBespokeQuote(int workspaceId, int projectId, int requestId)
+    {
+        var result = await _bespokeService.AcceptQuoteAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (result == null) return BadRequest(new { message = "Không thể chấp nhận báo giá." });
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/reject-quote")]
+    public async Task<IActionResult> RejectBespokeQuote(int workspaceId, int projectId, int requestId)
+    {
+        var result = await _bespokeService.RejectQuoteAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (result == null) return BadRequest(new { message = "Không thể từ chối báo giá." });
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/request-revision")]
+    public async Task<IActionResult> RequestBespokeRevision(
+        int workspaceId, int projectId, int requestId, [FromBody] RequestBespokeRevisionDto dto)
+    {
+        var result = await _bespokeService.RequestRevisionAsync(workspaceId, projectId, GetUserId(), requestId, dto);
+        if (result == null) return BadRequest(new { message = "Không thể gửi yêu cầu chỉnh sửa." });
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/upload-revision")]
+    public async Task<IActionResult> UploadBespokeRevision(
+        int workspaceId, int projectId, int requestId, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "Vui lòng chọn file báo cáo." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _bespokeService.UploadRevisionAsync(
+            workspaceId, projectId, GetUserId(), requestId, stream, file.FileName);
+        if (result == null) return BadRequest(new { message = "Không thể upload bản sửa đổi." });
+        return Ok(result);
     }
 }

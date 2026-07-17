@@ -153,6 +153,9 @@ export interface PortalBespokeRequest {
   agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
+  revisionFeedback: string | null;
+  keyword: string | null;
+  packageType: string | null;
 }
 
 function mapPortalRequest(r: Record<string, unknown>): PortalBespokeRequest {
@@ -178,6 +181,9 @@ function mapPortalRequest(r: Record<string, unknown>): PortalBespokeRequest {
     agreedPrice: pickField<number>(r, 'agreedPrice', 'AgreedPrice') ?? null,
     hasDeliverable: pickField(r, 'hasDeliverable', 'HasDeliverable') === true,
     deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,
+    revisionFeedback: pickNullableString(r, 'revisionFeedback', 'RevisionFeedback'),
+    keyword: pickNullableString(r, 'keyword', 'Keyword'),
+    packageType: pickNullableString(r, 'packageType', 'PackageType'),
   };
 }
 
@@ -600,14 +606,26 @@ export const reporterApi = {
 
   download: async (requestId: number) => {
     const res = await axiosClient.get(`/api/reporter/requests/${requestId}/download`, { responseType: 'blob' });
+    const disposition = res.headers['content-disposition'] as string | undefined;
+    const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+    const rawName = match?.[1]?.replace(/['"]/g, '');
+    const fileName = rawName || `bespoke-report-${requestId}.html`;
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `bespoke-report-${requestId}.html`);
+    link.setAttribute('download', fileName);
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  uploadRevision: async (requestId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    await axiosClient.post(`/api/reporter/requests/${requestId}/upload-revision`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   },
 
   getPerformance: async () => {
