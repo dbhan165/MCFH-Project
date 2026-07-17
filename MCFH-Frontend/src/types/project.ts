@@ -24,6 +24,11 @@ export interface CreateProjectPayload {
   dataSources?: Array<{ platform: string; targetUrl?: string | null }>;
 }
 
+export interface AiAnalysisProgress {
+  isAnalyzing: boolean;
+  progressPercent: number;
+}
+
 export interface AnalyzeProjectResult {
   projectId: number;
   analyzedCount: number;
@@ -193,6 +198,7 @@ export interface BespokeRequestItem {
   dateFrom: string | null;
   dateTo: string | null;
   format: string;
+  agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
 }
@@ -211,6 +217,8 @@ export interface BespokeCenter {
 
 export interface CreateBespokePayload {
   title: string;
+  keyword: string;
+  packageType: string;
   requirements?: string;
   dateFrom?: string;
   dateTo?: string;

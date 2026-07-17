@@ -12,7 +12,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace MCFH.Services;
 
-public interface IGeminiSentimentService
+public interface IAiSentimentService
 {
     bool IsConfigured { get; }
     Task<SentimentAnalysisResult?> AnalyzeAsync(
@@ -22,31 +22,41 @@ public interface IGeminiSentimentService
         IReadOnlyList<string> comments,
         string? combinedText = null,
         CancellationToken cancellationToken = default);
-    Task<GeminiTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default);
+    Task<AiModelTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default);
 }
 
-public class GeminiSentimentService : IGeminiSentimentService
+public class AiSentimentService : IAiSentimentService
 {
     private readonly HttpClient _httpClient;
-    private readonly GeminiOptions _options;
+    private readonly AiModelOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IMemoryCache _cache;
-    private readonly ILogger<GeminiSentimentService> _logger;
+    private readonly ILogger<AiSentimentService> _logger;
 
-    /// <summary>Sau khi mọi model đều 429, bỏ qua Gemini trong 30 phút.</summary>
-    private static volatile DateTime? _quotaExhaustedUntil;
+    /// <summary>
+    /// Sau khi mọi model đều 429, tạm ngưng gọi AI trong một khoảng cooldown
+    /// (thay vì khóa vĩnh viễn đến khi restart) rồi tự thử lại.
+    /// </summary>
+    private static long _quotaCooldownUntilTicks;
+    private static readonly TimeSpan QuotaCooldown = TimeSpan.FromMinutes(15);
+
+    private static bool IsQuotaCoolingDown =>
+        DateTime.UtcNow.Ticks < Interlocked.Read(ref _quotaCooldownUntilTicks);
+
+    private static void StartQuotaCooldown() =>
+        Interlocked.Exchange(ref _quotaCooldownUntilTicks, DateTime.UtcNow.Add(QuotaCooldown).Ticks);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public GeminiSentimentService(
+    public AiSentimentService(
         HttpClient httpClient,
-        IOptions<GeminiOptions> options,
+        IOptions<AiModelOptions> options,
         IServiceScopeFactory scopeFactory,
         IMemoryCache cache,
-        ILogger<GeminiSentimentService> logger)
+        ILogger<AiSentimentService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
@@ -55,7 +65,7 @@ public class GeminiSentimentService : IGeminiSentimentService
         _logger = logger;
     }
 
-    private bool IsQuotaExhausted => _quotaExhaustedUntil.HasValue && _quotaExhaustedUntil.Value > DateTime.UtcNow;
+
 
     private async Task<(string ApiKey, string Model)> ResolveSettingsAsync(CancellationToken ct)
     {
@@ -68,12 +78,19 @@ public class GeminiSentimentService : IGeminiSentimentService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
         
+        // Giữ key cũ GEMINI_* trong DB để không phá dữ liệu SystemSettings đã có.
         var settings = await db.SystemSettings
-            .Where(s => s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
+            .Where(s => s.SettingKey == "AI_MODEL_API_KEY" || s.SettingKey == "AI_MODEL_NAME"
+                     || s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
             .ToDictionaryAsync(s => s.SettingKey, s => s.SettingValue, ct);
 
-        settings.TryGetValue("GEMINI_API_KEY", out var dbKey);
-        settings.TryGetValue("GEMINI_MODEL", out var dbModel);
+        settings.TryGetValue("AI_MODEL_API_KEY", out var dbKey);
+        if (string.IsNullOrWhiteSpace(dbKey))
+            settings.TryGetValue("GEMINI_API_KEY", out dbKey);
+
+        settings.TryGetValue("AI_MODEL_NAME", out var dbModel);
+        if (string.IsNullOrWhiteSpace(dbModel))
+            settings.TryGetValue("GEMINI_MODEL", out dbModel);
 
         var result = (
             !string.IsNullOrWhiteSpace(dbKey) ? dbKey : _options.ApiKey,
@@ -87,12 +104,12 @@ public class GeminiSentimentService : IGeminiSentimentService
 
     public bool IsConfigured => true; // Tránh dùng biến tĩnh để check config vì config có thể đổi trong DB
 
-    public async Task<GeminiTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default)
+    public async Task<AiModelTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
         var (apiKey, model) = await ResolveSettingsAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            return new GeminiTestResultDto
+            return new AiModelTestResultDto
             {
                 Configured = false,
                 Success = false,
@@ -100,13 +117,13 @@ public class GeminiSentimentService : IGeminiSentimentService
             };
         }
 
-        if (IsQuotaExhausted)
+        if (IsQuotaCoolingDown)
         {
-            return new GeminiTestResultDto
+            return new AiModelTestResultDto
             {
                 Configured = true,
                 Success = false,
-                Message = $"AI Model đang bị tạm khóa do hết quota — thử lại sau {_quotaExhaustedUntil!.Value.ToLocalTime():HH:mm}."
+                Message = "AI Model đang tạm ngưng do hết quota — hệ thống sẽ tự thử lại sau ít phút."
             };
         }
 
@@ -129,9 +146,9 @@ public class GeminiSentimentService : IGeminiSentimentService
             combined,
             cancellationToken);
 
-        if (result?.UsedGemini == true)
+        if (result?.UsedAiModel == true)
         {
-            return new GeminiTestResultDto
+            return new AiModelTestResultDto
             {
                 Configured = true,
                 Success = true,
@@ -142,7 +159,7 @@ public class GeminiSentimentService : IGeminiSentimentService
             };
         }
 
-        return new GeminiTestResultDto
+        return new AiModelTestResultDto
         {
             Configured = true,
             Success = false,
@@ -164,7 +181,7 @@ public class GeminiSentimentService : IGeminiSentimentService
         CancellationToken cancellationToken = default)
     {
         var (apiKey, dynamicModel) = await ResolveSettingsAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(apiKey) || IsQuotaExhausted)
+        if (string.IsNullOrWhiteSpace(apiKey) || IsQuotaCoolingDown)
             return null;
 
         var commentsBlock = comments.Count > 0
@@ -245,7 +262,7 @@ public class GeminiSentimentService : IGeminiSentimentService
                     continue;
                 }
 
-                var parsed = JsonSerializer.Deserialize<GeminiSentimentPayload>(text, JsonOptions);
+                var parsed = JsonSerializer.Deserialize<AiSentimentPayload>(text, JsonOptions);
                 if (parsed == null)
                     continue;
 
@@ -258,7 +275,7 @@ public class GeminiSentimentService : IGeminiSentimentService
                     Confidence = ClampConfidence(parsed.Confidence),
                     IsCrisisAlert = parsed.IsCrisisAlert,
                     Summary = parsed.Summary,
-                    UsedGemini = true
+                    UsedAiModel = true
                 };
             }
             catch (Exception ex)
@@ -270,8 +287,10 @@ public class GeminiSentimentService : IGeminiSentimentService
 
         if (quotaHits > 0 && quotaHits >= models.Count)
         {
-            _quotaExhaustedUntil = DateTime.UtcNow.AddMinutes(30);
-            _logger.LogWarning("Mọi model AI đều hết quota — chuyển rule-based trong 30 phút.");
+            StartQuotaCooldown();
+            _logger.LogWarning(
+                "Mọi model AI đều hết quota — chuyển rule-based, tự thử lại sau {Minutes} phút.",
+                QuotaCooldown.TotalMinutes);
         }
 
         return null;
@@ -355,7 +374,7 @@ public class GeminiSentimentService : IGeminiSentimentService
         public string? Content { get; set; }
     }
 
-    private sealed class GeminiSentimentPayload
+    private sealed class AiSentimentPayload
     {
         [JsonPropertyName("sentiment")]
         public string? Sentiment { get; set; }

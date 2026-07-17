@@ -462,6 +462,57 @@ export const projectApi = {
     window.URL.revokeObjectURL(url);
   },
 
+  requestBespokeRevision: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number,
+    feedback: string
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/request-revision`,
+      { feedback }
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  uploadBespokeRevision: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number,
+    file: File
+  ): Promise<BespokeRequestItem> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/upload-revision`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  acceptBespokeQuote: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/accept-quote`
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  rejectBespokeQuote: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/reject-quote`
+    );
+    return mapBespokeRequest(response.data);
+  },
+
   getMentionFilters: async (workspaceId: number, projectId: number) => {
     const response = await axiosClient.get<unknown[]>(
       `/api/workspaces/${workspaceId}/projects/${projectId}/mention-filters`
@@ -606,6 +657,7 @@ function mapBespokeRequest(r: Record<string, unknown>): BespokeRequestItem {
     dateFrom: pickNullableString(r, 'dateFrom', 'DateFrom'),
     dateTo: pickNullableString(r, 'dateTo', 'DateTo'),
     format: pickString(r, 'format', 'Format') || 'html',
+    agreedPrice: pickField<number>(r, 'agreedPrice', 'AgreedPrice') ?? null,
     hasDeliverable: pickField(r, 'hasDeliverable', 'HasDeliverable') === true,
     deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,
   };

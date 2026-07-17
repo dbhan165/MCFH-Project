@@ -129,7 +129,7 @@ function ProjectCard({
           : compareMode && isCompareSelected
           ? 'border-[#4FD1C5]/60 shadow-[0_16px_40px_rgba(79,209,197,0.15)]'
           : 'border-white/10 hover:border-[#FF7575]/35 hover:shadow-[0_16px_40px_rgba(255,117,117,0.1)]'
-      }`}
+        }`}
     >
       {isBusy && !aiProgress?.isAnalyzing && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-[#1a2133] z-30 overflow-hidden">
@@ -154,11 +154,10 @@ function ProjectCard({
             e.stopPropagation();
             onToggleCompare?.();
           }}
-          className={`absolute top-4 left-4 z-20 w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${
-            isCompareSelected
+          className={`absolute top-4 left-4 z-20 w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${isCompareSelected
               ? 'bg-[#4FD1C5] border-[#4FD1C5] text-[#0A101D]'
               : 'bg-[#0A101D]/80 border-white/20 text-transparent hover:border-[#4FD1C5]/50'
-          }`}
+            }`}
           aria-label={isCompareSelected ? 'Bỏ chọn' : 'Chọn để so sánh'}
         >
           <Check size={14} className={isCompareSelected ? 'opacity-100' : 'opacity-0'} />
@@ -185,18 +184,18 @@ function ProjectCard({
 
           <div className="relative shrink-0" ref={isMenuOpen ? menuRef : undefined}>
             {!compareMode && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMenu();
-              }}
-              disabled={isBusy}
-              className="p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all disabled:opacity-0"
-              aria-label="Tùy chọn dự án"
-            >
-              <MoreVertical size={18} />
-            </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMenu();
+                }}
+                disabled={isBusy}
+                className="p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all disabled:opacity-40"
+                aria-label="Tùy chọn dự án"
+              >
+                {isBusy ? <Loader2 size={18} className="animate-spin" /> : <MoreVertical size={18} />}
+              </button>
             )}
 
             {isMenuOpen && !compareMode && (
@@ -528,6 +527,12 @@ const Projects = () => {
 
     try {
       const result = await projectApi.analyze(wid, project.projectId, true);
+      // Set ngay trạng thái đang phân tích để effect polling khởi động;
+      // các lần poll sau sẽ đồng bộ lại với backend.
+      setAiProgressByProject((prev) => ({
+        ...prev,
+        [project.projectId]: { isAnalyzing: true, progressPercent: 0 },
+      }));
       await alert({
         title: 'Phân tích AI',
         message: result.message,
@@ -626,11 +631,10 @@ const Projects = () => {
                   if (compareMode) exitCompareMode();
                   else setCompareMode(true);
                 }}
-                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold border transition-colors ${
-                  compareMode
+                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold border transition-colors ${compareMode
                     ? 'bg-[#4FD1C5]/15 text-[#4FD1C5] border-[#4FD1C5]/30'
                     : 'text-gray-300 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white'
-                }`}
+                  }`}
               >
                 <GitCompare size={16} />
                 {compareMode ? 'Hủy so sánh' : 'So sánh dự án'}
@@ -642,6 +646,14 @@ const Projects = () => {
             >
               <Plus size={18} />
               Tạo dự án mới
+            </Link>
+
+            <Link
+              to={`/workspace/${workspaceId}/project/bespoke-reports`}
+              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+            >
+              <Plus size={18} />
+              Tạo báo cáo chuyên sâu
             </Link>
           </div>
         </div>

@@ -27,23 +27,27 @@ public class ProjectExtendedController : ControllerBase
 
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ProjectExtendedController> _logger;
 
     public ProjectExtendedController(
         McfhDbContext db,
         IProjectService projectService,
         AiAnalysisService aiAnalysisService,
         IMemoryCache cache,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IEmailService emailService,
+        ILogger<ProjectExtendedController> logger)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
         _cache = cache;
         _scopeFactory = scopeFactory;
+        _logger = logger;
         _analyticsService = new ProjectAnalyticsService(db);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
         _reportService = new ProjectReportService(db, _analyticsService);
-        _bespokeService = new BespokeReportService(db, _analyticsService);
+        _bespokeService = new BespokeReportService(db, _analyticsService, emailService);
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -51,10 +55,15 @@ public class ProjectExtendedController : ControllerBase
     private string GetUserName() => User.FindFirst(ClaimTypes.Name)?.Value ?? "Hệ thống";
 
     [HttpPost("{projectId}/analyze")]
-    public IActionResult Analyze(int workspaceId, int projectId, [FromQuery] bool force = true)
+    public async Task<IActionResult> Analyze(int workspaceId, int projectId, [FromQuery] bool force = true)
     {
         var userId = GetUserId();
-        
+
+        // Check quyền trước khi queue để không trả "queued" ảo cho user không có quyền.
+        var project = await _projectService.GetByIdAsync(workspaceId, projectId, userId);
+        if (project == null)
+            return NotFound(new { message = "Project không tồn tại hoặc bạn không có quyền truy cập." });
+
         Task.Run(async () =>
         {
             try
@@ -67,10 +76,8 @@ public class ProjectExtendedController : ControllerBase
             {
                 using var scope = _scopeFactory.CreateScope();
                 var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProjectExtendedController>>();
-                logger.LogError(ex, "Lỗi phân tích AI background cho project {ProjectId}", projectId);
-
-                var cacheKey = $"Project:{projectId}:AiProgress";
-                _cache.Remove(cacheKey);
+                logger.LogError(ex, "Phân tích AI nền thất bại (project {ProjectId})", projectId);
+                _cache.Remove($"Project:{projectId}:AiProgress");
             }
         });
 
@@ -80,9 +87,9 @@ public class ProjectExtendedController : ControllerBase
     [HttpGet("{projectId}/analytics/progress")]
     public async Task<IActionResult> GetAnalysisProgress(int workspaceId, int projectId)
     {
-        var userId = GetUserId();
-        var project = await _projectService.GetByIdAsync(workspaceId, projectId, userId);
-        if (project == null) return NotFound();
+        var project = await _projectService.GetByIdAsync(workspaceId, projectId, GetUserId());
+        if (project == null)
+            return NotFound(new { message = "Project không tồn tại hoặc bạn không có quyền truy cập." });
 
         var cacheKey = $"Project:{projectId}:AiProgress";
         if (_cache.TryGetValue(cacheKey, out int percent))
@@ -336,6 +343,46 @@ public class ProjectExtendedController : ControllerBase
     {
         var file = await _bespokeService.DownloadDeliverableAsync(workspaceId, projectId, GetUserId(), requestId);
         if (file == null) return NotFound();
-        return File(file.Value.Content, "text/html; charset=utf-8", file.Value.FileName);
+        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+        return File(file.Value.Content, contentType, file.Value.FileName);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/accept-quote")]
+    public async Task<IActionResult> AcceptBespokeQuote(int workspaceId, int projectId, int requestId)
+    {
+        var result = await _bespokeService.AcceptQuoteAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (result == null) return BadRequest(new { message = "Không thể chấp nhận báo giá." });
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/reject-quote")]
+    public async Task<IActionResult> RejectBespokeQuote(int workspaceId, int projectId, int requestId)
+    {
+        var result = await _bespokeService.RejectQuoteAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (result == null) return BadRequest(new { message = "Không thể từ chối báo giá." });
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/request-revision")]
+    public async Task<IActionResult> RequestBespokeRevision(
+        int workspaceId, int projectId, int requestId, [FromBody] RequestBespokeRevisionDto dto)
+    {
+        var result = await _bespokeService.RequestRevisionAsync(workspaceId, projectId, GetUserId(), requestId, dto);
+        if (result == null) return BadRequest(new { message = "Không thể gửi yêu cầu chỉnh sửa." });
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/upload-revision")]
+    public async Task<IActionResult> UploadBespokeRevision(
+        int workspaceId, int projectId, int requestId, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "Vui lòng chọn file báo cáo." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _bespokeService.UploadRevisionAsync(
+            workspaceId, projectId, GetUserId(), requestId, stream, file.FileName);
+        if (result == null) return BadRequest(new { message = "Không thể upload bản sửa đổi." });
+        return Ok(result);
     }
 }

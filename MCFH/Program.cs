@@ -106,13 +106,13 @@ namespace MCFH
             builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
             builder.Services.AddScoped<IProjectService, ProjectService>();
 
-            builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
+            builder.Services.Configure<AiModelOptions>(builder.Configuration.GetSection(AiModelOptions.SectionName));
             builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
             builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
             builder.Services.Configure<SerpApiOptions>(builder.Configuration.GetSection(SerpApiOptions.SectionName));
             builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
             builder.Services.AddHttpClient<SerpApiNewsDiscovery>();
-            builder.Services.AddHttpClient<IGeminiSentimentService, GeminiSentimentService>();
+            builder.Services.AddHttpClient<IAiSentimentService, AiSentimentService>();
             builder.Services.AddScoped<INotificationService, NotificationService>();
             builder.Services.AddScoped<ProjectAlertService>();
             builder.Services.AddScoped<MentionManagementService>();
@@ -125,6 +125,7 @@ namespace MCFH
             builder.Services.AddScoped<PlatformCookieAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();
             builder.Services.AddSingleton<ScrapeJobRunner>();
+            builder.Services.AddScoped<ScrapeOrderService>();
 
             // 4. Cấu hình Hangfire — dùng chung connection string "MyCnn"
             builder.Services.AddHangfire(config => config
@@ -161,6 +162,13 @@ namespace MCFH
                 "scrape-due-projects",
                 service => service.RunDueProjectsAsync(),
                 scrapeSchedulerCron
+            );
+
+            // Recovery: nhặt lại các scrape order kẹt ở scraping/analyzing sau khi backend restart.
+            RecurringJob.AddOrUpdate<ScrapeOrderService>(
+                "recover-stuck-scrape-orders",
+                service => service.RecoverStuckOrdersAsync(),
+                "*/5 * * * *"
             );
 
             app.Run();

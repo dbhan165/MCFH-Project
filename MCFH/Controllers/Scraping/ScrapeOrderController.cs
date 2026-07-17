@@ -17,13 +17,9 @@ public class ScrapeOrderController : ControllerBase
 {
     private readonly ScrapeOrderService _service;
 
-    public ScrapeOrderController(
-        McfhDbContext db,
-        ScrapeJobRunner jobRunner,
-        IServiceScopeFactory scopeFactory,
-        IOptions<ScrapeOptions> scrapeOptions)
+    public ScrapeOrderController(ScrapeOrderService service)
     {
-        _service = new ScrapeOrderService(db, jobRunner, scopeFactory, scrapeOptions);
+        _service = service;
     }
 
     private int? GetUserId()
