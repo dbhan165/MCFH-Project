@@ -2,6 +2,8 @@ using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Models.Scraping;
 using MCFH.Services.Scraping;
+using System.Collections.Concurrent;
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -14,6 +16,7 @@ public class AiAnalysisService
     private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
     private readonly IMemoryCache _cache;
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> _projectLocks = new();
 
     private static readonly string[] PositiveWords =
     {
@@ -60,12 +63,13 @@ public class AiAnalysisService
 
     public async Task<AnalyzeProjectResultDto> AnalyzePendingFeedbacksAsync(int projectId, bool force = true)
     {
-        if (!RunningProjects.TryAdd(projectId, 0))
+        var projectLock = _projectLocks.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        if (!await projectLock.WaitAsync(TimeSpan.FromSeconds(5)))
         {
             return new AnalyzeProjectResultDto
             {
                 ProjectId = projectId,
-                Message = "Đang có phiên phân tích AI khác chạy cho dự án này — vui lòng đợi hoàn tất."
+                Message = "Hệ thống đang phân tích dữ liệu cho dự án này, vui lòng chờ trong giây lát."
             };
         }
 
@@ -165,9 +169,8 @@ public class AiAnalysisService
         }
         finally
         {
-            // Luôn dọn progress + nhả lock, kể cả khi exception giữa chừng.
             _cache.Remove(cacheKey);
-            RunningProjects.TryRemove(projectId, out _);
+            projectLock.Release();
         }
     }
 

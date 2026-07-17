@@ -74,7 +74,9 @@ public class ProjectExtendedController : ControllerBase
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Phân tích AI nền thất bại (project {ProjectId})", projectId);
+                using var scope = _scopeFactory.CreateScope();
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProjectExtendedController>>();
+                logger.LogError(ex, "Phân tích AI nền thất bại (project {ProjectId})", projectId);
                 _cache.Remove($"Project:{projectId}:AiProgress");
             }
         });

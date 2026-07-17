@@ -35,6 +35,7 @@ export interface AnalyzeProjectResult {
   skippedCount: number;
   totalFeedbacks: number;
   message: string;
+  status?: string;
 }
 
 export interface ProjectOverviewStats {
@@ -258,4 +259,9 @@ export interface ScrapeJobStatus {
 export interface ScrapeJobStart {
   jobId: string;
   projectId: number;
+}
+
+export interface AiAnalysisProgress {
+  isAnalyzing: boolean;
+  progressPercent: number;
 }
