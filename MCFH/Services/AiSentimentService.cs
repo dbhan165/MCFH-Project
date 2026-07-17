@@ -31,8 +31,18 @@ public class AiSentimentService : IAiSentimentService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AiSentimentService> _logger;
 
-    /// <summary>Sau khi mọi model đều 429, bỏ qua AI model cho đến khi restart server.</summary>
-    private static volatile bool _quotaExhausted;
+    /// <summary>
+    /// Sau khi mọi model đều 429, tạm ngưng gọi AI trong một khoảng cooldown
+    /// (thay vì khóa vĩnh viễn đến khi restart) rồi tự thử lại.
+    /// </summary>
+    private static long _quotaCooldownUntilTicks;
+    private static readonly TimeSpan QuotaCooldown = TimeSpan.FromMinutes(15);
+
+    private static bool IsQuotaCoolingDown =>
+        DateTime.UtcNow.Ticks < Interlocked.Read(ref _quotaCooldownUntilTicks);
+
+    private static void StartQuotaCooldown() =>
+        Interlocked.Exchange(ref _quotaCooldownUntilTicks, DateTime.UtcNow.Add(QuotaCooldown).Ticks);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -91,13 +101,13 @@ public class AiSentimentService : IAiSentimentService
             };
         }
 
-        if (_quotaExhausted)
+        if (IsQuotaCoolingDown)
         {
             return new AiModelTestResultDto
             {
                 Configured = true,
                 Success = false,
-                Message = "AI Model đang bị tạm khóa do hết quota — restart backend rồi thử lại."
+                Message = "AI Model đang tạm ngưng do hết quota — hệ thống sẽ tự thử lại sau ít phút."
             };
         }
 
@@ -155,7 +165,7 @@ public class AiSentimentService : IAiSentimentService
         CancellationToken cancellationToken = default)
     {
         var (apiKey, dynamicModel) = await ResolveSettingsAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(apiKey) || _quotaExhausted)
+        if (string.IsNullOrWhiteSpace(apiKey) || IsQuotaCoolingDown)
             return null;
 
         var commentsBlock = comments.Count > 0
@@ -261,8 +271,10 @@ public class AiSentimentService : IAiSentimentService
 
         if (quotaHits > 0 && quotaHits >= models.Count)
         {
-            _quotaExhausted = true;
-            _logger.LogWarning("Mọi model AI đều hết quota — chuyển rule-based cho các bài còn lại.");
+            StartQuotaCooldown();
+            _logger.LogWarning(
+                "Mọi model AI đều hết quota — chuyển rule-based, tự thử lại sau {Minutes} phút.",
+                QuotaCooldown.TotalMinutes);
         }
 
         return null;

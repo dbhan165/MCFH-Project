@@ -55,101 +55,120 @@ public class AiAnalysisService
         return await AnalyzePendingFeedbacksAsync(projectId, force);
     }
 
+    /// <summary>Project đang có phiên phân tích chạy — chặn double-run làm hỏng dữ liệu.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> RunningProjects = new();
+
     public async Task<AnalyzeProjectResultDto> AnalyzePendingFeedbacksAsync(int projectId, bool force = true)
     {
-        var feedbacks = await _context.ScrapedFeedbacks
-            .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
-            .Include(f => f.AiAnalysis)
-            .ToListAsync();
-
-        if (feedbacks.Count == 0)
+        if (!RunningProjects.TryAdd(projectId, 0))
         {
             return new AnalyzeProjectResultDto
             {
                 ProjectId = projectId,
-                Message = "Chưa có mention nào. Hãy cào dữ liệu trước."
+                Message = "Đang có phiên phân tích AI khác chạy cho dự án này — vui lòng đợi hoàn tất."
             };
         }
 
-        var pendingCount = feedbacks.Count(f => f.AiAnalysis == null);
-
-        // Đã phân tích hết → tự động chạy lại để cập nhật tóm tắt + comment
-        if (!force && pendingCount == 0)
-            force = true;
-
-        if (force)
-            await ClearExistingAnalysesAsync(feedbacks);
-
-        var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
-        var total = pending.Count;
-        
         var cacheKey = $"Project:{projectId}:AiProgress";
-        _cache.Set(cacheKey, 0, TimeSpan.FromHours(1)); // Initialize progress
-
-        var analyzed = 0;
-        var aiModelCount = 0;
-        var crisisCountInBatch = 0;
-
-        foreach (var feedback in pending)
+        try
         {
-            try
+            var feedbacks = await _context.ScrapedFeedbacks
+                .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
+                .Include(f => f.AiAnalysis)
+                .ToListAsync();
+
+            if (feedbacks.Count == 0)
             {
-                var comments = await EnsureCommentsAsync(feedback);
-                var analysis = await AnalyzeFeedbackAsync(feedback, comments);
-
-                if (string.IsNullOrWhiteSpace(analysis.Summary))
-                    analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
-
-                await CommentBundleStorage.SaveAiSummaryAsync(
-                    feedback.FeedbackId,
-                    analysis.Summary,
-                    feedback.CommentsFileUrl);
-
-                if (comments.Count > 0)
-                    feedback.CommentsCount = comments.Count;
-
-                feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
-
-                _context.AiAnalyses.Add(new AiAnalysis
+                return new AnalyzeProjectResultDto
                 {
-                    FeedbackId = feedback.FeedbackId,
-                    MainSentiment = analysis.Sentiment,
-                    ConfidenceScore = analysis.Confidence,
-                    IsCrisisAlert = analysis.IsCrisisAlert,
-                    ProcessedAt = DateTime.Now
-                });
-
-                analyzed++;
-                _cache.Set(cacheKey, total > 0 ? (analyzed * 100 / total) : 100, TimeSpan.FromHours(1));
-
-                if (analysis.IsCrisisAlert) crisisCountInBatch++;
-                if (analysis.UsedAiModel) aiModelCount++;
+                    ProjectId = projectId,
+                    Message = "Chưa có mention nào. Hãy cào dữ liệu trước."
+                };
             }
-            catch (Exception ex)
+
+            var pendingCount = feedbacks.Count(f => f.AiAnalysis == null);
+
+            // Đã phân tích hết → tự động chạy lại để cập nhật tóm tắt + comment
+            if (!force && pendingCount == 0)
+                force = true;
+
+            if (force)
+                await ClearExistingAnalysesAsync(feedbacks);
+
+            var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
+            var total = pending.Count;
+
+            _cache.Set(cacheKey, 0, TimeSpan.FromHours(1)); // Initialize progress
+
+            var analyzed = 0;
+            var aiModelCount = 0;
+            var crisisCountInBatch = 0;
+
+            foreach (var feedback in pending)
             {
-                _logger.LogError(ex, "Phân tích thất bại feedback {FeedbackId}", feedback.FeedbackId);
+                try
+                {
+                    var comments = await EnsureCommentsAsync(feedback);
+                    var analysis = await AnalyzeFeedbackAsync(feedback, comments);
+
+                    if (string.IsNullOrWhiteSpace(analysis.Summary))
+                        analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
+
+                    await CommentBundleStorage.SaveAiSummaryAsync(
+                        feedback.FeedbackId,
+                        analysis.Summary,
+                        feedback.CommentsFileUrl);
+
+                    if (comments.Count > 0)
+                        feedback.CommentsCount = comments.Count;
+
+                    feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
+
+                    _context.AiAnalyses.Add(new AiAnalysis
+                    {
+                        FeedbackId = feedback.FeedbackId,
+                        MainSentiment = analysis.Sentiment,
+                        ConfidenceScore = analysis.Confidence,
+                        IsCrisisAlert = analysis.IsCrisisAlert,
+                        ProcessedAt = DateTime.Now
+                    });
+
+                    analyzed++;
+                    _cache.Set(cacheKey, total > 0 ? (analyzed * 100 / total) : 100, TimeSpan.FromHours(1));
+
+                    if (analysis.IsCrisisAlert) crisisCountInBatch++;
+                    if (analysis.UsedAiModel) aiModelCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Phân tích thất bại feedback {FeedbackId}", feedback.FeedbackId);
+                }
             }
+
+            if (analyzed > 0)
+            {
+                await _context.SaveChangesAsync();
+                await _alertService.NotifyAfterAnalysisAsync(projectId, crisisCountInBatch);
+            }
+
+            var engine = aiModelCount > 0 ? "AI Model" : "rule-based";
+            return new AnalyzeProjectResultDto
+            {
+                ProjectId = projectId,
+                AnalyzedCount = analyzed,
+                SkippedCount = feedbacks.Count - analyzed,
+                TotalFeedbacks = feedbacks.Count,
+                Message = analyzed > 0
+                    ? $"Đã phân tích {analyzed}/{feedbacks.Count} bài (caption + bình luận) bằng {engine}."
+                    : "Không phân tích được bài nào — kiểm tra dữ liệu đã cào hoặc log server."
+            };
         }
-
-        if (analyzed > 0)
+        finally
         {
-            await _context.SaveChangesAsync();
-            await _alertService.NotifyAfterAnalysisAsync(projectId, crisisCountInBatch);
+            // Luôn dọn progress + nhả lock, kể cả khi exception giữa chừng.
+            _cache.Remove(cacheKey);
+            RunningProjects.TryRemove(projectId, out _);
         }
-
-        _cache.Remove(cacheKey);
-
-        var engine = aiModelCount > 0 ? "AI Model" : "rule-based";
-        return new AnalyzeProjectResultDto
-        {
-            ProjectId = projectId,
-            AnalyzedCount = analyzed,
-            SkippedCount = feedbacks.Count - analyzed,
-            TotalFeedbacks = feedbacks.Count,
-            Message = analyzed > 0
-                ? $"Đã phân tích {analyzed}/{feedbacks.Count} bài (caption + bình luận) bằng {engine}."
-                : "Không phân tích được bài nào — kiểm tra dữ liệu đã cào hoặc log server."
-        };
     }
 
     public async Task<AnalyzeProjectResultDto?> AnalyzeSingleFeedbackAsync(

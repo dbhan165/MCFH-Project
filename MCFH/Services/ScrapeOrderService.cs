@@ -165,32 +165,41 @@ public class ScrapeOrderService
         if (order.Status == "scraping" && !string.IsNullOrEmpty(order.ScrapeJobId))
         {
             var job = _jobRunner.GetJob(order.ScrapeJobId, order.UserId);
-            if (job != null)
+            if (job == null)
             {
-                order.ProgressPercent = CalcProgress(job);
-                order.StatusMessage = BuildProgressMessage(job) ?? job.PhaseMessage ?? "Đang cào dữ liệu từ các nền tảng...";
+                // Job chỉ tồn tại in-memory — backend restart giữa chừng thì mất.
+                // Chuyển sang analyzing để phân tích phần dữ liệu đã cào được.
+                order.Status = "analyzing";
+                order.ProgressPercent = 85;
+                order.StatusMessage = "Hệ thống khởi động lại giữa chừng — đang phân tích phần dữ liệu đã cào được...";
+                await _context.SaveChangesAsync();
+                _ = RunPostScrapeAsync(orderId);
+                return;
+            }
 
-                if (job.Status == "failed")
-                {
-                    order.Status = "failed";
-                    order.StatusMessage = string.IsNullOrWhiteSpace(job.ErrorMessage)
-                        ? "Cào dữ liệu thất bại. Vui lòng liên hệ hỗ trợ hoặc thử lại."
-                        : $"Cào dữ liệu thất bại: {job.ErrorMessage}";
-                    await _context.SaveChangesAsync();
-                }
-                else if (job.Status is "completed" or "cancelled")
-                {
-                    // cancelled: vẫn phân tích phần dữ liệu đã cào được.
-                    order.Status = "analyzing";
-                    order.ProgressPercent = 85;
-                    order.StatusMessage = "Cào xong — AI đang phân tích sentiment và tạo báo cáo...";
-                    await _context.SaveChangesAsync();
-                    _ = RunPostScrapeAsync(orderId);
-                }
-                else
-                {
-                    await _context.SaveChangesAsync();
-                }
+            order.ProgressPercent = CalcProgress(job);
+            order.StatusMessage = BuildProgressMessage(job) ?? job.PhaseMessage ?? "Đang cào dữ liệu từ các nền tảng...";
+
+            if (job.Status == "failed")
+            {
+                order.Status = "failed";
+                order.StatusMessage = string.IsNullOrWhiteSpace(job.ErrorMessage)
+                    ? "Cào dữ liệu thất bại. Vui lòng liên hệ hỗ trợ hoặc thử lại."
+                    : $"Cào dữ liệu thất bại: {job.ErrorMessage}";
+                await _context.SaveChangesAsync();
+            }
+            else if (job.Status is "completed" or "cancelled")
+            {
+                // cancelled: vẫn phân tích phần dữ liệu đã cào được.
+                order.Status = "analyzing";
+                order.ProgressPercent = 85;
+                order.StatusMessage = "Cào xong — AI đang phân tích sentiment và tạo báo cáo...";
+                await _context.SaveChangesAsync();
+                _ = RunPostScrapeAsync(orderId);
+            }
+            else
+            {
+                await _context.SaveChangesAsync();
             }
             return;
         }
@@ -202,8 +211,39 @@ public class ScrapeOrderService
         }
     }
 
+    /// <summary>Order đang chạy post-scrape (in-memory) — chặn trigger trùng từ nhiều request poll.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> PostScrapeRunning = new();
+
+    /// <summary>
+    /// Hangfire recurring: nhặt lại các order kẹt sau khi backend restart
+    /// (job scrape in-memory đã mất, hoặc RunPostScrapeAsync bị ngắt giữa chừng).
+    /// </summary>
+    public async Task RecoverStuckOrdersAsync()
+    {
+        var stuck = await _context.ScrapeOrders
+            .Where(o => o.Status == "scraping" || o.Status == "analyzing")
+            .Select(o => o.OrderId)
+            .ToListAsync();
+
+        foreach (var orderId in stuck)
+        {
+            // SyncOrderProgressAsync tự xử lý cả 2 trường hợp:
+            // - scraping + job mất → chuyển analyzing + RunPostScrapeAsync
+            // - analyzing → RunPostScrapeAsync có guard, không chạy trùng
+            await SyncOrderProgressAsync(orderId);
+
+            var order = await _context.ScrapeOrders.AsNoTracking()
+                .FirstOrDefaultAsync(o => o.OrderId == orderId);
+            if (order?.Status == "analyzing" && !PostScrapeRunning.ContainsKey(orderId))
+                _ = RunPostScrapeAsync(orderId);
+        }
+    }
+
     private async Task RunPostScrapeAsync(int orderId)
     {
+        if (!PostScrapeRunning.TryAdd(orderId, 0))
+            return;
+
         try
         {
             using var scope = _scopeFactory.CreateScope();
@@ -255,6 +295,10 @@ public class ScrapeOrderService
             order.StatusMessage = "Phân tích AI gặp lỗi — vui lòng vào dự án và thử «Phân tích lại».";
             order.CompletedAt = DateTime.Now;
             await db.SaveChangesAsync();
+        }
+        finally
+        {
+            PostScrapeRunning.TryRemove(orderId, out _);
         }
     }
 

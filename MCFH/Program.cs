@@ -125,6 +125,7 @@ namespace MCFH
             builder.Services.AddScoped<PlatformCookieAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();
             builder.Services.AddSingleton<ScrapeJobRunner>();
+            builder.Services.AddScoped<ScrapeOrderService>();
 
             // 4. Cấu hình Hangfire — dùng chung connection string "MyCnn"
             builder.Services.AddHangfire(config => config
@@ -161,6 +162,13 @@ namespace MCFH
                 "scrape-due-projects",
                 service => service.RunDueProjectsAsync(),
                 scrapeSchedulerCron
+            );
+
+            // Recovery: nhặt lại các scrape order kẹt ở scraping/analyzing sau khi backend restart.
+            RecurringJob.AddOrUpdate<ScrapeOrderService>(
+                "recover-stuck-scrape-orders",
+                service => service.RecoverStuckOrdersAsync(),
+                "*/5 * * * *"
             );
 
             app.Run();
