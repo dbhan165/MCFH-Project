@@ -12,7 +12,6 @@ import {
   User,
   LogOut,
   Search,
-  Bell,
   Radio,
   HelpCircle,
 } from 'lucide-react';

@@ -527,6 +527,12 @@ const Projects = () => {
 
     try {
       const result = await projectApi.analyze(wid, project.projectId, true);
+      // Set ngay trạng thái đang phân tích để effect polling khởi động;
+      // các lần poll sau sẽ đồng bộ lại với backend.
+      setAiProgressByProject((prev) => ({
+        ...prev,
+        [project.projectId]: { isAnalyzing: true, progressPercent: 0 },
+      }));
       await alert({
         title: 'Phân tích AI',
         message: result.message,

@@ -6,7 +6,6 @@ import {
   Gauge,
   Eye,
   EyeOff,
-  ChevronDown,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, aiModelApi } from '../../api/portalApi';

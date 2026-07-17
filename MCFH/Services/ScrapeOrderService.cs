@@ -1,6 +1,7 @@
 using System.Globalization;
 using MCFH.Configuration;
 using MCFH.DTOs;
+using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Models.Scraping;
 using MCFH.Services.Scraping;
@@ -169,8 +170,17 @@ public class ScrapeOrderService
                 order.ProgressPercent = CalcProgress(job);
                 order.StatusMessage = BuildProgressMessage(job) ?? job.PhaseMessage ?? "Đang cào dữ liệu từ các nền tảng...";
 
-                if (job.Status is "completed" or "failed" or "cancelled")
+                if (job.Status == "failed")
                 {
+                    order.Status = "failed";
+                    order.StatusMessage = string.IsNullOrWhiteSpace(job.ErrorMessage)
+                        ? "Cào dữ liệu thất bại. Vui lòng liên hệ hỗ trợ hoặc thử lại."
+                        : $"Cào dữ liệu thất bại: {job.ErrorMessage}";
+                    await _context.SaveChangesAsync();
+                }
+                else if (job.Status is "completed" or "cancelled")
+                {
+                    // cancelled: vẫn phân tích phần dữ liệu đã cào được.
                     order.Status = "analyzing";
                     order.ProgressPercent = 85;
                     order.StatusMessage = "Cào xong — AI đang phân tích sentiment và tạo báo cáo...";
@@ -205,7 +215,16 @@ public class ScrapeOrderService
             if (order == null || order.Status != "analyzing")
                 return;
 
-            var analyzeResult = await analyze.AnalyzePendingFeedbacksAsync(order.ProjectId, true);
+            // Scrape đã tự chạy AI cho feedback mới — ở đây chỉ phân tích phần còn sót,
+            // tránh force xóa + chạy lại toàn bộ (tốn quota, chậm gấp đôi).
+            var hasPending = await db.ScrapedFeedbacks
+                .Where(f => f.ProjectId == order.ProjectId && f.IsDeleted != true)
+                .AnyAsync(f => f.AiAnalysis == null);
+
+            AnalyzeProjectResultDto? analyzeResult = null;
+            if (hasPending)
+                analyzeResult = await analyze.AnalyzePendingFeedbacksAsync(order.ProjectId, false);
+
             var project = await db.Projects.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.ProjectId == order.ProjectId);
 
@@ -213,7 +232,7 @@ public class ScrapeOrderService
             order.ProgressPercent = 100;
             order.ReportReadyAt = DateTime.Now;
             order.CompletedAt = DateTime.Now;
-            order.StatusMessage = analyzeResult.Message ?? "Báo cáo đã sẵn sàng.";
+            order.StatusMessage = analyzeResult?.Message ?? "Báo cáo đã sẵn sàng.";
             await db.SaveChangesAsync();
 
             await notify.NotifyAsync(

@@ -24,6 +24,11 @@ export interface CreateProjectPayload {
   dataSources?: Array<{ platform: string; targetUrl?: string | null }>;
 }
 
+export interface AiAnalysisProgress {
+  isAnalyzing: boolean;
+  progressPercent: number;
+}
+
 export interface AnalyzeProjectResult {
   projectId: number;
   analyzedCount: number;

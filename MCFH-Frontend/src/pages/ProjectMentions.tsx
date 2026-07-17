@@ -23,7 +23,7 @@ import {
   BrainCircuit,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { AiAnalysisProgress, ProjectMention, MentionTag } from '../api/projectApi';
+import type { AiAnalysisProgress, ProjectMention, MentionTag } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
 import { useAppModal } from '../contexts/AppModalContext';

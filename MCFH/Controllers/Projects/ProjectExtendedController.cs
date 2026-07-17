@@ -27,6 +27,7 @@ public class ProjectExtendedController : ControllerBase
 
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ProjectExtendedController> _logger;
 
     public ProjectExtendedController(
         McfhDbContext db,
@@ -34,12 +35,14 @@ public class ProjectExtendedController : ControllerBase
         AiAnalysisService aiAnalysisService,
         IMemoryCache cache,
         IServiceScopeFactory scopeFactory,
-        IEmailService emailService)
+        IEmailService emailService,
+        ILogger<ProjectExtendedController> logger)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
         _cache = cache;
         _scopeFactory = scopeFactory;
+        _logger = logger;
         _analyticsService = new ProjectAnalyticsService(db);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
@@ -52,10 +55,15 @@ public class ProjectExtendedController : ControllerBase
     private string GetUserName() => User.FindFirst(ClaimTypes.Name)?.Value ?? "Hệ thống";
 
     [HttpPost("{projectId}/analyze")]
-    public IActionResult Analyze(int workspaceId, int projectId, [FromQuery] bool force = true)
+    public async Task<IActionResult> Analyze(int workspaceId, int projectId, [FromQuery] bool force = true)
     {
         var userId = GetUserId();
-        
+
+        // Check quyền trước khi queue để không trả "queued" ảo cho user không có quyền.
+        var project = await _projectService.GetByIdAsync(workspaceId, projectId, userId);
+        if (project == null)
+            return NotFound(new { message = "Project không tồn tại hoặc bạn không có quyền truy cập." });
+
         Task.Run(async () =>
         {
             try
@@ -66,9 +74,8 @@ public class ProjectExtendedController : ControllerBase
             }
             catch (Exception ex)
             {
-                // Task failed
-                var cacheKey = $"Project:{projectId}:AiProgress";
-                _cache.Remove(cacheKey);
+                _logger.LogError(ex, "Phân tích AI nền thất bại (project {ProjectId})", projectId);
+                _cache.Remove($"Project:{projectId}:AiProgress");
             }
         });
 
@@ -76,8 +83,12 @@ public class ProjectExtendedController : ControllerBase
     }
 
     [HttpGet("{projectId}/analytics/progress")]
-    public IActionResult GetAnalysisProgress(int workspaceId, int projectId)
+    public async Task<IActionResult> GetAnalysisProgress(int workspaceId, int projectId)
     {
+        var project = await _projectService.GetByIdAsync(workspaceId, projectId, GetUserId());
+        if (project == null)
+            return NotFound(new { message = "Project không tồn tại hoặc bạn không có quyền truy cập." });
+
         var cacheKey = $"Project:{projectId}:AiProgress";
         if (_cache.TryGetValue(cacheKey, out int percent))
         {
