@@ -867,12 +867,15 @@ function ShareOfVoiceCard({ model }: { model: CompareViewModel }) {
                 data={pieData}
                 cx="50%"
                 cy="50%"
-                innerRadius="58%"
-                outerRadius="82%"
-                paddingAngle={3}
+                innerRadius="65%"
+                outerRadius="85%"
+                paddingAngle={2}
+                startAngle={90}
+                endAngle={-270}
                 dataKey="value"
-                stroke="rgba(255,255,255,0.15)"
+                stroke="rgba(255,255,255,0.05)"
                 strokeWidth={2}
+                cornerRadius={4}
               >
                 {pieData.map((slice) => (
                   <Cell key={slice.key} fill={slice.color} />

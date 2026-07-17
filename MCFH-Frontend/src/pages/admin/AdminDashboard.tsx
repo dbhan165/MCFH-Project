@@ -260,10 +260,15 @@ const AdminDashboard = () => {
                     data={subscriptionData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={55}
-                    outerRadius={80}
+                    innerRadius="65%"
+                    outerRadius="85%"
                     paddingAngle={2}
+                    startAngle={90}
+                    endAngle={-270}
                     dataKey="value"
+                    stroke="rgba(255,255,255,0.05)"
+                    strokeWidth={2}
+                    cornerRadius={4}
                   >
                     {subscriptionData.map((entry) => (
                       <Cell key={entry.name} fill={entry.color} />

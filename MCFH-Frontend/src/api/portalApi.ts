@@ -540,7 +540,7 @@ export const adminApi = {
   },
 };
 
-export interface GeminiTestResult {
+export interface AiModelTestResult {
   configured: boolean;
   success: boolean;
   modelUsed: string | null;
@@ -549,17 +549,17 @@ export interface GeminiTestResult {
   sampleSentiment: string | null;
 }
 
-export const geminiApi = {
+export const aiModelApi = {
   status: async () => {
-    const res = await axiosClient.get<Record<string, unknown>>('/api/gemini/status');
+    const res = await axiosClient.get<Record<string, unknown>>('/api/ai-model/status');
     return {
       configured: pickField(res.data, 'configured', 'Configured') === true,
       message: pickString(res.data, 'message', 'Message'),
     };
   },
 
-  test: async (): Promise<GeminiTestResult> => {
-    const res = await axiosClient.post<Record<string, unknown>>('/api/gemini/test');
+  test: async (): Promise<AiModelTestResult> => {
+    const res = await axiosClient.post<Record<string, unknown>>('/api/ai-model/test');
     const d = res.data;
     return {
       configured: pickField(d, 'configured', 'Configured') === true,

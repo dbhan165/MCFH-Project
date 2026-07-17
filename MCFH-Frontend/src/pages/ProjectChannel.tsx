@@ -349,12 +349,15 @@ const ProjectChannel = () => {
                         data={pieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={58}
-                        outerRadius={88}
-                        paddingAngle={3}
+                        innerRadius="65%"
+                        outerRadius="85%"
+                        paddingAngle={2}
+                        startAngle={90}
+                        endAngle={-270}
                         dataKey="mentions"
-                        stroke="rgba(255,255,255,0.1)"
-                        strokeWidth={1}
+                        stroke="rgba(255,255,255,0.05)"
+                        strokeWidth={2}
+                        cornerRadius={4}
                       >
                         {pieData.map((channel) => (
                           <Cell key={channel.platform} fill={channel.color} />

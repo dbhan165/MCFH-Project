@@ -3,15 +3,17 @@ using MCFH.Models;
 using MCFH.Models.Scraping;
 using MCFH.Services.Scraping;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace MCFH.Services;
 
 public class AiAnalysisService
 {
     private readonly McfhDbContext _context;
-    private readonly IGeminiSentimentService _geminiSentimentService;
+    private readonly IAiSentimentService _aiSentimentService;
     private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
+    private readonly IMemoryCache _cache;
 
     private static readonly string[] PositiveWords =
     {
@@ -25,13 +27,15 @@ public class AiAnalysisService
 
     public AiAnalysisService(
         McfhDbContext context,
-        IGeminiSentimentService geminiSentimentService,
+        IAiSentimentService aiSentimentService,
         ProjectAlertService alertService,
+        IMemoryCache cache,
         ILogger<AiAnalysisService> logger)
     {
         _context = context;
-        _geminiSentimentService = geminiSentimentService;
+        _aiSentimentService = aiSentimentService;
         _alertService = alertService;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -51,92 +55,120 @@ public class AiAnalysisService
         return await AnalyzePendingFeedbacksAsync(projectId, force);
     }
 
+    /// <summary>Project đang có phiên phân tích chạy — chặn double-run làm hỏng dữ liệu.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> RunningProjects = new();
+
     public async Task<AnalyzeProjectResultDto> AnalyzePendingFeedbacksAsync(int projectId, bool force = true)
     {
-        var feedbacks = await _context.ScrapedFeedbacks
-            .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
-            .Include(f => f.AiAnalysis)
-            .ToListAsync();
-
-        if (feedbacks.Count == 0)
+        if (!RunningProjects.TryAdd(projectId, 0))
         {
             return new AnalyzeProjectResultDto
             {
                 ProjectId = projectId,
-                Message = "Chưa có mention nào. Hãy cào dữ liệu trước."
+                Message = "Đang có phiên phân tích AI khác chạy cho dự án này — vui lòng đợi hoàn tất."
             };
         }
 
-        var pendingCount = feedbacks.Count(f => f.AiAnalysis == null);
-
-        // Đã phân tích hết → tự động chạy lại để cập nhật tóm tắt + comment
-        if (!force && pendingCount == 0)
-            force = true;
-
-        if (force)
-            await ClearExistingAnalysesAsync(feedbacks);
-
-        var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
-        var analyzed = 0;
-        var geminiCount = 0;
-        var crisisCountInBatch = 0;
-
-        foreach (var feedback in pending)
+        var cacheKey = $"Project:{projectId}:AiProgress";
+        try
         {
-            try
+            var feedbacks = await _context.ScrapedFeedbacks
+                .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
+                .Include(f => f.AiAnalysis)
+                .ToListAsync();
+
+            if (feedbacks.Count == 0)
             {
-                var comments = await EnsureCommentsAsync(feedback);
-                var analysis = await AnalyzeFeedbackAsync(feedback, comments);
-
-                if (string.IsNullOrWhiteSpace(analysis.Summary))
-                    analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
-
-                await CommentBundleStorage.SaveAiSummaryAsync(
-                    feedback.FeedbackId,
-                    analysis.Summary,
-                    feedback.CommentsFileUrl);
-
-                if (comments.Count > 0)
-                    feedback.CommentsCount = comments.Count;
-
-                feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
-
-                _context.AiAnalyses.Add(new AiAnalysis
+                return new AnalyzeProjectResultDto
                 {
-                    FeedbackId = feedback.FeedbackId,
-                    MainSentiment = analysis.Sentiment,
-                    ConfidenceScore = analysis.Confidence,
-                    IsCrisisAlert = analysis.IsCrisisAlert,
-                    ProcessedAt = DateTime.Now
-                });
-
-                analyzed++;
-                if (analysis.IsCrisisAlert) crisisCountInBatch++;
-                if (analysis.UsedGemini) geminiCount++;
+                    ProjectId = projectId,
+                    Message = "Chưa có mention nào. Hãy cào dữ liệu trước."
+                };
             }
-            catch (Exception ex)
+
+            var pendingCount = feedbacks.Count(f => f.AiAnalysis == null);
+
+            // Đã phân tích hết → tự động chạy lại để cập nhật tóm tắt + comment
+            if (!force && pendingCount == 0)
+                force = true;
+
+            if (force)
+                await ClearExistingAnalysesAsync(feedbacks);
+
+            var pending = feedbacks.Where(f => f.AiAnalysis == null).ToList();
+            var total = pending.Count;
+
+            _cache.Set(cacheKey, 0, TimeSpan.FromHours(1)); // Initialize progress
+
+            var analyzed = 0;
+            var aiModelCount = 0;
+            var crisisCountInBatch = 0;
+
+            foreach (var feedback in pending)
             {
-                _logger.LogError(ex, "Phân tích thất bại feedback {FeedbackId}", feedback.FeedbackId);
+                try
+                {
+                    var comments = await EnsureCommentsAsync(feedback);
+                    var analysis = await AnalyzeFeedbackAsync(feedback, comments);
+
+                    if (string.IsNullOrWhiteSpace(analysis.Summary))
+                        analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
+
+                    await CommentBundleStorage.SaveAiSummaryAsync(
+                        feedback.FeedbackId,
+                        analysis.Summary,
+                        feedback.CommentsFileUrl);
+
+                    if (comments.Count > 0)
+                        feedback.CommentsCount = comments.Count;
+
+                    feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
+
+                    _context.AiAnalyses.Add(new AiAnalysis
+                    {
+                        FeedbackId = feedback.FeedbackId,
+                        MainSentiment = analysis.Sentiment,
+                        ConfidenceScore = analysis.Confidence,
+                        IsCrisisAlert = analysis.IsCrisisAlert,
+                        ProcessedAt = DateTime.Now
+                    });
+
+                    analyzed++;
+                    _cache.Set(cacheKey, total > 0 ? (analyzed * 100 / total) : 100, TimeSpan.FromHours(1));
+
+                    if (analysis.IsCrisisAlert) crisisCountInBatch++;
+                    if (analysis.UsedAiModel) aiModelCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Phân tích thất bại feedback {FeedbackId}", feedback.FeedbackId);
+                }
             }
-        }
 
-        if (analyzed > 0)
-        {
-            await _context.SaveChangesAsync();
-            await _alertService.NotifyAfterAnalysisAsync(projectId, crisisCountInBatch);
-        }
+            if (analyzed > 0)
+            {
+                await _context.SaveChangesAsync();
+                await _alertService.NotifyAfterAnalysisAsync(projectId, crisisCountInBatch);
+            }
 
-        var engine = geminiCount > 0 ? "Gemini" : "rule-based";
-        return new AnalyzeProjectResultDto
+            var engine = aiModelCount > 0 ? "AI Model" : "rule-based";
+            return new AnalyzeProjectResultDto
+            {
+                ProjectId = projectId,
+                AnalyzedCount = analyzed,
+                SkippedCount = feedbacks.Count - analyzed,
+                TotalFeedbacks = feedbacks.Count,
+                Message = analyzed > 0
+                    ? $"Đã phân tích {analyzed}/{feedbacks.Count} bài (caption + bình luận) bằng {engine}."
+                    : "Không phân tích được bài nào — kiểm tra dữ liệu đã cào hoặc log server."
+            };
+        }
+        finally
         {
-            ProjectId = projectId,
-            AnalyzedCount = analyzed,
-            SkippedCount = feedbacks.Count - analyzed,
-            TotalFeedbacks = feedbacks.Count,
-            Message = analyzed > 0
-                ? $"Đã phân tích {analyzed}/{feedbacks.Count} bài (caption + bình luận) bằng {engine}."
-                : "Không phân tích được bài nào — kiểm tra dữ liệu đã cào hoặc log server."
-        };
+            // Luôn dọn progress + nhả lock, kể cả khi exception giữa chừng.
+            _cache.Remove(cacheKey);
+            RunningProjects.TryRemove(projectId, out _);
+        }
     }
 
     public async Task<AnalyzeProjectResultDto?> AnalyzeSingleFeedbackAsync(
@@ -191,7 +223,7 @@ public class AiAnalysisService
             await _context.SaveChangesAsync();
             await _alertService.NotifyAfterAnalysisAsync(projectId, analysis.IsCrisisAlert ? 1 : 0);
 
-            var engine = analysis.UsedGemini ? "Gemini" : "rule-based";
+            var engine = analysis.UsedAiModel ? "AI Model" : "rule-based";
             return new AnalyzeProjectResultDto
             {
                 ProjectId = projectId,
@@ -241,17 +273,17 @@ public class AiAnalysisService
     {
         var combinedText = CommentBundleStorage.BuildCombinedAnalysisText(feedback.Content, comments);
 
-        if (_geminiSentimentService.IsConfigured)
+        if (_aiSentimentService.IsConfigured)
         {
-            var geminiResult = await _geminiSentimentService.AnalyzeAsync(
+            var aiResult = await _aiSentimentService.AnalyzeAsync(
                 feedback.Platform ?? "unknown",
                 feedback.AuthorName,
                 feedback.Content,
                 comments,
                 combinedText);
 
-            if (geminiResult != null && !string.IsNullOrWhiteSpace(geminiResult.Summary))
-                return geminiResult;
+            if (aiResult != null && !string.IsNullOrWhiteSpace(aiResult.Summary))
+                return aiResult;
         }
 
         return AnalyzeWithRules(combinedText, comments.Count);
@@ -266,7 +298,7 @@ public class AiAnalysisService
             Confidence = sentiment == "neutral" ? 0.55 : 0.82,
             IsCrisisAlert = sentiment == "negative",
             Summary = BuildFallbackSummary(combinedText, commentCount, sentiment),
-            UsedGemini = false
+            UsedAiModel = false
         };
     }
 

@@ -154,6 +154,9 @@ public class ProjectAnalyticsService
         if (filter?.DateTo.HasValue == true)
             query = query.Where(f => f.ScrapedAt <= filter.DateTo.Value);
 
+        if (filter?.IsCrisisAlert == true)
+            query = query.Where(f => f.AiAnalysis != null && f.AiAnalysis.IsCrisisAlert == true);
+
         var rows = await query
             .OrderByDescending(f => f.ScrapedAt)
             .ToListAsync();

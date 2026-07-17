@@ -6,5 +6,5 @@ public class SentimentAnalysisResult
     public double Confidence { get; set; }
     public bool IsCrisisAlert { get; set; }
     public string? Summary { get; set; }
-    public bool UsedGemini { get; set; }
+    public bool UsedAiModel { get; set; }
 }
