@@ -111,6 +111,8 @@ namespace MCFH
             builder.Services.Configure<ScrapeOptions>(builder.Configuration.GetSection(ScrapeOptions.SectionName));
             builder.Services.Configure<SerpApiOptions>(builder.Configuration.GetSection(SerpApiOptions.SectionName));
             builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
+            builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection(PayOsOptions.SectionName));
+            builder.Services.AddSingleton<MCFH.Services.Payments.PayOsService>();
             builder.Services.AddHttpClient<SerpApiNewsDiscovery>();
             builder.Services.AddHttpClient<IAiSentimentService, AiSentimentService>();
             builder.Services.AddScoped<INotificationService, NotificationService>();
@@ -146,11 +148,7 @@ namespace MCFH
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
-            else 
-            {
-                app.UseHttpsRedirection();
-            }
-            
+            app.UseHttpsRedirection();
             // QUAN TRỌNG: UseCors phải nằm TRƯỚC UseAuthentication và UseAuthorization
             app.UseCors("AllowAll");
             app.UseAuthentication(); // Xác thực danh tính

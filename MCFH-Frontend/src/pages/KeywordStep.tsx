@@ -1,12 +1,12 @@
 import { Tags, Calendar } from 'lucide-react';
 
 export const SCRAPE_TIME_RANGE_OPTIONS = [
-  { value: 0, label: 'Mọi thời gian', priceHint: '12 triệu ₫' },
-  { value: 7, label: '1 tuần gần đây', priceHint: '1 triệu ₫' },
-  { value: 30, label: '1 tháng gần đây', priceHint: '1 triệu ₫' },
-  { value: 90, label: '3 tháng gần đây', priceHint: '3 triệu ₫' },
-  { value: 180, label: '6 tháng gần đây', priceHint: '6 triệu ₫' },
-  { value: 365, label: '1 năm gần đây', priceHint: '12 triệu ₫' },
+  { value: 0, label: 'Mọi thời gian', priceHint: '50.000 ₫' },
+  { value: 7, label: '1 tuần gần đây', priceHint: '10.000 ₫' },
+  { value: 30, label: '1 tháng gần đây', priceHint: '10.000 ₫' },
+  { value: 90, label: '3 tháng gần đây', priceHint: '20.000 ₫' },
+  { value: 180, label: '6 tháng gần đây', priceHint: '50.000 ₫' },
+  { value: 365, label: '1 năm gần đây', priceHint: '50.000 ₫' },
 ] as const;
 
 interface KeywordStepProps {
