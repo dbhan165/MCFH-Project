@@ -146,7 +146,11 @@ namespace MCFH
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
-            app.UseHttpsRedirection();
+            else 
+            {
+                app.UseHttpsRedirection();
+            }
+            
             // QUAN TRỌNG: UseCors phải nằm TRƯỚC UseAuthentication và UseAuthorization
             app.UseCors("AllowAll");
             app.UseAuthentication(); // Xác thực danh tính

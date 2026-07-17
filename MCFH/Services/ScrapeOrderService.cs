@@ -200,7 +200,6 @@ public class ScrapeOrderService
             {
                 await _context.SaveChangesAsync();
             }
-            }
             return;
         }
 
