@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace MCFH.Services;
 
@@ -29,10 +30,11 @@ public class GeminiSentimentService : IGeminiSentimentService
     private readonly HttpClient _httpClient;
     private readonly GeminiOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<GeminiSentimentService> _logger;
 
-    /// <summary>Sau khi mọi model đều 429, bỏ qua Gemini cho đến khi restart server.</summary>
-    private static volatile bool _quotaExhausted;
+    /// <summary>Sau khi mọi model đều 429, bỏ qua Gemini trong 30 phút.</summary>
+    private static volatile DateTime? _quotaExhaustedUntil;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -43,16 +45,26 @@ public class GeminiSentimentService : IGeminiSentimentService
         HttpClient httpClient,
         IOptions<GeminiOptions> options,
         IServiceScopeFactory scopeFactory,
+        IMemoryCache cache,
         ILogger<GeminiSentimentService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _scopeFactory = scopeFactory;
+        _cache = cache;
         _logger = logger;
     }
 
+    private bool IsQuotaExhausted => _quotaExhaustedUntil.HasValue && _quotaExhaustedUntil.Value > DateTime.UtcNow;
+
     private async Task<(string ApiKey, string Model)> ResolveSettingsAsync(CancellationToken ct)
     {
+        var cacheKey = "GeminiSettings";
+        if (_cache.TryGetValue(cacheKey, out (string ApiKey, string Model) cachedSettings))
+        {
+            return cachedSettings;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
         
@@ -63,10 +75,14 @@ public class GeminiSentimentService : IGeminiSentimentService
         settings.TryGetValue("GEMINI_API_KEY", out var dbKey);
         settings.TryGetValue("GEMINI_MODEL", out var dbModel);
 
-        return (
+        var result = (
             !string.IsNullOrWhiteSpace(dbKey) ? dbKey : _options.ApiKey,
             !string.IsNullOrWhiteSpace(dbModel) ? dbModel : _options.Model
         );
+
+        _cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
+
+        return result;
     }
 
     public bool IsConfigured => true; // Tránh dùng biến tĩnh để check config vì config có thể đổi trong DB
@@ -84,13 +100,13 @@ public class GeminiSentimentService : IGeminiSentimentService
             };
         }
 
-        if (_quotaExhausted)
+        if (IsQuotaExhausted)
         {
             return new GeminiTestResultDto
             {
                 Configured = true,
                 Success = false,
-                Message = "AI Model đang bị tạm khóa do hết quota — restart backend rồi thử lại."
+                Message = $"AI Model đang bị tạm khóa do hết quota — thử lại sau {_quotaExhaustedUntil!.Value.ToLocalTime():HH:mm}."
             };
         }
 
@@ -148,7 +164,7 @@ public class GeminiSentimentService : IGeminiSentimentService
         CancellationToken cancellationToken = default)
     {
         var (apiKey, dynamicModel) = await ResolveSettingsAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(apiKey) || _quotaExhausted)
+        if (string.IsNullOrWhiteSpace(apiKey) || IsQuotaExhausted)
             return null;
 
         var commentsBlock = comments.Count > 0
@@ -254,8 +270,8 @@ public class GeminiSentimentService : IGeminiSentimentService
 
         if (quotaHits > 0 && quotaHits >= models.Count)
         {
-            _quotaExhausted = true;
-            _logger.LogWarning("Mọi model AI đều hết quota — chuyển rule-based cho các bài còn lại.");
+            _quotaExhaustedUntil = DateTime.UtcNow.AddMinutes(30);
+            _logger.LogWarning("Mọi model AI đều hết quota — chuyển rule-based trong 30 phút.");
         }
 
         return null;

@@ -65,7 +65,10 @@ public class ProjectExtendedController : ControllerBase
             }
             catch (Exception ex)
             {
-                // Task failed
+                using var scope = _scopeFactory.CreateScope();
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProjectExtendedController>>();
+                logger.LogError(ex, "Lỗi phân tích AI background cho project {ProjectId}", projectId);
+
                 var cacheKey = $"Project:{projectId}:AiProgress";
                 _cache.Remove(cacheKey);
             }
@@ -75,8 +78,12 @@ public class ProjectExtendedController : ControllerBase
     }
 
     [HttpGet("{projectId}/analytics/progress")]
-    public IActionResult GetAnalysisProgress(int workspaceId, int projectId)
+    public async Task<IActionResult> GetAnalysisProgress(int workspaceId, int projectId)
     {
+        var userId = GetUserId();
+        var project = await _projectService.GetByIdAsync(workspaceId, projectId, userId);
+        if (project == null) return NotFound();
+
         var cacheKey = $"Project:{projectId}:AiProgress";
         if (_cache.TryGetValue(cacheKey, out int percent))
         {

@@ -169,11 +169,17 @@ public class ScrapeOrderService
                 order.ProgressPercent = CalcProgress(job);
                 order.StatusMessage = BuildProgressMessage(job) ?? job.PhaseMessage ?? "Đang cào dữ liệu từ các nền tảng...";
 
-                if (job.Status is "completed" or "failed" or "cancelled")
+                if (job.Status is "failed" or "cancelled")
+                {
+                    order.Status = job.Status;
+                    order.StatusMessage = job.Status == "failed" ? "Lỗi trong quá trình cào dữ liệu." : "Đã hủy cào dữ liệu.";
+                    await _context.SaveChangesAsync();
+                }
+                else if (job.Status == "completed")
                 {
                     order.Status = "analyzing";
                     order.ProgressPercent = 85;
-                    order.StatusMessage = "Cào xong — AI đang phân tích sentiment và tạo báo cáo...";
+                    order.StatusMessage = "Cào xong — AI đang phân tích sentiment và báo cáo...";
                     await _context.SaveChangesAsync();
                     _ = RunPostScrapeAsync(orderId);
                 }
@@ -205,7 +211,7 @@ public class ScrapeOrderService
             if (order == null || order.Status != "analyzing")
                 return;
 
-            var analyzeResult = await analyze.AnalyzePendingFeedbacksAsync(order.ProjectId, true);
+            var analyzeResult = await analyze.AnalyzePendingFeedbacksAsync(order.ProjectId, false);
             var project = await db.Projects.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.ProjectId == order.ProjectId);
 
@@ -225,9 +231,12 @@ public class ScrapeOrderService
                 order.OrderId,
                 order.ProjectId);
         }
-        catch
+        catch (Exception ex)
         {
             using var scope = _scopeFactory.CreateScope();
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<ScrapeOrderService>>();
+            logger.LogError(ex, "Lỗi khi chạy Post Scrape cho order {OrderId}", orderId);
+            
             var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
             var order = await db.ScrapeOrders.FirstOrDefaultAsync(o => o.OrderId == orderId);
             if (order == null)

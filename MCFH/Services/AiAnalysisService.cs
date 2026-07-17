@@ -2,6 +2,8 @@ using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Models.Scraping;
 using MCFH.Services.Scraping;
+using System.Collections.Concurrent;
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -14,6 +16,7 @@ public class AiAnalysisService
     private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
     private readonly IMemoryCache _cache;
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> _projectLocks = new();
 
     private static readonly string[] PositiveWords =
     {
@@ -57,7 +60,19 @@ public class AiAnalysisService
 
     public async Task<AnalyzeProjectResultDto> AnalyzePendingFeedbacksAsync(int projectId, bool force = true)
     {
-        var feedbacks = await _context.ScrapedFeedbacks
+        var projectLock = _projectLocks.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        if (!await projectLock.WaitAsync(TimeSpan.FromSeconds(5)))
+        {
+            return new AnalyzeProjectResultDto
+            {
+                ProjectId = projectId,
+                Message = "Hệ thống đang phân tích dữ liệu cho dự án này, vui lòng chờ trong giây lát."
+            };
+        }
+
+        try
+        {
+            var feedbacks = await _context.ScrapedFeedbacks
             .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
             .Include(f => f.AiAnalysis)
             .ToListAsync();
@@ -150,6 +165,11 @@ public class AiAnalysisService
                 ? $"Đã phân tích {analyzed}/{feedbacks.Count} bài (caption + bình luận) bằng {engine}."
                 : "Không phân tích được bài nào — kiểm tra dữ liệu đã cào hoặc log server."
         };
+        }
+        finally
+        {
+            projectLock.Release();
+        }
     }
 
     public async Task<AnalyzeProjectResultDto?> AnalyzeSingleFeedbackAsync(

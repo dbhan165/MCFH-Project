@@ -46,6 +46,7 @@ function normalizeAnalyzeResult(data: Record<string, unknown>): AnalyzeProjectRe
     skippedCount: pickNumber(data, 'skippedCount', 'SkippedCount'),
     totalFeedbacks: pickNumber(data, 'totalFeedbacks', 'TotalFeedbacks'),
     message: pickString(data, 'message', 'Message'),
+    status: pickNullableString(data, 'status', 'Status') ?? undefined,
   };
 }
 

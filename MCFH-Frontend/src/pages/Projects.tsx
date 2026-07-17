@@ -533,6 +533,7 @@ const Projects = () => {
         message: result.message,
         type: 'success',
       });
+      loadAiProgress();
     } catch (error) {
       await alert({
         title: 'Phân tích thất bại',
