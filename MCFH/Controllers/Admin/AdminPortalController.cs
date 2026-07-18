@@ -19,9 +19,9 @@ public class AdminPortalController : ControllerBase
     private readonly AdminPortalService _admin;
     private readonly SubscriptionService _subscription;
 
-    public AdminPortalController(McfhDbContext db, IEmailService emailService)
+    public AdminPortalController(McfhDbContext db, IEmailService emailService, MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
     {
-        var analytics = new ProjectAnalyticsService(db);
+        var analytics = new ProjectAnalyticsService(db, bundleStorage);
         var bespoke = new BespokeReportService(db, analytics, emailService);
         _admin = new AdminPortalService(db, bespoke);
         _subscription = new SubscriptionService(db);

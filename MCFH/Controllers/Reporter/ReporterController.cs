@@ -14,9 +14,9 @@ public class ReporterController : ControllerBase
 {
     private readonly ReporterPortalService _reporter;
 
-    public ReporterController(McfhDbContext db, IEmailService emailService)
+    public ReporterController(McfhDbContext db, IEmailService emailService, MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
     {
-        var analytics = new ProjectAnalyticsService(db);
+        var analytics = new ProjectAnalyticsService(db, bundleStorage);
         var bespoke = new BespokeReportService(db, analytics, emailService);
         _reporter = new ReporterPortalService(db, bespoke, analytics);
     }

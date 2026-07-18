@@ -36,14 +36,15 @@ public class ProjectExtendedController : ControllerBase
         IMemoryCache cache,
         IServiceScopeFactory scopeFactory,
         IEmailService emailService,
-        ILogger<ProjectExtendedController> logger)
+        ILogger<ProjectExtendedController> logger,
+        MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
         _cache = cache;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _analyticsService = new ProjectAnalyticsService(db);
+        _analyticsService = new ProjectAnalyticsService(db, bundleStorage);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
         _reportService = new ProjectReportService(db, _analyticsService);

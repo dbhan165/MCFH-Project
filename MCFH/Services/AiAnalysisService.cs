@@ -16,6 +16,7 @@ public class AiAnalysisService
     private readonly ProjectAlertService _alertService;
     private readonly ILogger<AiAnalysisService> _logger;
     private readonly IMemoryCache _cache;
+    private readonly ICommentBundleStorage _bundleStorage;
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> _projectLocks = new();
 
     private static readonly string[] PositiveWords =
