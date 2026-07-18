@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace MCFH.Services;
 
@@ -29,6 +30,7 @@ public class AiSentimentService : IAiSentimentService
     private readonly HttpClient _httpClient;
     private readonly AiModelOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<AiSentimentService> _logger;
     private readonly ICommentBundleStorage _bundleStorage;
 
@@ -54,18 +56,27 @@ public class AiSentimentService : IAiSentimentService
         HttpClient httpClient,
         IOptions<AiModelOptions> options,
         IServiceScopeFactory scopeFactory,
-        ILogger<AiSentimentService> logger,
-        ICommentBundleStorage bundleStorage)
+        IMemoryCache cache,
+        ILogger<AiSentimentService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _scopeFactory = scopeFactory;
+        _cache = cache;
         _logger = logger;
         _bundleStorage = bundleStorage;
     }
 
+
+
     private async Task<(string ApiKey, string Model)> ResolveSettingsAsync(CancellationToken ct)
     {
+        var cacheKey = "GeminiSettings";
+        if (_cache.TryGetValue(cacheKey, out (string ApiKey, string Model) cachedSettings))
+        {
+            return cachedSettings;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
         
@@ -83,10 +94,14 @@ public class AiSentimentService : IAiSentimentService
         if (string.IsNullOrWhiteSpace(dbModel))
             settings.TryGetValue("GEMINI_MODEL", out dbModel);
 
-        return (
+        var result = (
             !string.IsNullOrWhiteSpace(dbKey) ? dbKey : _options.ApiKey,
             !string.IsNullOrWhiteSpace(dbModel) ? dbModel : _options.Model
         );
+
+        _cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
+
+        return result;
     }
 
     public bool IsConfigured => true; // Tránh dùng biến tĩnh để check config vì config có thể đổi trong DB

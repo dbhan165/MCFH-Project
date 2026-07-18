@@ -40,6 +40,7 @@ import Projects from "./pages/Projects";
 import CreateWorkspace from "./pages/CreateWorkspace";
 import CreateProject from "./pages/CreateProject";
 import ScrapeOrderTracking from "./pages/ScrapeOrderTracking";
+import PaymentReturn from "./pages/PaymentReturn";
 import EditProject from "./pages/EditProject";
 import Members from "./pages/Members";
 import Invitations from "./pages/Invitations";
@@ -173,6 +174,7 @@ function AppRoutes() {
           path="/workspace/:workspaceId/orders/:orderId"
           element={<ScrapeOrderTracking />}
         />
+        <Route path="/payment/return" element={<PaymentReturn />} />
         <Route
           path="/workspace/:workspaceId/project/:projectId/edit"
           element={<EditProject />}

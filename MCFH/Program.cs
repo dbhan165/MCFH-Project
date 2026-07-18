@@ -119,6 +119,8 @@ namespace MCFH
             builder.Services.Configure<ProxyOptions>(builder.Configuration.GetSection(ProxyOptions.SectionName));
             builder.Services.Configure<AzureBlobOptions>(builder.Configuration.GetSection(AzureBlobOptions.SectionName));
 
+            builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection(PayOsOptions.SectionName));
+            builder.Services.AddSingleton<MCFH.Services.Payments.PayOsService>();
             builder.Services.AddHttpClient<SerpApiNewsDiscovery>();
             builder.Services.AddHttpClient<IAiSentimentService, AiSentimentService>();
 

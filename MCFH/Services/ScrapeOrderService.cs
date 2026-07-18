@@ -4,10 +4,13 @@ using MCFH.DTOs;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Models.Scraping;
+using MCFH.Services.Payments;
 using MCFH.Services.Scraping;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using PayOS.Models.V2.PaymentRequests;
+using PayOS.Models.Webhooks;
 
 namespace MCFH.Services;
 
@@ -17,17 +20,23 @@ public class ScrapeOrderService
     private readonly ScrapeJobRunner _jobRunner;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ScrapeOptions _scrapeOptions;
+    private readonly PayOsService _payOs;
+    private readonly ILogger<ScrapeOrderService> _logger;
 
     public ScrapeOrderService(
         McfhDbContext context,
         ScrapeJobRunner jobRunner,
         IServiceScopeFactory scopeFactory,
-        IOptions<ScrapeOptions> scrapeOptions)
+        IOptions<ScrapeOptions> scrapeOptions,
+        PayOsService payOs,
+        ILogger<ScrapeOrderService> logger)
     {
         _context = context;
         _jobRunner = jobRunner;
         _scopeFactory = scopeFactory;
         _scrapeOptions = scrapeOptions.Value;
+        _payOs = payOs;
+        _logger = logger;
     }
 
     public ScrapeQuoteDto GetQuote(int postedSinceDays) => new()
@@ -79,41 +88,251 @@ public class ScrapeOrderService
         return await MapOrderAsync(order.OrderId, userId);
     }
 
-    public async Task<ScrapeOrderDto?> PayOrderAsync(int userId, int orderId)
+    /// <summary>
+    /// Tạo checkout PayOS cho đơn: Payment status "pending", order → "pending_payment".
+    /// Frontend redirect người dùng sang CheckoutUrl; job cào CHỈ chạy sau khi webhook/confirm xác thực đã trả tiền.
+    /// </summary>
+    public async Task<ScrapeOrderCheckoutDto?> PayOrderAsync(int userId, int orderId)
     {
         var order = await _context.ScrapeOrders
             .FirstOrDefaultAsync(o => o.OrderId == orderId && o.UserId == userId);
         if (order == null || order.Status is not ("quoted" or "pending_payment"))
             return null;
 
-        var now = DateTime.Now;
-        var payment = new Payment
+        // Đã có checkout đang chờ → kiểm tra lại trên PayOS trước khi tạo link mới.
+        Payment? payment = null;
+        if (order.PaymentId != null)
         {
-            TransactionRef = $"SCRAPE-{now:yyyyMMddHHmmss}-{orderId}",
+            payment = await _context.Payments
+                .FirstOrDefaultAsync(p => p.PaymentId == order.PaymentId && p.Status == "pending");
+            if (payment?.OrderCode != null)
+            {
+                var link = await _payOs.GetPaymentLinkAsync(payment.OrderCode.Value);
+                if (link?.Status == PaymentLinkStatus.Paid)
+                {
+                    // Người dùng đã trả nhưng webhook chưa tới — hoàn tất luôn.
+                    await FulfillPaidOrderAsync(order, payment);
+                    return await BuildCheckoutDtoAsync(order, payment, payment.CheckoutUrl ?? "", "");
+                }
+                if (link?.Status == PaymentLinkStatus.Pending && !string.IsNullOrEmpty(payment.CheckoutUrl))
+                    return await BuildCheckoutDtoAsync(order, payment, payment.CheckoutUrl, "");
+                // Không tra cứu được PayOS (null) → giữ link cũ nếu còn checkoutUrl, tránh tạo link trùng.
+                if (link == null && !string.IsNullOrEmpty(payment.CheckoutUrl))
+                {
+                    _logger.LogWarning(
+                        "Không tra cứu được PayOS orderCode {OrderCode} — tái sử dụng checkoutUrl hiện có.",
+                        payment.OrderCode);
+                    return await BuildCheckoutDtoAsync(order, payment, payment.CheckoutUrl, "");
+                }
+                // Link cũ hết hạn / bị hủy → đánh dấu failed rồi tạo link mới bên dưới.
+                if (link?.Status is PaymentLinkStatus.Cancelled or PaymentLinkStatus.Expired or PaymentLinkStatus.Failed)
+                {
+                    payment.Status = "failed";
+                    await _context.SaveChangesAsync();
+                    payment = null;
+                }
+                else if (!string.IsNullOrEmpty(payment.CheckoutUrl))
+                {
+                    return await BuildCheckoutDtoAsync(order, payment, payment.CheckoutUrl, "");
+                }
+            }
+        }
+
+        var now = DateTime.Now;
+        // orderCode PayOS phải là số duy nhất — unix ms + 2 số ngẫu nhiên, vẫn dưới ngưỡng MAX_SAFE_INTEGER.
+        var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 100 + Random.Shared.Next(100);
+        var description = $"MCFH#{orderId}"; // PayOS giới hạn mô tả 25 ký tự
+
+        var link2 = await _payOs.CreatePaymentLinkAsync(
+            orderCode,
+            (long)order.QuotedPrice,
+            description,
+            _payOs.BuildReturnUrl(orderId),
+            _payOs.BuildCancelUrl(orderId));
+
+        payment = new Payment
+        {
+            TransactionRef = $"PAYOS-{orderCode}",
             Amount = order.QuotedPrice,
-            Status = "success",
+            Status = "pending",
             Type = "scrape_order",
             CreatedBy = userId,
-            CreatedAt = now
+            CreatedAt = now,
+            OrderCode = orderCode,
+            PaymentLinkId = link2.PaymentLinkId,
+            CheckoutUrl = link2.CheckoutUrl
         };
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
 
-        var postedDays = order.PostedSinceDays > 0 ? order.PostedSinceDays : (int?)null;
-        var jobId = await _jobRunner.StartAsync(order.ProjectId, userId, postedDays);
-        if (jobId == null)
+        order.PaymentId = payment.PaymentId;
+        order.Status = "pending_payment";
+        order.StatusMessage = "Chờ thanh toán qua PayOS — quét mã QR hoặc thanh toán trên trang checkout.";
+        await _context.SaveChangesAsync();
+
+        return await BuildCheckoutDtoAsync(order, payment, link2.CheckoutUrl, link2.QrCode);
+    }
+
+    private async Task<ScrapeOrderCheckoutDto?> BuildCheckoutDtoAsync(
+        ScrapeOrder order, Payment payment, string checkoutUrl, string qrCode)
+    {
+        var orderDto = await MapOrderAsync(order.OrderId, order.UserId);
+        if (orderDto == null)
+            return null;
+        return new ScrapeOrderCheckoutDto
+        {
+            Order = orderDto,
+            OrderCode = payment.OrderCode ?? 0,
+            PaymentLinkId = payment.PaymentLinkId ?? "",
+            CheckoutUrl = checkoutUrl,
+            QrCode = qrCode,
+            Amount = payment.Amount
+        };
+    }
+
+    /// <summary>
+    /// Xử lý webhook PayOS ĐÃ verify chữ ký: đối soát payment theo orderCode, kiểm tra số tiền,
+    /// hoàn tất đơn idempotent (đã xử lý rồi thì no-op). Webhook là nguồn tin cậy về thanh toán.
+    /// </summary>
+    public async Task HandlePayOsWebhookAsync(WebhookData data)
+    {
+        if (data.Code != "00")
+        {
+            _logger.LogInformation("Webhook PayOS orderCode {OrderCode} không thành công (code {Code}) — bỏ qua.", data.OrderCode, data.Code);
+            return;
+        }
+
+        var payment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.OrderCode == data.OrderCode && p.Type == "scrape_order");
+        if (payment == null)
+        {
+            // Webhook test khi đăng ký URL (orderCode 123) hoặc payment của luồng khác — no-op.
+            _logger.LogInformation("Webhook PayOS orderCode {OrderCode} không khớp payment nào — bỏ qua.", data.OrderCode);
+            return;
+        }
+
+        if (data.Amount != (long)payment.Amount)
+        {
+            _logger.LogError(
+                "Webhook PayOS orderCode {OrderCode}: số tiền không khớp (webhook {WebhookAmount} ≠ báo giá {QuotedAmount}) — KHÔNG kích hoạt đơn.",
+                data.OrderCode, data.Amount, payment.Amount);
+            return;
+        }
+
+        var order = await _context.ScrapeOrders.FirstOrDefaultAsync(o => o.PaymentId == payment.PaymentId);
+        if (order == null)
+        {
+            _logger.LogWarning("Webhook PayOS orderCode {OrderCode}: không tìm thấy scrape order gắn với payment {PaymentId}.", data.OrderCode, payment.PaymentId);
+            return;
+        }
+
+        if (payment.Amount != order.QuotedPrice)
+        {
+            _logger.LogError(
+                "Webhook PayOS orderCode {OrderCode}: payment.Amount {PaymentAmount} ≠ order.QuotedPrice {QuotedPrice} — KHÔNG kích hoạt đơn.",
+                data.OrderCode, payment.Amount, order.QuotedPrice);
+            return;
+        }
+
+        await FulfillPaidOrderAsync(order, payment);
+    }
+
+    /// <summary>
+    /// Confirm cho trang return: KHÔNG tin query param — tra cứu lại PayOS / DB.
+    /// Nếu PayOS báo đã trả → hoàn tất đơn (idempotent với webhook). Nếu hủy/hết hạn → trả đơn về "quoted".
+    /// </summary>
+    public async Task<ScrapeOrderDto?> ConfirmPaymentAsync(int userId, int orderId)
+    {
+        var order = await _context.ScrapeOrders
+            .FirstOrDefaultAsync(o => o.OrderId == orderId && o.UserId == userId);
+        if (order == null)
             return null;
 
-        order.PaymentId = payment.PaymentId;
+        if (order.Status == "pending_payment" && order.PaymentId != null)
+        {
+            var payment = await _context.Payments.FirstOrDefaultAsync(p => p.PaymentId == order.PaymentId);
+            if (payment?.OrderCode != null && payment.Status == "pending")
+            {
+                var link = await _payOs.GetPaymentLinkAsync(payment.OrderCode.Value);
+                if (link?.Status == PaymentLinkStatus.Paid)
+                {
+                    if (link.AmountPaid == (long)payment.Amount && payment.Amount == order.QuotedPrice)
+                        await FulfillPaidOrderAsync(order, payment);
+                    else
+                        _logger.LogError(
+                            "PayOS orderCode {OrderCode}: số tiền không khớp (AmountPaid {AmountPaid}, payment {PaymentAmount}, quoted {QuotedAmount}) — không kích hoạt đơn.",
+                            payment.OrderCode, link.AmountPaid, payment.Amount, order.QuotedPrice);
+                }
+                else if (link?.Status is PaymentLinkStatus.Cancelled or PaymentLinkStatus.Expired or PaymentLinkStatus.Failed)
+                {
+                    payment.Status = "failed";
+                    order.Status = "quoted";
+                    order.StatusMessage = "Thanh toán đã bị hủy hoặc hết hạn — bạn có thể thanh toán lại.";
+                    await _context.SaveChangesAsync();
+                }
+            }
+        }
+        else if (order.Status == "paid" && string.IsNullOrEmpty(order.ScrapeJobId))
+        {
+            // Đã thu tiền nhưng job chưa khởi động được (VD: backend bận) — thử lại khi user poll.
+            await StartScrapeForPaidOrderAsync(order);
+        }
+
+        return await GetOrderAsync(userId, orderId);
+    }
+
+    /// <summary>Order đang được fulfill (webhook + confirm có thể chạy song song) — chống double-start job.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> FulfillRunning = new();
+
+    /// <summary>
+    /// Idempotent: đánh dấu payment success + order paid, rồi khởi động job cào → "scraping".
+    /// Gọi lặp lại (webhook retry / confirm poll) sẽ no-op nếu đã xử lý.
+    /// </summary>
+    private async Task FulfillPaidOrderAsync(ScrapeOrder order, Payment payment)
+    {
+        if (!FulfillRunning.TryAdd(order.OrderId, 0))
+            return;
+
+        try
+        {
+            if (payment.Status != "success")
+            {
+                var now = DateTime.Now;
+                payment.Status = "success";
+                payment.PaidAt = now;
+                order.Status = "paid";
+                order.PaidAt = now;
+                order.StatusMessage = "Thanh toán thành công — đang khởi động cào dữ liệu...";
+                await _context.SaveChangesAsync();
+            }
+
+            if (order.Status == "paid" && string.IsNullOrEmpty(order.ScrapeJobId))
+                await StartScrapeForPaidOrderAsync(order);
+        }
+        finally
+        {
+            FulfillRunning.TryRemove(order.OrderId, out _);
+        }
+    }
+
+    private async Task StartScrapeForPaidOrderAsync(ScrapeOrder order)
+    {
+        var postedDays = order.PostedSinceDays > 0 ? order.PostedSinceDays : (int?)null;
+        var jobId = await _jobRunner.StartAsync(order.ProjectId, order.UserId, postedDays);
+        if (jobId == null)
+        {
+            order.StatusMessage = "Thanh toán thành công nhưng chưa khởi động được cào dữ liệu — hệ thống sẽ tự thử lại.";
+            await _context.SaveChangesAsync();
+            return;
+        }
+
+        var now = DateTime.Now;
         order.ScrapeJobId = jobId;
         order.Status = "scraping";
-        order.PaidAt = now;
         order.ProgressPercent = 5;
         order.EstimatedReportAt = now.AddMinutes(EstimateMinutes(order.PostedSinceDays));
         order.StatusMessage = $"Thanh toán thành công. Báo cáo dự kiến sẵn sàng trước {order.EstimatedReportAt:HH:mm dd/MM/yyyy}.";
         await _context.SaveChangesAsync();
-
-        return await MapOrderAsync(orderId, userId);
     }
 
     public async Task<ScrapeOrderDto?> GetOrderAsync(int userId, int orderId)
@@ -180,20 +399,19 @@ public class ScrapeOrderService
             order.ProgressPercent = CalcProgress(job);
             order.StatusMessage = BuildProgressMessage(job) ?? job.PhaseMessage ?? "Đang cào dữ liệu từ các nền tảng...";
 
-            if (job.Status == "failed")
+            if (job.Status is "failed" or "cancelled")
             {
-                order.Status = "failed";
-                order.StatusMessage = string.IsNullOrWhiteSpace(job.ErrorMessage)
-                    ? "Cào dữ liệu thất bại. Vui lòng liên hệ hỗ trợ hoặc thử lại."
-                    : $"Cào dữ liệu thất bại: {job.ErrorMessage}";
+                order.Status = job.Status;
+                order.StatusMessage = job.Status == "failed"
+                    ? (string.IsNullOrWhiteSpace(job.ErrorMessage) ? "Lỗi trong quá trình cào dữ liệu." : $"Cào dữ liệu thất bại: {job.ErrorMessage}")
+                    : "Đã hủy cào dữ liệu.";
                 await _context.SaveChangesAsync();
             }
-            else if (job.Status is "completed" or "cancelled")
+            else if (job.Status == "completed")
             {
-                // cancelled: vẫn phân tích phần dữ liệu đã cào được.
                 order.Status = "analyzing";
                 order.ProgressPercent = 85;
-                order.StatusMessage = "Cào xong — AI đang phân tích sentiment và tạo báo cáo...";
+                order.StatusMessage = "Cào xong — AI đang phân tích sentiment và báo cáo...";
                 await _context.SaveChangesAsync();
                 _ = RunPostScrapeAsync(orderId);
             }
@@ -264,7 +482,6 @@ public class ScrapeOrderService
             AnalyzeProjectResultDto? analyzeResult = null;
             if (hasPending)
                 analyzeResult = await analyze.AnalyzePendingFeedbacksAsync(order.ProjectId, false);
-
             var project = await db.Projects.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.ProjectId == order.ProjectId);
 
@@ -284,9 +501,12 @@ public class ScrapeOrderService
                 order.OrderId,
                 order.ProjectId);
         }
-        catch
+        catch (Exception ex)
         {
             using var scope = _scopeFactory.CreateScope();
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<ScrapeOrderService>>();
+            logger.LogError(ex, "Lỗi khi chạy Post Scrape cho order {OrderId}", orderId);
+            
             var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
             var order = await db.ScrapeOrders.FirstOrDefaultAsync(o => o.OrderId == orderId);
             if (order == null)
@@ -363,13 +583,15 @@ public class ScrapeOrderService
         };
     }
 
+    // Giá test (tạm giảm để dễ test PayOS): 10k / 20k / 50k. TODO: khôi phục giá thật trước khi lên production.
     public static decimal QuotePrice(int postedSinceDays) => postedSinceDays switch
     {
-        <= 7 => 1_000_000m,
-        <= 30 => 1_000_000m,
-        <= 90 => 3_000_000m,
-        <= 180 => 6_000_000m,
-        _ => 12_000_000m
+        0 => 50_000m, // Mọi thời gian
+        <= 7 => 10_000m,
+        <= 30 => 10_000m,
+        <= 90 => 20_000m,
+        <= 180 => 50_000m,
+        _ => 50_000m
     };
 
     public static int EstimateMinutes(int postedSinceDays) => postedSinceDays switch
