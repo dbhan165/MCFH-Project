@@ -30,6 +30,7 @@ public class AiSentimentService : IAiSentimentService
     private readonly AiModelOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AiSentimentService> _logger;
+    private readonly ICommentBundleStorage _bundleStorage;
 
     /// <summary>
     /// Sau khi mọi model đều 429, tạm ngưng gọi AI trong một khoảng cooldown
@@ -53,12 +54,14 @@ public class AiSentimentService : IAiSentimentService
         HttpClient httpClient,
         IOptions<AiModelOptions> options,
         IServiceScopeFactory scopeFactory,
-        ILogger<AiSentimentService> logger)
+        ILogger<AiSentimentService> logger,
+        ICommentBundleStorage bundleStorage)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _bundleStorage = bundleStorage;
     }
 
     private async Task<(string ApiKey, string Model)> ResolveSettingsAsync(CancellationToken ct)
@@ -118,7 +121,7 @@ public class AiSentimentService : IAiSentimentService
             "Giá hợp lý, giao hàng nhanh."
         };
 
-        var combined = CommentBundleStorage.BuildCombinedAnalysisText(
+        var combined = _bundleStorage.BuildCombinedAnalysisText(
             "Video review sản phẩm mới từ thương hiệu.",
             sampleComments);
 
