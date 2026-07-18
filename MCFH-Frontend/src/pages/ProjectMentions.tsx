@@ -461,8 +461,6 @@ const ProjectMentions = () => {
     setErrorMessage('');
     try {
       const data = await projectApi.getMentions(wid, projectId, {
-        platform: activePlatform !== 'all' ? activePlatform : undefined,
-        sentiment: activeSentiment !== 'all' ? activeSentiment : undefined,
         search: searchText.trim() || undefined,
         isCrisisAlert: showCrisisOnly || undefined,
       });
@@ -478,7 +476,7 @@ const ProjectMentions = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [wid, projectId, activePlatform, activeSentiment, searchText, showCrisisOnly]);
+  }, [wid, projectId, searchText, showCrisisOnly]);
 
   const loadAiProgress = useCallback(async () => {
     if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
@@ -603,13 +601,34 @@ const ProjectMentions = () => {
     return counts;
   }, [mentions]);
 
+  const displayedMentions = useMemo(() => {
+    return mentions.filter(m => {
+      if (activePlatform !== 'all' && m.platform.toLowerCase() !== activePlatform) return false;
+      if (activeSentiment !== 'all') {
+        const s = m.sentiment?.toLowerCase();
+        if (activeSentiment === 'pending') {
+          if (s === 'positive' || s === 'negative' || s === 'neutral') return false;
+        } else {
+          if (s !== activeSentiment) return false;
+        }
+      }
+      return true;
+    });
+  }, [mentions, activePlatform, activeSentiment]);
+
   const totalComments = useMemo(
-    () => mentions.reduce((sum, m) => sum + (m.comments.length > 0 ? m.comments.length : m.commentsCount), 0),
-    [mentions]
+    () => displayedMentions.reduce((sum, m) => sum + (m.comments.length > 0 ? m.comments.length : m.commentsCount), 0),
+    [displayedMentions]
   );
 
-  const analyzedCount = sentimentCounts.positive + sentimentCounts.negative + sentimentCounts.neutral;
-  const coveragePercent = mentions.length > 0 ? Math.round((analyzedCount / mentions.length) * 100) : 0;
+  const analyzedCount = useMemo(() => 
+    displayedMentions.filter(m => {
+      const s = m.sentiment?.toLowerCase();
+      return s === 'positive' || s === 'negative' || s === 'neutral';
+    }).length,
+  [displayedMentions]);
+
+  const coveragePercent = displayedMentions.length > 0 ? Math.round((analyzedCount / displayedMentions.length) * 100) : 0;
 
   const visiblePlatforms = useMemo(
     () =>
@@ -905,14 +924,14 @@ const ProjectMentions = () => {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <MetricCard
           label="Tổng mentions"
-          value={formatNumber(mentions.length)}
+          value={formatNumber(displayedMentions.length)}
           detail="Trong bộ lọc hiện tại"
           accentClass="text-white"
         />
         <MetricCard
           label="Đã phân tích"
           value={`${coveragePercent}%`}
-          detail={`${formatNumber(analyzedCount)} / ${formatNumber(mentions.length)} có sentiment`}
+          detail={`${formatNumber(analyzedCount)} / ${formatNumber(displayedMentions.length)} có sentiment`}
           accentClass="text-[#00B4D8]"
         />
         <MetricCard
@@ -1055,7 +1074,7 @@ const ProjectMentions = () => {
           </div>
           <p className="text-sm">Đang tải mentions...</p>
         </div>
-      ) : mentions.length === 0 ? (
+      ) : displayedMentions.length === 0 ? (
         <div className="rounded-3xl border border-white/5 bg-[#151B2B] p-16 text-center">
           <MessageCircle className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa có mention nào</p>
@@ -1066,10 +1085,10 @@ const ProjectMentions = () => {
       ) : (
         <div className="space-y-4">
           <p className="text-xs text-gray-500 px-1">
-            Hiển thị <span className="text-white font-semibold tabular-nums">{formatNumber(mentions.length)}</span> kết
+            Hiển thị <span className="text-white font-semibold tabular-nums">{formatNumber(displayedMentions.length)}</span> kết
             quả
           </p>
-          {mentions.map((item) => (
+          {displayedMentions.map((item) => (
             <MentionCard
               key={item.feedbackId}
               item={item}
