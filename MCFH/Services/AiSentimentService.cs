@@ -32,6 +32,7 @@ public class AiSentimentService : IAiSentimentService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IMemoryCache _cache;
     private readonly ILogger<AiSentimentService> _logger;
+    private readonly ICommentBundleStorage _bundleStorage;
 
     /// <summary>
     /// Sau khi mọi model đều 429, tạm ngưng gọi AI trong một khoảng cooldown
@@ -63,6 +64,7 @@ public class AiSentimentService : IAiSentimentService
         _scopeFactory = scopeFactory;
         _cache = cache;
         _logger = logger;
+        _bundleStorage = bundleStorage;
     }
 
 
@@ -134,7 +136,7 @@ public class AiSentimentService : IAiSentimentService
             "Giá hợp lý, giao hàng nhanh."
         };
 
-        var combined = CommentBundleStorage.BuildCombinedAnalysisText(
+        var combined = _bundleStorage.BuildCombinedAnalysisText(
             "Video review sản phẩm mới từ thương hiệu.",
             sampleComments);
 

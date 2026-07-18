@@ -33,13 +33,15 @@ public class AiAnalysisService
         IAiSentimentService aiSentimentService,
         ProjectAlertService alertService,
         IMemoryCache cache,
-        ILogger<AiAnalysisService> logger)
+        ILogger<AiAnalysisService> logger,
+        ICommentBundleStorage bundleStorage)
     {
         _context = context;
         _aiSentimentService = aiSentimentService;
         _alertService = alertService;
         _cache = cache;
         _logger = logger;
+        _bundleStorage = bundleStorage;
     }
 
     public async Task<AnalyzeProjectResultDto?> AnalyzeProjectAsync(
@@ -118,7 +120,7 @@ public class AiAnalysisService
                     if (string.IsNullOrWhiteSpace(analysis.Summary))
                         analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
 
-                    await CommentBundleStorage.SaveAiSummaryAsync(
+                    await _bundleStorage.SaveAiSummaryAsync(
                         feedback.FeedbackId,
                         analysis.Summary,
                         feedback.CommentsFileUrl);
@@ -204,7 +206,7 @@ public class AiAnalysisService
             if (string.IsNullOrWhiteSpace(analysis.Summary))
                 analysis.Summary = BuildFallbackSummary(feedback.Content, comments.Count, analysis.Sentiment);
 
-            await CommentBundleStorage.SaveAiSummaryAsync(
+            await _bundleStorage.SaveAiSummaryAsync(
                 feedback.FeedbackId,
                 analysis.Summary,
                 feedback.CommentsFileUrl);
@@ -274,7 +276,7 @@ public class AiAnalysisService
         ScrapedFeedback feedback,
         List<string> comments)
     {
-        var combinedText = CommentBundleStorage.BuildCombinedAnalysisText(feedback.Content, comments);
+        var combinedText = _bundleStorage.BuildCombinedAnalysisText(feedback.Content, comments);
 
         if (_aiSentimentService.IsConfigured)
         {
@@ -328,7 +330,7 @@ public class AiAnalysisService
 
     private async Task<List<string>> EnsureCommentsAsync(ScrapedFeedback feedback)
     {
-        var bundle = await CommentBundleStorage.LoadAsync(feedback.FeedbackId, feedback.CommentsFileUrl);
+        var bundle = await _bundleStorage.LoadAsync(feedback.FeedbackId, feedback.CommentsFileUrl);
         if (bundle.Comments.Count > 0)
             return bundle.Comments;
 

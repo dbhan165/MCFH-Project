@@ -10,10 +10,12 @@ namespace MCFH.Services;
 public class ProjectAnalyticsService
 {
     private readonly McfhDbContext _context;
+    private readonly ICommentBundleStorage _bundleStorage;
 
-    public ProjectAnalyticsService(McfhDbContext context)
+    public ProjectAnalyticsService(McfhDbContext context, ICommentBundleStorage bundleStorage)
     {
         _context = context;
+        _bundleStorage = bundleStorage;
     }
 
     private async Task<bool> IsMemberAsync(int workspaceId, int userId)
@@ -176,7 +178,7 @@ public class ProjectAnalyticsService
                     continue;
             }
 
-            var bundle = await CommentBundleStorage.LoadAsync(row.FeedbackId, row.CommentsFileUrl);
+            var bundle = await _bundleStorage.LoadAsync(row.FeedbackId, row.CommentsFileUrl);
             var sentiment = row.AiAnalysis?.MainSentiment;
             var isAnalyzed = sentiment != null;
             var aiSummary = bundle.AiSummary;
@@ -271,19 +273,8 @@ public class ProjectAnalyticsService
         feedback.DeletedAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
-        TryDeleteCommentBundle(feedback.FeedbackId);
+        await _bundleStorage.DeleteAsync(feedback.FeedbackId);
         return true;
-    }
-
-    private static void TryDeleteCommentBundle(int feedbackId)
-    {
-        try
-        {
-            var path = CommentBundleStorage.GetBundlePath(feedbackId);
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch { }
     }
 
     public async Task<SentimentSummaryDto?> GetSentimentSummaryAsync(int workspaceId, int projectId, int userId)
@@ -493,7 +484,7 @@ public class ProjectAnalyticsService
 
         foreach (var feedback in feedbacks)
         {
-            var bundle = await CommentBundleStorage.LoadAsync(feedback.FeedbackId, feedback.CommentsFileUrl);
+            var bundle = await _bundleStorage.LoadAsync(feedback.FeedbackId, feedback.CommentsFileUrl);
             var hits = AspectTextAnalyzer.AnalyzeText(feedback.Content, bundle.Comments);
             if (hits.Count == 0) continue;
 
