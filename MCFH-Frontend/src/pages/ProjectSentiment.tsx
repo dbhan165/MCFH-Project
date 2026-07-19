@@ -171,14 +171,16 @@ function SentimentRatioCard({
               data={pieData}
               cx="50%"
               cy="50%"
-              innerRadius="62%"
-              outerRadius="82%"
-              paddingAngle={2}
-              minAngle={4}
+              innerRadius="68%"
+              outerRadius="86%"
+              paddingAngle={4}
+              minAngle={5}
+              startAngle={90}
+              endAngle={-270}
               dataKey="value"
-              stroke="rgba(255,255,255,0.14)"
-              strokeWidth={2}
-              cornerRadius={6}
+              stroke="rgba(10,16,29,0.5)"
+              strokeWidth={3}
+              cornerRadius={8}
               animationDuration={800}
             >
               {pieData.map((slice) => (

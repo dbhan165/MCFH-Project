@@ -29,8 +29,11 @@ public class ReporterPortalService
 
         return new ReporterKanbanDto
         {
-            Pending = all.Where(r => r.Status is "pending" or "quoted" or "assigned").ToList(),
+            // Cần chỉnh sửa: khách mới gửi / đã giao / khách yêu cầu sửa lại
+            Pending = all.Where(r => r.Status is "pending" or "assigned" or "revision_requested").ToList(),
+            // Đang xử lý: đã tải file về chỉnh
             InProgress = all.Where(r => r.Status == "in_progress").ToList(),
+            // Đã gửi khách: upload xong
             Completed = all.Where(r => r.Status == "completed").ToList()
         };
     }
@@ -49,6 +52,10 @@ public class ReporterPortalService
 
     public async Task<(byte[] Content, string FileName)?> DownloadAsync(int userId, int requestId) =>
         await _bespoke.DownloadByRequestIdAsync(userId, requestId);
+
+    public async Task<BespokeRequestItemDto?> UploadRevisionAsync(
+        int userId, int requestId, Stream fileStream, string fileName) =>
+        await _bespoke.UploadRevisionByRequestIdAsync(userId, requestId, fileStream, fileName);
 
     public async Task<ReporterPerformanceDto?> GetPerformanceAsync(int userId)
     {

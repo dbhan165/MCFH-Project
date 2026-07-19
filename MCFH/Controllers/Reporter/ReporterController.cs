@@ -14,10 +14,10 @@ public class ReporterController : ControllerBase
 {
     private readonly ReporterPortalService _reporter;
 
-    public ReporterController(McfhDbContext db)
+    public ReporterController(McfhDbContext db, IEmailService emailService, MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
     {
-        var analytics = new ProjectAnalyticsService(db);
-        var bespoke = new BespokeReportService(db, analytics);
+        var analytics = new ProjectAnalyticsService(db, bundleStorage);
+        var bespoke = new BespokeReportService(db, analytics, emailService);
         _reporter = new ReporterPortalService(db, bespoke, analytics);
     }
 
@@ -43,7 +43,7 @@ public class ReporterController : ControllerBase
     public async Task<IActionResult> Quote(int requestId, [FromBody] QuoteBespokeDto dto)
     {
         var result = await _reporter.QuoteAsync(GetUserId(), requestId, dto);
-        if (result == null) return BadRequest(new { message = "Không thể gửi báo giá." });
+        if (result == null) return BadRequest(new { message = "Không thể gửi báo giá. Hạn bàn giao phải từ hôm nay trở đi." });
         return Ok(result);
     }
 
@@ -68,7 +68,20 @@ public class ReporterController : ControllerBase
     {
         var file = await _reporter.DownloadAsync(GetUserId(), requestId);
         if (file == null) return NotFound(new { message = "Không tìm thấy báo cáo." });
-        return File(file.Value.Content, "text/html; charset=utf-8", file.Value.FileName);
+        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+        return File(file.Value.Content, contentType, file.Value.FileName);
+    }
+
+    [HttpPost("requests/{requestId}/upload-revision")]
+    public async Task<IActionResult> UploadRevision(int requestId, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "Vui lòng chọn file báo cáo." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _reporter.UploadRevisionAsync(GetUserId(), requestId, stream, file.FileName);
+        if (result == null) return BadRequest(new { message = "Không thể upload. Chỉ nhận đơn đang được giao / đang xử lý / chờ sửa đổi." });
+        return Ok(result);
     }
 
     [HttpGet("performance")]

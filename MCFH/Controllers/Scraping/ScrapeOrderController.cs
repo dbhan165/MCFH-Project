@@ -17,13 +17,9 @@ public class ScrapeOrderController : ControllerBase
 {
     private readonly ScrapeOrderService _service;
 
-    public ScrapeOrderController(
-        McfhDbContext db,
-        ScrapeJobRunner jobRunner,
-        IServiceScopeFactory scopeFactory,
-        IOptions<ScrapeOptions> scrapeOptions)
+    public ScrapeOrderController(ScrapeOrderService service)
     {
-        _service = new ScrapeOrderService(db, jobRunner, scopeFactory, scrapeOptions);
+        _service = service;
     }
 
     private int? GetUserId()
@@ -54,13 +50,28 @@ public class ScrapeOrderController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Tạo checkout PayOS — trả về checkoutUrl / qrCode để frontend redirect.</summary>
     [HttpPost("{orderId:int}/pay")]
     public async Task<IActionResult> Pay(int orderId)
     {
         var userId = GetUserId();
         if (userId == null) return Unauthorized();
         var result = await _service.PayOrderAsync(userId.Value, orderId);
-        if (result == null) return BadRequest(new { message = "Thanh toán thất bại hoặc đơn không hợp lệ." });
+        if (result == null) return BadRequest(new { message = "Không tạo được thanh toán hoặc đơn không hợp lệ." });
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Trang return sau thanh toán gọi endpoint này — server tra cứu lại PayOS/DB,
+    /// không tin query param từ PayOS redirect.
+    /// </summary>
+    [HttpGet("{orderId:int}/payment-status")]
+    public async Task<IActionResult> PaymentStatus(int orderId)
+    {
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+        var result = await _service.ConfirmPaymentAsync(userId.Value, orderId);
+        if (result == null) return NotFound();
         return Ok(result);
     }
 

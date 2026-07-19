@@ -1,4 +1,5 @@
 ﻿import { Navigate, Outlet } from 'react-router-dom';
+import { getAccessToken, getUserRole } from '../../utils/authStorage';
 
 type PrivateRouteProps = {
   allowedRoles?: string[];
@@ -20,8 +21,8 @@ function resolveRoleHomePath(role: string) {
 }
 
 const PrivateRoute = ({ allowedRoles }: PrivateRouteProps) => {
-  const token = localStorage.getItem('accessToken');
-  const currentRole = localStorage.getItem('userRole');
+  const token = getAccessToken();
+  const currentRole = getUserRole();
 
   if (!token) {
     return <Navigate to="/login" replace />;

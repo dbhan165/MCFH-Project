@@ -8,6 +8,7 @@ import type {
   MentionTag,
   Project,
   ProjectMention,
+  AiAnalysisProgress,
   ProjectOverviewStats,
   ScrapeResult,
   ScrapeJobStatus,
@@ -45,6 +46,7 @@ function normalizeAnalyzeResult(data: Record<string, unknown>): AnalyzeProjectRe
     skippedCount: pickNumber(data, 'skippedCount', 'SkippedCount'),
     totalFeedbacks: pickNumber(data, 'totalFeedbacks', 'TotalFeedbacks'),
     message: pickString(data, 'message', 'Message'),
+    status: pickNullableString(data, 'status', 'Status') ?? undefined,
   };
 }
 
@@ -136,6 +138,20 @@ export const projectApi = {
     return normalizeAnalyzeResult(response.data);
   },
 
+  getAnalyzeProgress: async (workspaceId: number, projectId: number): Promise<AiAnalysisProgress> => {
+    const response = await axiosClient.get<{ isAnalyzing: boolean; progressPercent: number }>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/progress`
+    );
+    return response.data;
+  },
+
+  getWorkspaceAnalyzeProgress: async (workspaceId: number): Promise<Record<number, AiAnalysisProgress>> => {
+    const response = await axiosClient.get<Record<number, AiAnalysisProgress>>(
+      `/api/workspaces/${workspaceId}/projects/analytics/progress`
+    );
+    return response.data;
+  },
+
   getOverview: async (workspaceId: number, projectId: number): Promise<ProjectOverviewStats> => {
     const response = await axiosClient.get<Record<string, unknown>>(
       `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/overview`
@@ -165,6 +181,7 @@ export const projectApi = {
       search?: string;
       dateFrom?: string;
       dateTo?: string;
+      isCrisisAlert?: boolean;
     }
   ): Promise<ProjectMention[]> => {
     const response = await axiosClient.get<unknown[]>(
@@ -445,6 +462,57 @@ export const projectApi = {
     window.URL.revokeObjectURL(url);
   },
 
+  requestBespokeRevision: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number,
+    feedback: string
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/request-revision`,
+      { feedback }
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  uploadBespokeRevision: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number,
+    file: File
+  ): Promise<BespokeRequestItem> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/upload-revision`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  acceptBespokeQuote: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/accept-quote`
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  rejectBespokeQuote: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/reject-quote`
+    );
+    return mapBespokeRequest(response.data);
+  },
+
   getMentionFilters: async (workspaceId: number, projectId: number) => {
     const response = await axiosClient.get<unknown[]>(
       `/api/workspaces/${workspaceId}/projects/${projectId}/mention-filters`
@@ -589,6 +657,7 @@ function mapBespokeRequest(r: Record<string, unknown>): BespokeRequestItem {
     dateFrom: pickNullableString(r, 'dateFrom', 'DateFrom'),
     dateTo: pickNullableString(r, 'dateTo', 'DateTo'),
     format: pickString(r, 'format', 'Format') || 'html',
+    agreedPrice: pickField<number>(r, 'agreedPrice', 'AgreedPrice') ?? null,
     hasDeliverable: pickField(r, 'hasDeliverable', 'HasDeliverable') === true,
     deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,
   };
