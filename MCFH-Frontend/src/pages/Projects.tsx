@@ -24,7 +24,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { projectApi } from '../api/projectApi';
 import { scrapeOrderApi, type ScrapeOrder } from '../api/scrapeOrderApi';
 import { workspaceApi } from '../api/workspaceApi';
-import type { Project } from '../types/project';
+import type { Project, AiAnalysisProgress } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDate } from '../utils/workspaceHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
@@ -81,6 +81,7 @@ function ProjectCard({
   workspaceId,
   isMenuOpen,
   isBusy,
+  aiProgress,
   menuRef,
   compareMode = false,
   isCompareSelected = false,
@@ -97,6 +98,7 @@ function ProjectCard({
   workspaceId: string | undefined;
   isMenuOpen: boolean;
   isBusy: boolean;
+  aiProgress?: AiAnalysisProgress;
   menuRef: React.RefObject<HTMLDivElement | null> | undefined;
   compareMode?: boolean;
   isCompareSelected?: boolean;
@@ -114,6 +116,7 @@ function ProjectCard({
   return (
     <article
       onClick={() => {
+        if (isBusy) return;
         if (compareMode) {
           onToggleCompare?.();
           return;
@@ -121,11 +124,27 @@ function ProjectCard({
         onEnter();
       }}
       className={`group relative overflow-hidden rounded-3xl border bg-[#151B2B] cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
-        compareMode && isCompareSelected
+        isBusy
+          ? 'opacity-90 pointer-events-none border-[#FF7575]/30'
+          : compareMode && isCompareSelected
           ? 'border-[#4FD1C5]/60 shadow-[0_16px_40px_rgba(79,209,197,0.15)]'
           : 'border-white/10 hover:border-[#FF7575]/35 hover:shadow-[0_16px_40px_rgba(255,117,117,0.1)]'
-      }`}
+        }`}
     >
+      {isBusy && !aiProgress?.isAnalyzing && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-[#1a2133] z-30 overflow-hidden">
+          <div className="h-full w-1/2 bg-gradient-to-r from-transparent via-[#FF7575] to-transparent shadow-[0_0_10px_#FF7575] rounded-full animate-indeterminate" />
+        </div>
+      )}
+      {aiProgress?.isAnalyzing && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-[#1a2133] z-30 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-transparent via-[#FF7575] to-[#FF7575] shadow-[0_0_10px_#FF7575] transition-all duration-300"
+            style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
+          />
+        </div>
+      )}
+
       <div className={`absolute inset-0 bg-gradient-to-br ${gradient} pointer-events-none`} />
 
       {compareMode && (
@@ -135,11 +154,10 @@ function ProjectCard({
             e.stopPropagation();
             onToggleCompare?.();
           }}
-          className={`absolute top-4 left-4 z-20 w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${
-            isCompareSelected
+          className={`absolute top-4 left-4 z-20 w-7 h-7 rounded-lg border flex items-center justify-center transition-all ${isCompareSelected
               ? 'bg-[#4FD1C5] border-[#4FD1C5] text-[#0A101D]'
               : 'bg-[#0A101D]/80 border-white/20 text-transparent hover:border-[#4FD1C5]/50'
-          }`}
+            }`}
           aria-label={isCompareSelected ? 'Bỏ chọn' : 'Chọn để so sánh'}
         >
           <Check size={14} className={isCompareSelected ? 'opacity-100' : 'opacity-0'} />
@@ -166,18 +184,18 @@ function ProjectCard({
 
           <div className="relative shrink-0" ref={isMenuOpen ? menuRef : undefined}>
             {!compareMode && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMenu();
-              }}
-              disabled={isBusy}
-              className="p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all disabled:opacity-40"
-              aria-label="Tùy chọn dự án"
-            >
-              {isBusy ? <Loader2 size={18} className="animate-spin" /> : <MoreVertical size={18} />}
-            </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMenu();
+                }}
+                disabled={isBusy}
+                className="p-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all disabled:opacity-40"
+                aria-label="Tùy chọn dự án"
+              >
+                {isBusy ? <Loader2 size={18} className="animate-spin" /> : <MoreVertical size={18} />}
+              </button>
             )}
 
             {isMenuOpen && !compareMode && (
@@ -306,7 +324,15 @@ function ProjectCard({
         )}
 
         <div className="mt-auto flex items-center justify-between gap-3 pt-4 border-t border-white/10">
-          {activeOrder && isActiveOrder(activeOrder) ? (
+          {isBusy || aiProgress?.isAnalyzing ? (
+            <span className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#FF7575] tracking-wide uppercase">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF7575] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF7575]"></span>
+              </span>
+              Đang phân tích AI... {aiProgress?.isAnalyzing ? `${aiProgress.progressPercent}%` : ''}
+            </span>
+          ) : activeOrder && isActiveOrder(activeOrder) ? (
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#FF7575]">
               <Loader2 size={12} className="animate-spin" />
               Đang xử lý đơn cào
@@ -349,6 +375,7 @@ const Projects = () => {
   const [orderByProject, setOrderByProject] = useState<Record<number, ScrapeOrder>>({});
   const [compareMode, setCompareMode] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<number[]>([]);
+  const [aiProgressByProject, setAiProgressByProject] = useState<Record<number, AiAnalysisProgress>>({});
   const menuRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
@@ -387,10 +414,21 @@ const Projects = () => {
     }
   }, [wid]);
 
+  const loadAiProgress = useCallback(async () => {
+    if (!wid || Number.isNaN(wid)) return;
+    try {
+      const progressMap = await projectApi.getWorkspaceAnalyzeProgress(wid);
+      setAiProgressByProject(progressMap);
+    } catch {
+      /* ignore */
+    }
+  }, [wid]);
+
   useEffect(() => {
     loadProjects();
     loadScrapeOrders();
-  }, [loadProjects, loadScrapeOrders]);
+    loadAiProgress();
+  }, [loadProjects, loadScrapeOrders, loadAiProgress]);
 
   const hasActiveOrders = useMemo(
     () => Object.values(orderByProject).some(isActiveOrder),
@@ -398,15 +436,19 @@ const Projects = () => {
   );
 
   useEffect(() => {
-    if (!hasActiveOrders) return;
+    const hasAnalyzing = Object.values(aiProgressByProject).some(p => p.isAnalyzing);
+    if (!hasActiveOrders && !hasAnalyzing) return;
 
     const tick = () => {
-      if (document.visibilityState === 'visible') loadScrapeOrders();
+      if (document.visibilityState === 'visible') {
+        if (hasActiveOrders) loadScrapeOrders();
+        if (hasAnalyzing) loadAiProgress();
+      }
     };
     tick();
-    const timer = setInterval(tick, 8000);
+    const timer = setInterval(tick, 3000);
     return () => clearInterval(timer);
-  }, [hasActiveOrders, loadScrapeOrders]);
+  }, [hasActiveOrders, aiProgressByProject, loadScrapeOrders, loadAiProgress]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -485,11 +527,18 @@ const Projects = () => {
 
     try {
       const result = await projectApi.analyze(wid, project.projectId, true);
+      // Set ngay trạng thái đang phân tích để effect polling khởi động;
+      // các lần poll sau sẽ đồng bộ lại với backend.
+      setAiProgressByProject((prev) => ({
+        ...prev,
+        [project.projectId]: { isAnalyzing: true, progressPercent: 0 },
+      }));
       await alert({
         title: 'Phân tích AI',
         message: result.message,
         type: 'success',
       });
+      loadAiProgress();
     } catch (error) {
       await alert({
         title: 'Phân tích thất bại',
@@ -582,11 +631,10 @@ const Projects = () => {
                   if (compareMode) exitCompareMode();
                   else setCompareMode(true);
                 }}
-                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold border transition-colors ${
-                  compareMode
+                className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold border transition-colors ${compareMode
                     ? 'bg-[#4FD1C5]/15 text-[#4FD1C5] border-[#4FD1C5]/30'
                     : 'text-gray-300 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white'
-                }`}
+                  }`}
               >
                 <GitCompare size={16} />
                 {compareMode ? 'Hủy so sánh' : 'So sánh dự án'}
@@ -598,6 +646,14 @@ const Projects = () => {
             >
               <Plus size={18} />
               Tạo dự án mới
+            </Link>
+
+            <Link
+              to={`/workspace/${workspaceId}/project/bespoke-reports`}
+              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+            >
+              <Plus size={18} />
+              Tạo báo cáo chuyên sâu
             </Link>
           </div>
         </div>
@@ -724,34 +780,38 @@ const Projects = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredProjects.map((project) => (
-            <ProjectCard
-              key={project.projectId}
-              project={project}
-              activeOrder={orderByProject[project.projectId]}
-              workspaceId={workspaceId}
-              compareMode={compareMode}
-              isCompareSelected={selectedCompareIds.includes(project.projectId)}
-              onToggleCompare={() => toggleCompareSelection(project.projectId)}
-              isMenuOpen={openMenuId === project.projectId}
-              isBusy={actionProjectId === project.projectId}
-              menuRef={openMenuId === project.projectId ? menuRef : undefined}
-              onToggleMenu={() =>
-                setOpenMenuId(openMenuId === project.projectId ? null : project.projectId)
-              }
-              onEnter={() => {
-                setOpenMenuId(null);
-                enterProject(project.projectId);
-              }}
-              onRescrape={() => handleRescrape(project)}
-              onAnalyze={() => handleAnalyze(project)}
-              onEdit={() => {
-                setOpenMenuId(null);
-                navigate(`/workspace/${wid}/project/${project.projectId}/edit`);
-              }}
-              onDelete={() => handleDeleteProject(project)}
-            />
-          ))}
+          {filteredProjects.map((project) => {
+            const isBusy = actionProjectId === project.projectId || aiProgressByProject[project.projectId]?.isAnalyzing;
+            return (
+              <ProjectCard
+                key={project.projectId}
+                project={project}
+                activeOrder={orderByProject[project.projectId]}
+                workspaceId={workspaceId}
+                compareMode={compareMode}
+                isCompareSelected={selectedCompareIds.includes(project.projectId)}
+                onToggleCompare={() => toggleCompareSelection(project.projectId)}
+                isMenuOpen={openMenuId === project.projectId}
+                isBusy={isBusy}
+                aiProgress={aiProgressByProject[project.projectId]}
+                menuRef={openMenuId === project.projectId ? menuRef : undefined}
+                onToggleMenu={() =>
+                  setOpenMenuId(openMenuId === project.projectId ? null : project.projectId)
+                }
+                onEnter={() => {
+                  setOpenMenuId(null);
+                  enterProject(project.projectId);
+                }}
+                onRescrape={() => handleRescrape(project)}
+                onAnalyze={() => handleAnalyze(project)}
+                onEdit={() => {
+                  setOpenMenuId(null);
+                  navigate(`/workspace/${workspaceId}/project/${project.projectId}/edit`);
+                }}
+                onDelete={() => handleDeleteProject(project)}
+              />
+            );
+          })}
 
           {filteredProjects.length === 0 && searchQuery && (
             <div className="md:col-span-2 xl:col-span-3 rounded-3xl border border-white/10 bg-[#151B2B] p-12 text-center">

@@ -436,9 +436,8 @@ FodyWeavers.xsd
 .env.development
 .env.production
 
-# ASP.NET sensitive config (connection string, JWT secret)
-appsettings.Development.json
-appsettings.Production.json
+# ASP.NET sensitive config - cấu hình dev/prod đã tách riêng
+# appsettings.Development.json và appsettings.Production.json được track trong git
 
 # React build output
 dist/

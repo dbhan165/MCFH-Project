@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using ClosedXML.Excel;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
@@ -39,11 +40,11 @@ public class ProjectReportService
         },
         new()
         {
-            Key = "mentions-csv",
-            Name = "Xuất Mentions (CSV)",
-            Description = "Danh sách mentions dạng bảng để mở trong Excel hoặc BI tool.",
-            Format = "csv",
-            TypeLabel = "CSV Export"
+            Key = "mentions-xlsx",
+            Name = "Xuất Mentions (Excel)",
+            Description = "Danh sách mentions dạng bảng để lọc, tìm kiếm hoặc báo cáo (đã xử lý màu sắc).",
+            Format = "xlsx",
+            TypeLabel = "Excel Export"
         },
         new()
         {
@@ -101,26 +102,33 @@ public class ProjectReportService
             await File.WriteAllBytesAsync(filePath, pdfBytes);
             fileName = $"{fileName}.{extension}";
         }
-        else if (type == "analytics-pptx")
+        else if (type == "analytics-pptx" || type == "mentions-xlsx")
         {
-            var (pptxBytes, ext, count) = await BuildAnalyticsPptxAsync(workspaceId, projectId, userId, project.Name);
-            extension = ext;
+            byte[] bytes;
+            int count;
+            if (type == "analytics-pptx")
+            {
+                (bytes, extension, count) = await BuildAnalyticsPptxAsync(workspaceId, projectId, userId, project.Name);
+            }
+            else
+            {
+                (bytes, extension, count) = await BuildMentionsXlsxAsync(workspaceId, projectId, userId, project.Name);
+            }
             rowCount = count;
             var filePath = Path.Combine(folder, $"{fileName}.{extension}");
-            await File.WriteAllBytesAsync(filePath, pptxBytes);
+            await File.WriteAllBytesAsync(filePath, bytes);
             fileName = $"{fileName}.{extension}";
         }
         else
         {
             (string content, extension, rowCount) = type switch
             {
-                "mentions-csv" => await BuildMentionsCsvAsync(projectId, project.Name),
                 "analytics-html" => await BuildAnalyticsHtmlAsync(workspaceId, projectId, userId, project.Name),
                 "analytics-json" => await BuildAnalyticsJsonAsync(workspaceId, projectId, userId, project.Name),
                 _ => throw new ArgumentException("Loại báo cáo không hợp lệ.")
             };
             var filePath = Path.Combine(folder, $"{fileName}.{extension}");
-            await File.WriteAllTextAsync(filePath, content, Encoding.UTF8);
+            await File.WriteAllTextAsync(filePath, content, new UTF8Encoding(true));
             fileName = $"{fileName}.{extension}";
         }
 
@@ -161,7 +169,7 @@ public class ProjectReportService
         var bytes = await File.ReadAllBytesAsync(filePath);
         var contentType = meta.Type switch
         {
-            "mentions-csv" => "text/csv; charset=utf-8",
+            "mentions-xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "analytics-html" => "text/html; charset=utf-8",
             "analytics-pdf" => "application/pdf",
             "analytics-pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -173,32 +181,82 @@ public class ProjectReportService
         return (bytes, contentType, fileName);
     }
 
-    private async Task<(string Content, string Extension, int RowCount)> BuildMentionsCsvAsync(
-        int projectId, string projectName)
+    private async Task<(byte[] Content, string Extension, int RowCount)> BuildMentionsXlsxAsync(
+        int workspaceId, int projectId, int userId, string projectName)
     {
-        var mentions = await _context.ScrapedFeedbacks
-            .Where(f => f.ProjectId == projectId && f.IsDeleted != true)
-            .Include(f => f.AiAnalysis)
-            .OrderByDescending(f => f.ScrapedAt)
-            .ToListAsync();
+        var mentions = await _analytics.GetMentionsAsync(workspaceId, projectId, userId);
 
-        var sb = new StringBuilder();
-        sb.AppendLine("feedback_id,platform,author,content,sentiment,comments_count,original_url,scraped_at");
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Mentions");
 
+        // Headers
+        var headers = new[] { "Feedback ID", "Nền tảng", "Tác giả", "Nội dung", "Sentiment", "Bình luận", "Ngày lấy dữ liệu", "AI Summary", "Original URL" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#F3F4F6");
+            cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+            cell.Style.Border.BottomBorderColor = XLColor.FromHtml("#D1D5DB");
+        }
+        ws.SheetView.FreezeRows(1);
+
+        // Data
+        int row = 2;
         foreach (var m in mentions)
         {
-            sb.AppendLine(string.Join(",",
-                m.FeedbackId,
-                Csv(m.Platform),
-                Csv(m.AuthorName),
-                Csv(m.Content),
-                Csv(m.AiAnalysis?.MainSentiment),
-                m.CommentsCount ?? 0,
-                Csv(m.OriginalUrl),
-                Csv(m.ScrapedAt?.ToString("o"))));
+            ws.Cell(row, 1).Value = m.FeedbackId;
+            ws.Cell(row, 2).Value = m.Platform ?? "";
+            ws.Cell(row, 3).Value = m.AuthorName ?? "";
+            ws.Cell(row, 4).Value = m.Content ?? "";
+            ws.Cell(row, 4).Style.Alignment.WrapText = true;
+            
+            var sentiment = m.Sentiment ?? "";
+            var senCell = ws.Cell(row, 5);
+            senCell.Value = sentiment;
+            if (sentiment.Equals("positive", StringComparison.OrdinalIgnoreCase))
+            {
+                senCell.Style.Font.FontColor = XLColor.FromHtml("#059669");
+                senCell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D1FAE5");
+            }
+            else if (sentiment.Equals("negative", StringComparison.OrdinalIgnoreCase))
+            {
+                senCell.Style.Font.FontColor = XLColor.FromHtml("#E11D48");
+                senCell.Style.Fill.BackgroundColor = XLColor.FromHtml("#FFE4E6");
+            }
+            else
+            {
+                senCell.Style.Font.FontColor = XLColor.FromHtml("#4B5563");
+                senCell.Style.Fill.BackgroundColor = XLColor.FromHtml("#F3F4F6");
+            }
+            
+            ws.Cell(row, 6).Value = m.CommentsCount;
+            ws.Cell(row, 7).Value = m.ScrapedAt?.ToString("dd/MM/yyyy HH:mm") ?? "";
+            ws.Cell(row, 8).Value = m.AiSummary ?? "";
+            ws.Cell(row, 8).Style.Alignment.WrapText = true;
+            ws.Cell(row, 9).Value = m.OriginalUrl ?? "";
+            if (!string.IsNullOrEmpty(m.OriginalUrl))
+            {
+                ws.Cell(row, 9).SetHyperlink(new XLHyperlink(m.OriginalUrl));
+            }
+            
+            row++;
         }
 
-        return (sb.ToString(), "csv", mentions.Count);
+        ws.Column(1).Width = 15;
+        ws.Column(2).Width = 12;
+        ws.Column(3).Width = 20;
+        ws.Column(4).Width = 60;
+        ws.Column(5).Width = 12;
+        ws.Column(6).Width = 10;
+        ws.Column(7).Width = 18;
+        ws.Column(8).Width = 40;
+        ws.Column(9).Width = 25;
+
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return (ms.ToArray(), "xlsx", mentions.Count);
     }
 
     private async Task<(string Content, string Extension, int RowCount)> BuildAnalyticsHtmlAsync(
@@ -412,7 +470,7 @@ public class ProjectReportService
             sb.AppendLine("</section>");
         }
 
-        sb.AppendLine("<p class=\"footnote\">Ghi chú: báo cáo này được tổng hợp từ dữ liệu hiện có trong hệ thống tại thời điểm xuất file. Nếu Gemini không khả dụng, một phần sentiment có thể được sinh từ rule-based fallback để đảm bảo dashboard và báo cáo không bị gián đoạn.</p>");
+        sb.AppendLine("<p class=\"footnote\">Ghi chú: báo cáo này được tổng hợp từ dữ liệu hiện có trong hệ thống tại thời điểm xuất file. Nếu AI Model không khả dụng, một phần sentiment có thể được sinh từ rule-based fallback để đảm bảo dashboard và báo cáo không bị gián đoạn.</p>");
         sb.AppendLine("<div class=\"footer\">Generated by MCFH Platform</div>");
         sb.AppendLine("</div>");
         sb.AppendLine("</body></html>");
@@ -426,13 +484,15 @@ public class ProjectReportService
         var overview = await _analytics.GetOverviewAsync(workspaceId, projectId, userId);
         var sentiment = await _analytics.GetSentimentSummaryAsync(workspaceId, projectId, userId);
         var channels = await _analytics.GetChannelComparisonAsync(workspaceId, projectId, userId);
+        var influencers = await _analytics.GetInfluencersAsync(workspaceId, projectId, userId);
+        var aspects = await _analytics.GetAspectAnalysisAsync(workspaceId, projectId, userId);
         var generated = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("vi-VN"));
 
         var slides = new List<PptxSlide>
         {
             new()
             {
-                Heading = "Tổng quan KPI",
+                Heading = "Tổng quan chiến dịch (KPI)",
                 Bullets =
                 [
                     $"Tổng mentions: {FormatNumber(overview?.TotalMentions ?? 0)}",
@@ -450,22 +510,60 @@ public class ProjectReportService
             slides.Add(new PptxSlide
             {
                 Heading = "Hiệu quả theo kênh",
-                Bullets = channels.Channels
+                Bullets = new List<string> { "Biểu đồ SOV (Share of Voice) theo nền tảng:" },
+                ChartData = channels.Channels
                     .OrderByDescending(c => c.Mentions)
                     .Take(6)
-                    .Select(c => $"{c.Label}: {FormatNumber(c.Mentions)} mentions · SOV {c.MentionShare:0.#}% · NSR {c.NsrScore:+#.#;-#.#;0}%")
+                    .Select(c => new PptxBarChartItem
+                    {
+                        Label = c.Label,
+                        Value = c.Mentions,
+                        ValueLabel = $"{FormatNumber(c.Mentions)} ({c.MentionShare:0.#}%)",
+                        ColorHex = c.Mentions > (overview?.TotalMentions * 0.5 ?? 0) ? "00B4D8" : "10B981"
+                    }).ToList()
+            });
+        }
+
+        if (aspects?.Aspects.Count > 0)
+        {
+            slides.Add(new PptxSlide
+            {
+                Heading = "Các khía cạnh bàn luận nhiều nhất",
+                Bullets = new List<string> { "AI phân tích các chủ đề người dùng thường đề cập:" },
+                ChartData = aspects.Aspects
+                    .OrderByDescending(a => a.TotalMentions)
+                    .Take(6)
+                    .Select(a => new PptxBarChartItem
+                    {
+                        Label = a.Label,
+                        Value = a.TotalMentions,
+                        ValueLabel = $"{FormatNumber(a.TotalMentions)} mentions",
+                        ColorHex = a.NegativePercent > a.PositivePercent ? "FF7575" : "F59E0B"
+                    }).ToList()
+            });
+        }
+
+        if (influencers?.Influencers.Count > 0)
+        {
+            slides.Add(new PptxSlide
+            {
+                Heading = "Top Influencers Nổi Bật",
+                Bullets = influencers.Influencers
+                    .OrderByDescending(i => i.InfluenceScore)
+                    .Take(6)
+                    .Select(i => $"{i.Name} ({i.Platform}): {FormatNumber(i.Mentions)} mentions · {FormatNumber(i.TotalComments)} bình luận · Điểm ảnh hưởng: {i.InfluenceScore:0.#}")
                     .ToList()
             });
         }
 
         slides.Add(new PptxSlide
         {
-            Heading = "Ghi chú",
+            Heading = "Ghi chú & Nguồn Dữ Liệu",
             Bullets =
             [
                 $"Thời điểm xuất: {generated}",
-                "Báo cáo được tổng hợp từ dữ liệu hiện có trong MCFH.",
-                "Nên đối chiếu thêm tab Sentiment và Mentions trước khi ra quyết định."
+                "Báo cáo được tổng hợp tự động từ AI qua hệ thống MCFH.",
+                "Dữ liệu biểu đồ được trích xuất dựa trên tập mentions hiện có."
             ]
         });
 

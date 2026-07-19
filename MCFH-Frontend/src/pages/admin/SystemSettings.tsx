@@ -6,10 +6,9 @@ import {
   Gauge,
   Eye,
   EyeOff,
-  ChevronDown,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { adminApi, geminiApi } from '../../api/portalApi';
+import { adminApi, aiModelApi } from '../../api/portalApi';
 
 type SettingsTab = 'api' | 'payment' | 'notifications' | 'thresholds';
 
@@ -26,44 +25,44 @@ const settingsCategories: SettingsCategory[] = [
   { id: 'thresholds', label: 'Global Thresholds', icon: Gauge },
 ];
 
-const modelOptions = [
-  'Gemini 2.5 Flash (Recommended)',
-  'Gemini 2.0 Flash',
-  'Gemini 2.0 Flash Lite',
-];
+const defaultModelValue = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
 
 const SystemSettings = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('api');
   const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKey, setApiKey] = useState('sk-gemini-xxxxxxxxxxxxxxxxxxxx');
-  const [defaultModel, setDefaultModel] = useState(modelOptions[0]);
-  const [dailyLimit, setDailyLimit] = useState('50,00');
+  const [apiKey, setApiKey] = useState('sk-xxxxxxxxxxxxxxxxxxxx');
+  const [defaultModel, setDefaultModel] = useState(defaultModelValue);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [isTestingGemini, setIsTestingGemini] = useState(false);
-  const [geminiTestMessage, setGeminiTestMessage] = useState('');
+  const [isTestingAiModel, setIsTestingAiModel] = useState(false);
+  const [aiModelTestMessage, setAiModelTestMessage] = useState('');
 
   useEffect(() => {
     adminApi.getSettings().then((settings) => {
-      const gemini = settings.find((s) => s.settingKey === 'GEMINI_API_KEY');
-      if (gemini?.settingValue) setApiKey(gemini.settingValue);
+      // Ưu tiên key mới AI_MODEL_*, fallback key cũ GEMINI_* còn trong DB.
+      const key = settings.find((s) => s.settingKey === 'AI_MODEL_API_KEY')
+        ?? settings.find((s) => s.settingKey === 'GEMINI_API_KEY');
+      if (key?.settingValue) setApiKey(key.settingValue);
+      const model = settings.find((s) => s.settingKey === 'AI_MODEL_NAME')
+        ?? settings.find((s) => s.settingKey === 'GEMINI_MODEL');
+      if (model?.settingValue) setDefaultModel(model.settingValue);
     }).catch(() => undefined);
   }, []);
 
-  const handleTestGemini = async () => {
-    setIsTestingGemini(true);
-    setGeminiTestMessage('');
+  const handleTestAiModel = async () => {
+    setIsTestingAiModel(true);
+    setAiModelTestMessage('');
     try {
-      const result = await geminiApi.test();
+      const result = await aiModelApi.test();
       const detail = result.sampleSummary
         ? ` Sentiment mẫu: ${result.sampleSentiment ?? '—'}. Tóm tắt: ${result.sampleSummary}`
         : '';
-      setGeminiTestMessage(`${result.message}${detail}`);
+      setAiModelTestMessage(`${result.message}${detail}`);
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { message?: string } } };
-      setGeminiTestMessage(apiErr.response?.data?.message ?? 'Không thể kết nối Gemini — kiểm tra API key và restart backend.');
+      setAiModelTestMessage(apiErr.response?.data?.message ?? 'Không thể kết nối AI Model — kiểm tra API key và restart backend.');
     } finally {
-      setIsTestingGemini(false);
+      setIsTestingAiModel(false);
     }
   };
 
@@ -72,7 +71,8 @@ const SystemSettings = () => {
     setSaveMessage('');
     try {
       await adminApi.updateSettings({
-        GEMINI_API_KEY: apiKey,
+        AI_MODEL_API_KEY: apiKey,
+        AI_MODEL_NAME: defaultModel,
         VNPAY_TMN_CODE: null,
         VNPAY_SECRET_KEY: null,
       });
@@ -124,9 +124,9 @@ const SystemSettings = () => {
             <>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
                 <div>
-                  <h3 className="text-lg font-semibold text-[#111827]">Gemini API Settings</h3>
+                  <h3 className="text-lg font-semibold text-[#111827]">AI Model Settings</h3>
                   <p className="text-sm text-[#6b7280] mt-1">
-                    Configure Large Language Model integration for data analysis.
+                    Configure Large Language Model integration via TokenRouter.
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-blue-50 text-blue-600 shrink-0">
@@ -168,42 +168,25 @@ const SystemSettings = () => {
                       Default Model
                     </label>
                     <div className="relative">
-                      <select
+                      <input
+                        type="text"
                         value={defaultModel}
                         onChange={(e) => setDefaultModel(e.target.value)}
-                        className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 pr-10 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                      >
-                        {modelOptions.map((model) => (
-                          <option key={model} value={model}>
-                            {model}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        placeholder="e.g. nvidia/nemotron-3..."
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                      />
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
-                      Daily Usage Limit ($)
-                    </label>
-                    <input
-                      type="text"
-                      value={dailyLimit}
-                      onChange={(e) => setDailyLimit(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                    />
                   </div>
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={handleTestGemini}
-                    disabled={isTestingGemini}
+                    onClick={handleTestAiModel}
+                    disabled={isTestingAiModel}
                     className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors"
                   >
-                    {isTestingGemini ? 'Đang test Gemini...' : 'Test Gemini AI'}
+                    {isTestingAiModel ? 'Đang test AI...' : 'Test AI Model'}
                   </button>
                   <button
                     type="submit"
@@ -214,9 +197,9 @@ const SystemSettings = () => {
                   </button>
                 </div>
               </form>
-              {geminiTestMessage && (
-                <p className={`mt-4 text-sm ${geminiTestMessage.includes('hoạt động') ? 'text-emerald-600' : 'text-amber-700'}`}>
-                  {geminiTestMessage}
+              {aiModelTestMessage && (
+                <p className={`mt-4 text-sm ${aiModelTestMessage.includes('hoạt động') ? 'text-emerald-600' : 'text-amber-700'}`}>
+                  {aiModelTestMessage}
                 </p>
               )}
               {saveMessage && <p className="mt-4 text-sm text-emerald-600">{saveMessage}</p>}

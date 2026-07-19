@@ -511,6 +511,21 @@ public partial class McfhDbContext : DbContext
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.OrderCode).HasColumnName("order_code");
+            entity.Property(e => e.PaymentLinkId)
+                .HasMaxLength(100)
+                .IsUnicode(false)
+                .HasColumnName("payment_link_id");
+            entity.Property(e => e.CheckoutUrl)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .HasColumnName("checkout_url");
+            entity.Property(e => e.PaidAt)
+                .HasColumnType("datetime")
+                .HasColumnName("paid_at");
+            entity.HasIndex(e => e.OrderCode, "UQ_Payments_OrderCode")
+                .IsUnique()
+                .HasFilter("[order_code] IS NOT NULL");
             entity.Property(e => e.PlanId).HasColumnName("plan_id");
             entity.Property(e => e.RequestId).HasColumnName("request_id");
             entity.Property(e => e.Status)

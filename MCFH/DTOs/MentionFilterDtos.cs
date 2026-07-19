@@ -1,4 +1,4 @@
-﻿namespace MCFH.DTOs;
+namespace MCFH.DTOs;
 
 public class MentionQueryDto
 {
@@ -8,6 +8,7 @@ public class MentionQueryDto
     public DateTime? DateFrom { get; set; }
     public DateTime? DateTo { get; set; }
     public bool ExcludeMuted { get; set; } = true;
+    public bool? IsCrisisAlert { get; set; }
 }
 
 public class SavedFilterDto

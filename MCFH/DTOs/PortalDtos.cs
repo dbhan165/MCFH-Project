@@ -134,6 +134,9 @@ public class PortalBespokeRequestDto
     public decimal? AgreedPrice { get; set; }
     public bool HasDeliverable { get; set; }
     public int? DeliverableReportId { get; set; }
+    public string? RevisionFeedback { get; set; }
+    public string? Keyword { get; set; }
+    public string? PackageType { get; set; }
 }
 
 public class ReporterKanbanDto

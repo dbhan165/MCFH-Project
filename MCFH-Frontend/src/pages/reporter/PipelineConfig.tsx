@@ -115,7 +115,7 @@ export default function PipelineConfig() {
             Cấu hình Tiến trình Cào & AI Phân tích
           </h1>
           <p className="text-sm text-gray-500">
-            Thiết lập nguồn cấp dữ liệu và các tiêu chí để Bot Python và Gemini AI chạy ngầm.
+            Thiết lập nguồn cấp dữ liệu và các tiêu chí để Bot và AI Model chạy ngầm.
           </p>
         </div>
 
@@ -181,10 +181,10 @@ export default function PipelineConfig() {
             </button>
           </div>
 
-          {/* CỘT 2: Cấu hình AI (Gemini Criteria) */}
+          {/* CỘT 2: Cấu hình AI (AI Model Criteria) */}
           <div className="lg:col-span-5 bg-white rounded-xl border border-gray-200/80 shadow-sm p-6">
             <h2 className="text-base font-bold text-[#0f172a] mb-4">
-              2. Cấu hình AI (Gemini Criteria)
+              2. Cấu hình AI (AI Model Criteria)
             </h2>
 
             {/* Hộp gợi ý cấu hình AI */}

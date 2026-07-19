@@ -114,10 +114,18 @@ const CreateProject = () => {
       });
 
       setLaunchPhase('paying');
-      const paid = await scrapeOrderApi.pay(order.orderId);
+      const checkout = await scrapeOrderApi.pay(order.orderId);
       setLaunchPhase('done');
 
-      navigate(`/workspace/${wid}/orders/${paid.orderId}`);
+      // Đơn đã thanh toán từ trước (link cũ đã trả tiền) → vào thẳng trang theo dõi.
+      const paidStatuses = ['paid', 'scraping', 'analyzing', 'completed'];
+      if (paidStatuses.includes(checkout.order.status) || !checkout.checkoutUrl) {
+        navigate(`/workspace/${wid}/orders/${checkout.order.orderId}`);
+        return;
+      }
+
+      // Redirect sang cổng thanh toán PayOS — PayOS sẽ đưa người dùng về /payment/return.
+      window.location.href = checkout.checkoutUrl;
     } catch (error) {
       setLaunchPhase('error');
       const message = extractApiError(error, 'Không thể hoàn tất thanh toán. Vui lòng thử lại.');
@@ -132,8 +140,8 @@ const CreateProject = () => {
   const phaseLabel: Record<LaunchPhase, string> = {
     idle: '',
     creating: 'Đang tạo dự án...',
-    paying: 'Đang xử lý thanh toán...',
-    done: 'Thanh toán thành công — chuyển đến trang theo dõi...',
+    paying: 'Đang tạo liên kết thanh toán PayOS...',
+    done: 'Đang chuyển đến cổng thanh toán PayOS...',
     error: 'Có lỗi xảy ra',
   };
 
@@ -295,7 +303,8 @@ const CreateProject = () => {
                         </div>
                       </div>
                       <p className="text-xs text-center text-gray-500">
-                        Thanh toán mô phỏng (demo) — số tiền sẽ được ghi vào lịch sử thanh toán.
+                        Thanh toán an toàn qua PayOS — quét mã VietQR hoặc chuyển khoản ngân hàng.
+                        Dữ liệu chỉ được cào sau khi thanh toán thành công.
                       </p>
                     </div>
                   ) : (

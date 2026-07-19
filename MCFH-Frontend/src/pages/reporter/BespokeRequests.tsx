@@ -10,17 +10,17 @@ import { formatWorkspaceDate } from '../../utils/workspaceHelpers';
 type ColumnKey = 'pending' | 'inProgress' | 'completed';
 
 const COLUMNS: { key: ColumnKey; title: string; dotColor: string }[] = [
-  { key: 'pending', title: 'Chờ xử lý / Báo giá', dotColor: 'bg-sky-400' },
-  { key: 'inProgress', title: 'Đang làm', dotColor: 'bg-amber-400' },
-  { key: 'completed', title: 'Hoàn thành', dotColor: 'bg-emerald-400' },
+  { key: 'pending', title: 'Cần chỉnh sửa', dotColor: 'bg-pink-400' },
+  { key: 'inProgress', title: 'Đang xử lý', dotColor: 'bg-amber-400' },
+  { key: 'completed', title: 'Đã gửi khách', dotColor: 'bg-emerald-400' },
 ];
 
-function getCardAction(req: PortalBespokeRequest): { action: 'quote' | 'pipeline' | 'download'; label: string } {
-  if (req.status === 'completed' && req.hasDeliverable)
-    return { action: 'download', label: 'Tải báo cáo' };
-  if (req.status === 'assigned' || req.status === 'quoted' || req.status === 'in_progress')
-    return { action: 'pipeline', label: req.status === 'in_progress' ? 'Tiếp tục làm' : 'Bắt đầu làm' };
-  return { action: 'quote', label: 'Xem & Báo giá' };
+function getCardAction(req: PortalBespokeRequest): { label: string } {
+  if (req.status === 'in_progress') return { label: 'Upload bản đã chỉnh sửa' };
+  if (req.status === 'pending' || req.status === 'assigned' || req.status === 'revision_requested')
+    return { label: 'Tải báo cáo & chỉnh sửa' };
+  if (req.status === 'completed') return { label: 'Xem báo cáo đã gửi' };
+  return { label: 'Xem chi tiết' };
 }
 
 const BespokeRequests = () => {
@@ -50,36 +50,12 @@ const BespokeRequests = () => {
     load();
   }, [load]);
 
-  const handleCardAction = async (req: PortalBespokeRequest) => {
-    const { action } = getCardAction(req);
-    if (action === 'quote') {
-      navigate(`/reporter/requests/${req.requestId}`);
-      return;
-    }
-    if (action === 'pipeline') {
-      if (req.status === 'assigned' || req.status === 'quoted') {
-        try {
-          await reporterApi.startWork(req.requestId);
-        } catch {
-          /* có thể đã in_progress */
-        }
-      }
-      navigate(`/reporter/pipeline/${req.requestId}`);
-      return;
-    }
-    try {
-      await reporterApi.download(req.requestId);
-    } catch (error) {
-      setErrorMessage(extractApiError(error, 'Không thể tải báo cáo.'));
-    }
-  };
-
   return (
     <ReporterLayout activeTopNav="reports">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <h2 className="text-xl lg:text-2xl font-bold text-[#0f172a]">
-          Quản lý Đơn Yêu cầu{' '}
-          <span className="text-base font-normal text-[#64748b]">(Bespoke Requests)</span>
+          Yêu cầu chỉnh sửa báo cáo{' '}
+          <span className="text-base font-normal text-[#64748b]">(Bespoke)</span>
         </h2>
         <button
           type="button"
@@ -159,7 +135,7 @@ const BespokeRequests = () => {
 
                           <button
                             type="button"
-                            onClick={() => handleCardAction(card)}
+                            onClick={() => navigate(`/reporter/requests/${card.requestId}`)}
                             className="w-full py-2.5 border-2 border-teal-600 text-teal-700 hover:bg-teal-50 rounded-lg text-sm font-semibold transition-colors"
                           >
                             {label}

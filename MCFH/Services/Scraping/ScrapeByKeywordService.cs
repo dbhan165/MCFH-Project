@@ -20,6 +20,7 @@ public class ScrapeByKeywordService
     private readonly ProxyRotationService _proxyRotation;
     private readonly ProxyOptions _proxyOptions;
     private readonly SerpApiNewsDiscovery _serpApiNewsDiscovery;
+    private readonly ICommentBundleStorage _bundleStorage;
     private ScrapeOptions _activeOptions = null!;
     private SystemProxy? _activeProxy;
     private string? _scrapeJobId;
@@ -33,7 +34,8 @@ public class ScrapeByKeywordService
         IOptions<ScrapeOptions> scrapeOptions,
         ProxyRotationService proxyRotation,
         IOptions<ProxyOptions> proxyOptions,
-        SerpApiNewsDiscovery serpApiNewsDiscovery)
+        SerpApiNewsDiscovery serpApiNewsDiscovery,
+        ICommentBundleStorage bundleStorage)
     {
         _db = db;
         _aiAnalysisService = aiAnalysisService;
@@ -41,6 +43,7 @@ public class ScrapeByKeywordService
         _proxyRotation = proxyRotation;
         _proxyOptions = proxyOptions.Value;
         _serpApiNewsDiscovery = serpApiNewsDiscovery;
+        _bundleStorage = bundleStorage;
     }
 
     public async Task<ScrapeByKeywordResult> ScrapeAsync(
@@ -1145,7 +1148,7 @@ public class ScrapeByKeywordService
             _db.ScrapedFeedbacks.Add(feedback);
             await _db.SaveChangesAsync();
 
-            var savedCount = await CommentBundleStorage.SaveAsync(feedback.FeedbackId, normalized);
+            var savedCount = await _bundleStorage.SaveAsync(feedback.FeedbackId, normalized);
             feedback.CommentsCount = savedCount;
             feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
             await _db.SaveChangesAsync();

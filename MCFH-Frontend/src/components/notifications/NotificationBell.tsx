@@ -4,7 +4,11 @@ import { Bell, Check, Loader2, Mail, AlertTriangle } from 'lucide-react';
 import { meApi, type AppNotification } from '../../api/meApi';
 import { formatWorkspaceDateTime } from '../../utils/workspaceHelpers';
 
-const NotificationBell = () => {
+interface NotificationBellProps {
+  theme?: 'light' | 'dark';
+}
+
+const NotificationBell = ({ theme = 'dark' }: NotificationBellProps) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -67,6 +71,19 @@ const NotificationBell = () => {
     if (notification.type === 'crisis_alert' && notification.workspaceId && notification.projectId) {
       setOpen(false);
       navigate(`/workspace/${notification.workspaceId}/project/${notification.projectId}/sentiment`);
+      return;
+    }
+
+    if ((notification.type === 'scrape_completed' || notification.type === 'scrape_failed') && notification.workspaceId && notification.projectId) {
+      setOpen(false);
+      navigate(`/workspace/${notification.workspaceId}/project/${notification.projectId}`);
+      return;
+    }
+
+    if (notification.type === 'success' && notification.relatedType === 'scrape_order' && notification.workspaceId && notification.relatedId) {
+      setOpen(false);
+      navigate(`/workspace/${notification.workspaceId}/orders/${notification.relatedId}`);
+      return;
     }
   };
 
@@ -79,10 +96,14 @@ const NotificationBell = () => {
       <button
         type="button"
         onClick={handleOpen}
-        className="relative p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors"
+        className={
+          theme === 'dark'
+            ? "relative p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors"
+            : "relative p-2 rounded-lg text-gray-500 hover:text-[#111827] hover:bg-gray-50 transition-colors"
+        }
         aria-label="Thông báo"
       >
-        <Bell size={20} />
+        <Bell className={theme === 'dark' ? "w-5 h-5" : "w-5 h-5"} />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF7575] text-white text-[10px] font-bold flex items-center justify-center">
             {unreadCount > 9 ? '9+' : unreadCount}
@@ -128,6 +149,8 @@ const NotificationBell = () => {
                         <Mail className="w-4 h-4 text-[#FF7575]" />
                       ) : n.type === 'crisis_alert' ? (
                         <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      ) : n.type === 'scrape_failed' ? (
+                        <AlertTriangle className="w-4 h-4 text-[#FF7575]" />
                       ) : (
                         <Check className="w-4 h-4 text-emerald-400" />
                       )}

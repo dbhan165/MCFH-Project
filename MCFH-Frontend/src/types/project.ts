@@ -24,12 +24,18 @@ export interface CreateProjectPayload {
   dataSources?: Array<{ platform: string; targetUrl?: string | null }>;
 }
 
+export interface AiAnalysisProgress {
+  isAnalyzing: boolean;
+  progressPercent: number;
+}
+
 export interface AnalyzeProjectResult {
   projectId: number;
   analyzedCount: number;
   skippedCount: number;
   totalFeedbacks: number;
   message: string;
+  status?: string;
 }
 
 export interface ProjectOverviewStats {
@@ -192,6 +198,7 @@ export interface BespokeRequestItem {
   dateFrom: string | null;
   dateTo: string | null;
   format: string;
+  agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
 }
@@ -210,6 +217,8 @@ export interface BespokeCenter {
 
 export interface CreateBespokePayload {
   title: string;
+  keyword: string;
+  packageType: string;
   requirements?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -250,4 +259,9 @@ export interface ScrapeJobStatus {
 export interface ScrapeJobStart {
   jobId: string;
   projectId: number;
+}
+
+export interface AiAnalysisProgress {
+  isAnalyzing: boolean;
+  progressPercent: number;
 }

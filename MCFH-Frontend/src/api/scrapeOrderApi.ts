@@ -11,6 +11,16 @@ export type ScrapeQuote = {
   estimatedDeliveryLabel: string;
 };
 
+export type ScrapeOrderCheckout = {
+  order: ScrapeOrder;
+  orderCode: number;
+  paymentLinkId: string;
+  checkoutUrl: string;
+  /** Chuỗi VietQR thô — có thể render thành mã QR nếu muốn hiển thị tại chỗ. */
+  qrCode: string;
+  amount: number;
+};
+
 export type ScrapeOrder = {
   orderId: number;
   workspaceId: number;
@@ -94,6 +104,18 @@ function normalizeOrder(data: Record<string, unknown>): ScrapeOrder {
   };
 }
 
+function normalizeCheckout(data: Record<string, unknown>): ScrapeOrderCheckout {
+  const orderRaw = pickField(data, 'order', 'Order') as Record<string, unknown>;
+  return {
+    order: normalizeOrder(orderRaw ?? {}),
+    orderCode: pickNumber(data, 'orderCode', 'OrderCode'),
+    paymentLinkId: pickString(data, 'paymentLinkId', 'PaymentLinkId'),
+    checkoutUrl: pickString(data, 'checkoutUrl', 'CheckoutUrl'),
+    qrCode: pickString(data, 'qrCode', 'QrCode'),
+    amount: pickNumber(data, 'amount', 'Amount'),
+  };
+}
+
 export const scrapeOrderApi = {
   async getQuote(postedSinceDays: number): Promise<ScrapeQuote> {
     const { data } = await axiosClient.get('/api/scrape-orders/quote', {
@@ -112,8 +134,15 @@ export const scrapeOrderApi = {
     return normalizeOrder(data as Record<string, unknown>);
   },
 
-  async pay(orderId: number): Promise<ScrapeOrder> {
+  /** Tạo checkout PayOS — redirect người dùng sang checkoutUrl để thanh toán. */
+  async pay(orderId: number): Promise<ScrapeOrderCheckout> {
     const { data } = await axiosClient.post(`/api/scrape-orders/${orderId}/pay`);
+    return normalizeCheckout(data as Record<string, unknown>);
+  },
+
+  /** Trang return gọi hàm này — backend tự tra cứu lại PayOS, không tin query param. */
+  async getPaymentStatus(orderId: number): Promise<ScrapeOrder> {
+    const { data } = await axiosClient.get(`/api/scrape-orders/${orderId}/payment-status`);
     return normalizeOrder(data as Record<string, unknown>);
   },
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { authApi } from '../api/authApi';
-import { extractApiError, getAvatarFallback, loadProfileFromStorage, normalizeProfile, saveUserProfile, type UserProfile } from '../utils/authStorage';
+import { extractApiError, getAccessToken, getAvatarFallback, loadProfileFromStorage, normalizeProfile, saveUserProfile, type UserProfile } from '../utils/authStorage';
 import { getPasswordValidationError, PASSWORD_REQUIREMENT_MESSAGE } from '../utils/passwordValidation';
 
 const Profile = () => {
@@ -38,7 +38,7 @@ const Profile = () => {
   const displayAvatar = avatarUrl || getAvatarFallback(fullName || email);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (!token) {
       navigate('/login');
       return;

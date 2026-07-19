@@ -116,6 +116,17 @@ public static class CommentBundleStorage
     public static bool BundleFileExists(int feedbackId) =>
         File.Exists(GetBundlePath(feedbackId));
 
+    public static void TryDeleteCommentBundle(int feedbackId)
+    {
+        try
+        {
+            var path = GetBundlePath(feedbackId);
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch { }
+    }
+
     public static string BuildCombinedAnalysisText(string? caption, IReadOnlyList<string> comments)
     {
         var parts = new List<string>();

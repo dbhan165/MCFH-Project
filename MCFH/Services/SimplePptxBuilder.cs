@@ -33,7 +33,8 @@ public static class SimplePptxBuilder
             for (var i = 0; i < slides.Count; i++)
             {
                 var slideNo = i + 2;
-                Write(zip, $"ppt/slides/slide{slideNo}.xml", BulletSlide(slides[i]));
+                var slideContent = slides[i].ChartData.Count > 0 ? BarChartSlide(slides[i]) : BulletSlide(slides[i]);
+                Write(zip, $"ppt/slides/slide{slideNo}.xml", slideContent);
                 Write(zip, $"ppt/slides/_rels/slide{slideNo}.xml.rels", SlideRels(slideNo));
             }
         }
@@ -237,6 +238,62 @@ public static class SimplePptxBuilder
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + doc;
     }
 
+    private static string BarChartSlide(PptxSlide slide)
+    {
+        var children = new List<XElement>
+        {
+            new XElement(P + "nvGrpSpPr",
+                new XElement(P + "cNvPr", new XAttribute("id", "1"), new XAttribute("name", "")),
+                new XElement(P + "cNvGrpSpPr"),
+                new XElement(P + "nvPr")),
+            new XElement(P + "grpSpPr"),
+            TextBox(2, slide.Heading, 457200, 365760, 8229600, 685800, 3200, true)
+        };
+
+        if (slide.Bullets.Count > 0)
+        {
+            var bulletBody = string.Join("\n", slide.Bullets.Select(b => $"• {b}"));
+            children.Add(TextBox(3, bulletBody, 457200, 1100000, 8229600, 800000, 1600, false));
+        }
+
+        long startY = slide.Bullets.Count > 0 ? 2000000 : 1371600;
+        long maxW = 6000000;
+        long h = 400000;
+        long gap = 150000;
+        long currentY = startY;
+        long labelX = 457200;
+        long barX = 2500000;
+        
+        var maxVal = slide.ChartData.Count > 0 ? slide.ChartData.Max(d => d.Value) : 1;
+        if (maxVal <= 0) maxVal = 1;
+
+        int id = 4;
+        foreach (var item in slide.ChartData)
+        {
+            // Label
+            children.Add(TextBox(id++, item.Label, labelX, currentY, 1900000, h, 1400, false));
+            
+            // Bar
+            long barW = (long)(maxW * (item.Value / maxVal));
+            if (barW < 50000) barW = 50000;
+            children.Add(Rectangle(id++, "", barX, currentY, barW, h, item.ColorHex, 1400, "FFFFFF"));
+            
+            // Value Label (placed after bar)
+            children.Add(TextBox(id++, item.ValueLabel, barX + barW + 100000, currentY, 1500000, h, 1400, true));
+
+            currentY += h + gap;
+        }
+
+        var doc = new XDocument(
+            new XElement(P + "sld",
+                new XAttribute(XNamespace.Xmlns + "a", A),
+                new XAttribute(XNamespace.Xmlns + "r", R),
+                new XAttribute(XNamespace.Xmlns + "p", P),
+                new XElement(P + "cSld", new XElement(P + "spTree", children))));
+
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + doc;
+    }
+
     private static XElement TextBox(int id, string text, long x, long y, long cx, long cy, int fontSize, bool bold)
     {
         var runs = text.Split('\n').SelectMany((line, index) =>
@@ -272,12 +329,60 @@ public static class SimplePptxBuilder
                 new XElement(A + "p", runs)));
     }
 
+    private static XElement Rectangle(int id, string text, long x, long y, long cx, long cy, string colorHex, int fontSize, string textColorHex)
+    {
+        var runs = text.Split('\n').SelectMany((line, index) =>
+        {
+            var elements = new List<XElement>
+            {
+                new XElement(A + "r",
+                    new XElement(A + "rPr",
+                        new XAttribute("lang", "vi-VN"),
+                        new XAttribute("sz", fontSize),
+                        new XElement(A + "solidFill", new XElement(A + "srgbClr", new XAttribute("val", textColorHex)))),
+                    new XElement(A + "t", new XAttribute(XNamespace.Xml + "space", "preserve"), line))
+            };
+            if (index < text.Split('\n').Length - 1)
+                elements.Add(new XElement(A + "br"));
+            return elements;
+        });
+
+        return new XElement(P + "sp",
+            new XElement(P + "nvSpPr",
+                new XElement(P + "cNvPr", new XAttribute("id", id), new XAttribute("name", $"Rect {id}")),
+                new XElement(P + "cNvSpPr"),
+                new XElement(P + "nvPr")),
+            new XElement(P + "spPr",
+                new XElement(A + "xfrm",
+                    new XElement(A + "off", new XAttribute("x", x), new XAttribute("y", y)),
+                    new XElement(A + "ext", new XAttribute("cx", cx), new XAttribute("cy", cy))),
+                new XElement(A + "prstGeom", new XAttribute("prst", "rect"),
+                    new XElement(A + "avLst")),
+                new XElement(A + "solidFill", new XElement(A + "srgbClr", new XAttribute("val", colorHex))),
+                new XElement(A + "ln", new XElement(A + "noFill"))),
+            new XElement(P + "txBody",
+                new XElement(A + "bodyPr", new XAttribute("wrap", "square"), new XAttribute("lIns", "91440"), new XAttribute("tIns", "45720"), new XAttribute("rIns", "91440"), new XAttribute("bIns", "45720"), new XAttribute("anchor", "ctr")),
+                new XElement(A + "lstStyle"),
+                new XElement(A + "p",
+                    new XElement(A + "pPr", new XAttribute("algn", "l")),
+                    runs)));
+    }
+
     private static string EscapeXml(string value) =>
         value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+}
+
+public sealed class PptxBarChartItem
+{
+    public string Label { get; init; } = "";
+    public double Value { get; init; }
+    public string ColorHex { get; init; } = "FF7575";
+    public string ValueLabel { get; init; } = "";
 }
 
 public sealed class PptxSlide
 {
     public string Heading { get; init; } = "";
     public IReadOnlyList<string> Bullets { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<PptxBarChartItem> ChartData { get; init; } = Array.Empty<PptxBarChartItem>();
 }

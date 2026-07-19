@@ -1,4 +1,4 @@
-﻿using Hangfire;
+using Hangfire;
 using MCFH.Configuration;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
@@ -15,15 +15,18 @@ public class ScrapingJobService
     private readonly McfhDbContext _db;
     private readonly ScrapeByKeywordService _scrapeService;
     private readonly ScrapeOptions _scrapeOptions;
+    private readonly INotificationService _notifications;
 
     public ScrapingJobService(
         McfhDbContext db,
         ScrapeByKeywordService scrapeService,
-        IOptions<ScrapeOptions> scrapeOptions)
+        IOptions<ScrapeOptions> scrapeOptions,
+        INotificationService notifications)
     {
         _db = db;
         _scrapeService = scrapeService;
         _scrapeOptions = scrapeOptions.Value;
+        _notifications = notifications;
     }
 
     /// <summary>
@@ -75,10 +78,43 @@ public class ScrapingJobService
             var result = await _scrapeService.ScrapeAsync(projectId, scrapeJobId: jobId);
             var status = ScrapingJobPersistence.MapHangfireStatus(result);
             await ScrapingJobPersistence.FinalizeAsync(_db, jobId, status, result);
+
+            if (status == "failed")
+            {
+                await NotifyAdminsAsync(projectId, result.ErrorMessage ?? "Lỗi không xác định");
+            }
         }
         catch (Exception ex)
         {
             await ScrapingJobPersistence.FinalizeAsync(_db, jobId, "failed", errorLog: ex.Message);
+            await NotifyAdminsAsync(projectId, ex.Message);
+        }
+    }
+
+    private async Task NotifyAdminsAsync(int projectId, string error)
+    {
+        try
+        {
+            var project = await _db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.ProjectId == projectId);
+            var projectName = project?.Name ?? "Dự án";
+
+            var admins = await _db.Users.Where(u => u.SystemRole == "admin" || u.SystemRole == "system_admin").Select(u => u.UserId).ToListAsync();
+            foreach (var adminId in admins)
+            {
+                await _notifications.NotifyAsync(
+                    userId: adminId,
+                    title: "Lỗi cào dữ liệu (Tự động)",
+                    message: $"Dự án «{projectName}» cào thất bại. Chi tiết: {error}",
+                    type: "scrape_failed",
+                    relatedType: "project",
+                    relatedId: projectId,
+                    projectId: projectId
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ScrapingJobService] Error notifying admins: {ex.Message}");
         }
     }
 }

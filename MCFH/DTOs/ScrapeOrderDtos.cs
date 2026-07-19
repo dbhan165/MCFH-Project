@@ -23,6 +23,18 @@ public class CreateScrapeOrderDto
     public int PostedSinceDays { get; set; } = 30;
 }
 
+/// <summary>Kết quả tạo checkout PayOS cho đơn cào dữ liệu — frontend redirect sang CheckoutUrl hoặc hiển thị QrCode.</summary>
+public class ScrapeOrderCheckoutDto
+{
+    public ScrapeOrderDto Order { get; set; } = null!;
+    public long OrderCode { get; set; }
+    public string PaymentLinkId { get; set; } = null!;
+    public string CheckoutUrl { get; set; } = null!;
+    /// <summary>Chuỗi VietQR thô — có thể render thành mã QR phía client.</summary>
+    public string QrCode { get; set; } = null!;
+    public decimal Amount { get; set; }
+}
+
 public class ScrapeOrderDto
 {
     public int OrderId { get; set; }
