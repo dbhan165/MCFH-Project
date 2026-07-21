@@ -33,6 +33,7 @@ public class AiSentimentService : IAiSentimentService
     private readonly IMemoryCache _cache;
     private readonly ILogger<AiSentimentService> _logger;
     private readonly ICommentBundleStorage _bundleStorage;
+    private readonly EncryptionService _encryption;
 
     /// <summary>
     /// Sau khi mọi model đều 429, tạm ngưng gọi AI trong một khoảng cooldown
@@ -58,7 +59,8 @@ public class AiSentimentService : IAiSentimentService
         IServiceScopeFactory scopeFactory,
         IMemoryCache cache,
         ILogger<AiSentimentService> logger,
-        ICommentBundleStorage bundleStorage)
+        ICommentBundleStorage bundleStorage,
+        EncryptionService encryption)
     {
         _httpClient = httpClient;
         _options = options.Value;
@@ -66,6 +68,7 @@ public class AiSentimentService : IAiSentimentService
         _cache = cache;
         _logger = logger;
         _bundleStorage = bundleStorage;
+        _encryption = encryption;
     }
 
 
@@ -82,10 +85,14 @@ public class AiSentimentService : IAiSentimentService
         var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
         
         // Giữ key cũ GEMINI_* trong DB để không phá dữ liệu SystemSettings đã có.
-        var settings = await db.SystemSettings
+        var settingsList = await db.SystemSettings
             .Where(s => s.SettingKey == "AI_MODEL_API_KEY" || s.SettingKey == "AI_MODEL_NAME"
                      || s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
-            .ToDictionaryAsync(s => s.SettingKey, s => s.SettingValue, ct);
+            .ToListAsync(ct);
+
+        var settings = settingsList.ToDictionary(
+            s => s.SettingKey, 
+            s => s.IsEncrypted == true ? _encryption.Decrypt(s.SettingValue) : s.SettingValue);
 
         settings.TryGetValue("AI_MODEL_API_KEY", out var dbKey);
         if (string.IsNullOrWhiteSpace(dbKey))

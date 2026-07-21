@@ -20,11 +20,11 @@ public class AdminPortalController : ControllerBase
     private readonly AdminPortalService _admin;
     private readonly SubscriptionService _subscription;
 
-    public AdminPortalController(McfhDbContext db, IEmailService emailService, ICommentBundleStorage bundleStorage)
+    public AdminPortalController(McfhDbContext db, IEmailService emailService, ICommentBundleStorage bundleStorage, EncryptionService encryption)
     {
         var analytics = new ProjectAnalyticsService(db, bundleStorage);
         var bespoke = new BespokeReportService(db, analytics, emailService);
-        _admin = new AdminPortalService(db, bespoke);
+        _admin = new AdminPortalService(db, bespoke, encryption);
         _subscription = new SubscriptionService(db);
     }
 

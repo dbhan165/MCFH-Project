@@ -9,11 +9,13 @@ public class AdminPortalService
 {
     private readonly McfhDbContext _context;
     private readonly BespokeReportService _bespoke;
+    private readonly EncryptionService _encryption;
 
-    public AdminPortalService(McfhDbContext context, BespokeReportService bespoke)
+    public AdminPortalService(McfhDbContext context, BespokeReportService bespoke, EncryptionService encryption)
     {
         _context = context;
         _bespoke = bespoke;
+        _encryption = encryption;
     }
 
     public async Task<AdminDashboardDto?> GetDashboardAsync(int userId)
@@ -443,17 +445,18 @@ public class AdminPortalService
     {
         if (!await IsAdminAsync(adminUserId)) return new();
 
-        return await _context.SystemSettings
+        var settings = await _context.SystemSettings
             .OrderBy(s => s.SettingKey)
-            .Select(s => new SystemSettingDto
-            {
-                SettingId = s.SettingId,
-                SettingKey = s.SettingKey,
-                SettingValue = s.SettingValue,
-                IsEncrypted = s.IsEncrypted == true,
-                UpdatedAt = s.UpdatedAt
-            })
             .ToListAsync();
+
+        return settings.Select(s => new SystemSettingDto
+        {
+            SettingId = s.SettingId,
+            SettingKey = s.SettingKey,
+            SettingValue = s.IsEncrypted == true ? "********" : s.SettingValue,
+            IsEncrypted = s.IsEncrypted == true,
+            UpdatedAt = s.UpdatedAt
+        }).ToList();
     }
 
     public async Task<List<SystemSettingDto>> UpdateSettingsAsync(
@@ -463,16 +466,23 @@ public class AdminPortalService
 
         foreach (var (key, value) in dto.Settings)
         {
+            if (value == "********") continue;
+
             var setting = await _context.SystemSettings
                 .FirstOrDefaultAsync(s => s.SettingKey == key);
+                
+            bool isEncryptedKey = key.Contains("KEY", StringComparison.OrdinalIgnoreCase) ||
+                                  key.Contains("SECRET", StringComparison.OrdinalIgnoreCase);
+                                  
+            string finalValue = isEncryptedKey ? _encryption.Encrypt(value) : value;
+
             if (setting == null)
             {
                 setting = new SystemSetting
                 {
                     SettingKey = key,
-                    SettingValue = value,
-                    IsEncrypted = key.Contains("KEY", StringComparison.OrdinalIgnoreCase) ||
-                                  key.Contains("SECRET", StringComparison.OrdinalIgnoreCase),
+                    SettingValue = finalValue,
+                    IsEncrypted = isEncryptedKey,
                     UpdatedAt = DateTime.Now,
                     UpdatedBy = adminUserId
                 };
@@ -480,7 +490,8 @@ public class AdminPortalService
             }
             else
             {
-                setting.SettingValue = value;
+                setting.SettingValue = finalValue;
+                setting.IsEncrypted = isEncryptedKey;
                 setting.UpdatedAt = DateTime.Now;
                 setting.UpdatedBy = adminUserId;
             }

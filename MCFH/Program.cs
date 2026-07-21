@@ -39,6 +39,7 @@ namespace MCFH
             builder.Services.AddTransient<IEmailService, EmailService>();
             builder.Services.AddHttpClient(nameof(EmailService));
             builder.Services.AddSingleton<IAuthEmailTemplateService, AuthEmailTemplateService>();
+            builder.Services.AddSingleton<EncryptionService>();
             // 2. Kích hoạt xác thực bằng JWT Bearer
             var jwtKey = builder.Configuration["Jwt:Key"]!;
             builder.Services.AddAuthentication(options =>
