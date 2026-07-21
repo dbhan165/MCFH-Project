@@ -125,7 +125,7 @@ const Login = () => {
         <div className="absolute top-[-10%] left-[-20%] w-[500px] h-[500px] bg-[#00B4D8] rounded-full mix-blend-screen filter blur-[120px] opacity-20 animate-pulse-slow"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-[#3B82F6] rounded-full mix-blend-screen filter blur-[100px] opacity-20"></div>
 
-        <div className="absolute top-8 left-8 z-10">
+        <div className="relative z-50 mb-8">
           <McfhLogo linkTo="/" size={36} textClassName="text-white text-xl" />
         </div>
 
@@ -174,16 +174,16 @@ const Login = () => {
           
           {/* Header kèm Animation */}
           <div key={`header-${mode}`} className="animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
-            <McfhLogo size={44} textClassName="text-[#0A101D] text-3xl" subtitle="Social Listening" subtitleClassName="text-xs text-gray-500 font-semibold tracking-[0.2em] uppercase" className="mb-6" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              {mode === 'login' && "Đăng nhập không gian làm việc"}
-              {mode === 'register' && "Tạo tài khoản mới"}
+            <McfhLogo size={44} textClassName="text-[#0A101D] text-3xl" subtitle="Social Listening" subtitleClassName="text-xs text-[#00B4D8] font-bold tracking-[0.2em] uppercase" className="mb-6" />
+            <h2 className="text-3xl font-extrabold text-gray-900 mb-3 tracking-tight">
+              {mode === 'login' && "Chào mừng trở lại"}
+              {mode === 'register' && "Bắt đầu hành trình mới"}
               {mode === 'forgot' && "Khôi phục mật khẩu"}
               {mode === 'verify-otp' && "Xác thực tài khoản"}
             </h2>
-            <p className="text-gray-500 text-sm leading-relaxed">
-              {mode === 'login' && "Chào mừng trở lại! Vui lòng điền thông tin để tiếp tục."}
-              {mode === 'register' && "Điền thông tin bên dưới để trải nghiệm hệ thống ngay hôm nay."}
+            <p className="text-gray-500 text-sm leading-relaxed font-medium">
+              {mode === 'login' && "Đăng nhập để tiếp tục theo dõi và phân tích dữ liệu mạng xã hội của bạn."}
+              {mode === 'register' && "Mở khóa sức mạnh AI để thấu hiểu khách hàng trên đa nền tảng."}
               {mode === 'forgot' && "Nhập email của bạn, chúng tôi sẽ gửi hướng dẫn khôi phục qua hòm thư."}
               {mode === 'verify-otp' && `Vui lòng nhập mã OTP gồm 6 số vừa được gửi tới ${email}.`}
             </p>
@@ -211,15 +211,15 @@ const Login = () => {
               {mode === 'verify-otp' ? (
                 <div className="space-y-2">
                   <label className="text-[13px] font-bold text-gray-700 tracking-wider">Mã xác thực (OTP)</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><ShieldCheck className="h-5 w-5 text-gray-400" /></div>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><ShieldCheck className="h-5 w-5 text-gray-400 group-focus-within:text-[#00B4D8] transition-colors" /></div>
                     <input 
                       type="text" 
                       value={otp} 
                       onChange={(e) => setOtp(e.target.value)} 
                       placeholder="Nhập 6 số OTP..." 
                       maxLength={6}
-                      className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm" 
+                      className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300" 
                       required 
                       disabled={isLoading} 
                     />
@@ -236,16 +236,16 @@ const Login = () => {
                     <>
                       <div className="space-y-2">
                         <label className="text-[13px] font-bold text-gray-700 tracking-wider">Họ và Tên</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div>
-                          <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nguyễn Văn A" className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm" required disabled={isLoading} />
+                        <div className="relative group">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400 group-focus-within:text-[#00B4D8] transition-colors" /></div>
+                          <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nguyễn Văn A" className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300" required disabled={isLoading} />
                         </div>
                       </div>
                       <div className="space-y-2">
                         <label className="text-[13px] font-bold text-gray-700 tracking-wider">Số điện thoại</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Phone className="h-5 w-5 text-gray-400" /></div>
-                          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0987654321" className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm" required disabled={isLoading} />
+                        <div className="relative group">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Phone className="h-5 w-5 text-gray-400 group-focus-within:text-[#00B4D8] transition-colors" /></div>
+                          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0987654321" className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300" required disabled={isLoading} />
                         </div>
                       </div>
                     </>
@@ -253,23 +253,23 @@ const Login = () => {
 
                   <div className="space-y-2">
                     <label className="text-[13px] font-bold text-gray-700 tracking-wider">Email doanh nghiệp</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail className="h-5 w-5 text-gray-400" /></div>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm" required disabled={isLoading} />
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail className="h-5 w-5 text-gray-400 group-focus-within:text-[#00B4D8] transition-colors" /></div>
+                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300" required disabled={isLoading} />
                     </div>
                   </div>
 
                   {mode !== 'forgot' && (
                     <div className="space-y-2">
                       <label className="text-[13px] font-bold text-gray-700 tracking-wider">Mật khẩu</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div>
+                      <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400 group-focus-within:text-[#00B4D8] transition-colors" /></div>
                         <input
                           type="password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder={mode === 'register' ? 'Ví dụ: MatKhau@1' : '••••••••'}
-                          className="w-full pl-12 pr-4 py-4 bg-[#0A101D] border border-transparent text-white placeholder-gray-500 rounded-xl focus:outline-none focus:ring-0 transition-all shadow-sm"
+                          className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300"
                           required
                           disabled={isLoading}
                         />
@@ -296,7 +296,7 @@ const Login = () => {
                 </div>
               )}
 
-              <button type="submit" disabled={isLoading} className="w-full bg-[#0A101D] hover:bg-[#1A2235] disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all duration-300 hover:shadow-[0_8px_30px_rgb(10,16,29,0.2)] active:scale-[0.98] flex justify-center items-center mt-4">
+              <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-[#00B4D8] to-[#3B82F6] hover:from-[#0693B0] hover:to-[#2563EB] disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all duration-300 shadow-[0_8px_20px_rgba(0,180,216,0.3)] hover:shadow-[0_12px_25px_rgba(0,180,216,0.4)] active:scale-[0.98] flex justify-center items-center mt-4">
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <svg className="animate-spin h-5 w-5 text-white/70" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
