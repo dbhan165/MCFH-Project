@@ -9,7 +9,7 @@ function resolveRoleHomePath(role: string): string | null {
   return null;
 }
 
-/** Sau đăng nhập: Admin/Reporter → portal; Client → onboarding workspace/project */
+/** Sau đăng nhập: Admin/Reporter → portal; Client → /workspaces hoặc project gần nhất */
 export async function resolvePostLoginPath(): Promise<string> {
   const profile = loadProfileFromStorage();
   const rolePath = profile ? resolveRoleHomePath(profile.role) : null;
@@ -19,7 +19,7 @@ export async function resolvePostLoginPath(): Promise<string> {
     const workspaces = await workspaceApi.getMyWorkspaces();
 
     if (workspaces.length === 0) {
-      return '/create-workspace?onboarding=1';
+      return '/workspaces';
     }
 
     const workspace = workspaces[0];

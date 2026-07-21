@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAccessToken } from '../utils/authStorage';
 
 /**
  * Dev: gọi backend local :5254
@@ -17,7 +18,7 @@ const axiosClient = axios.create({
 });
 
 axiosClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
+  const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
