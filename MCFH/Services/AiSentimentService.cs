@@ -57,7 +57,8 @@ public class AiSentimentService : IAiSentimentService
         IOptions<AiModelOptions> options,
         IServiceScopeFactory scopeFactory,
         IMemoryCache cache,
-        ILogger<AiSentimentService> logger)
+        ILogger<AiSentimentService> logger,
+        ICommentBundleStorage bundleStorage)
     {
         _httpClient = httpClient;
         _options = options.Value;

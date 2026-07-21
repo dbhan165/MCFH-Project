@@ -435,12 +435,19 @@ const Projects = () => {
     [orderByProject]
   );
 
+  const hasAnalyzing = useMemo(
+    () => Object.values(aiProgressByProject).some((p) => p.isAnalyzing),
+    [aiProgressByProject]
+  );
+
   useEffect(() => {
-    const hasAnalyzing = Object.values(aiProgressByProject).some(p => p.isAnalyzing);
     if (!hasActiveOrders && !hasAnalyzing) return;
 
     const tick = () => {
       if (document.visibilityState === 'visible') {
+        // Use refs or current state checks if necessary, but since the effect
+        // restarts when these booleans change, the closure values are fresh enough
+        // to handle the current polling state.
         if (hasActiveOrders) loadScrapeOrders();
         if (hasAnalyzing) loadAiProgress();
       }
@@ -448,7 +455,7 @@ const Projects = () => {
     tick();
     const timer = setInterval(tick, 3000);
     return () => clearInterval(timer);
-  }, [hasActiveOrders, aiProgressByProject, loadScrapeOrders, loadAiProgress]);
+  }, [hasActiveOrders, hasAnalyzing, loadScrapeOrders, loadAiProgress]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

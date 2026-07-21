@@ -430,6 +430,7 @@ const ProjectMentions = () => {
   const [filterName, setFilterName] = useState('');
   const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
   const [expandedContent, setExpandedContent] = useState<Record<number, boolean>>({});
+  const [displayLimit, setDisplayLimit] = useState(50);
   const [isLoading, setIsLoading] = useState(true);
   const [aiProgress, setAiProgress] = useState<AiAnalysisProgress>({ isAnalyzing: false, progressPercent: 0 });
   const wasAnalyzing = useRef(false);
@@ -442,6 +443,7 @@ const ProjectMentions = () => {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [newTagName, setNewTagName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const loadMentionsRef = useRef<() => void>(() => {});
   const { confirm, alert } = useAppModal();
 
   const loadProjectTags = useCallback(async () => {
@@ -478,19 +480,23 @@ const ProjectMentions = () => {
     }
   }, [wid, projectId, searchText, showCrisisOnly]);
 
+  useEffect(() => {
+    loadMentionsRef.current = loadMentions;
+  }, [loadMentions]);
+
   const loadAiProgress = useCallback(async () => {
     if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
     try {
       const progress = await projectApi.getAnalyzeProgress(wid, projectId);
       setAiProgress(progress);
       if (wasAnalyzing.current && !progress.isAnalyzing) {
-        loadMentions();
+        loadMentionsRef.current();
       }
       wasAnalyzing.current = progress.isAnalyzing;
     } catch {
       /* ignore */
     }
-  }, [wid, projectId, loadMentions]);
+  }, [wid, projectId]);
 
   useEffect(() => {
     loadProjectTags();
@@ -615,6 +621,14 @@ const ProjectMentions = () => {
       return true;
     });
   }, [mentions, activePlatform, activeSentiment]);
+
+  useEffect(() => {
+    setDisplayLimit(50);
+  }, [activePlatform, activeSentiment, searchText, showCrisisOnly]);
+
+  const paginatedMentions = useMemo(() => {
+    return displayedMentions.slice(0, displayLimit);
+  }, [displayedMentions, displayLimit]);
 
   const totalComments = useMemo(
     () => displayedMentions.reduce((sum, m) => sum + (m.comments.length > 0 ? m.comments.length : m.commentsCount), 0),
@@ -1085,17 +1099,16 @@ const ProjectMentions = () => {
       ) : (
         <div className="space-y-4">
           <p className="text-xs text-gray-500 px-1">
-            Hiển thị <span className="text-white font-semibold tabular-nums">{formatNumber(displayedMentions.length)}</span> kết
-            quả
+            Hiển thị <span className="text-white font-semibold tabular-nums">{formatNumber(paginatedMentions.length)}</span> / <span className="text-white font-semibold tabular-nums">{formatNumber(displayedMentions.length)}</span> kết quả
           </p>
-          {displayedMentions.map((item) => (
+          {paginatedMentions.map((item) => (
             <MentionCard
               key={item.feedbackId}
               item={item}
               isMenuOpen={openMenuId === item.feedbackId}
               isBusy={actionMentionId === item.feedbackId}
-              commentsExpanded={expandedComments[item.feedbackId] ?? item.comments.length > 0}
-              contentExpanded={expandedContent[item.feedbackId] ?? false}
+              commentsExpanded={!!expandedComments[item.feedbackId]}
+              contentExpanded={!!expandedContent[item.feedbackId]}
               menuRef={openMenuId === item.feedbackId ? menuRef : undefined}
               onToggleMenu={() => setOpenMenuId(openMenuId === item.feedbackId ? null : item.feedbackId)}
               onToggleComments={() =>
@@ -1114,6 +1127,17 @@ const ProjectMentions = () => {
               onMutePlatform={() => handleMutePlatform(item)}
             />
           ))}
+          {displayLimit < displayedMentions.length && (
+            <div className="pt-2 pb-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setDisplayLimit(prev => prev + 50)}
+                className="px-6 py-2.5 rounded-xl bg-[#00B4D8]/10 border border-[#00B4D8]/20 text-[#00B4D8] hover:text-white hover:bg-[#00B4D8]/20 font-semibold text-sm transition-colors"
+              >
+                Tải thêm ({formatNumber(displayedMentions.length - displayLimit)} mentions nữa)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
