@@ -90,7 +90,7 @@ const RequestDelivery = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
           <h2 className="text-xl lg:text-2xl font-bold text-[#0f172a]">
-            {request.projectName ?? request.title}
+            {request.title}
           </h2>
           <span className="inline-flex mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
             {request.statusLabel}

@@ -151,8 +151,6 @@ export default function RequestDetail() {
                 )}
 
                 <div className="pt-4 border-t border-dashed border-slate-200 text-xs text-gray-500 space-y-1">
-                  <p>Dự án: {request.projectName ?? '—'}</p>
-                  <p>Workspace: {request.workspaceName ?? '—'}</p>
                   <p>Khách hàng: {request.clientName ?? '—'}</p>
                   {request.keyword && <p>Keyword: {request.keyword}</p>}
                   {request.packageType && (

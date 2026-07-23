@@ -114,10 +114,7 @@ const BespokeRequests = () => {
                             </span>
                           </div>
 
-                          <h4 className="text-base font-bold text-[#0f172a] mb-1 leading-snug">{card.title}</h4>
-                          {card.projectName && (
-                            <p className="text-xs text-gray-500 mb-3">{card.projectName}</p>
-                          )}
+                          <h4 className="text-base font-bold text-[#0f172a] mb-3 leading-snug">{card.title}</h4>
 
                           <div className="flex items-center gap-2.5 mb-4">
                             <span className="w-8 h-8 bg-sky-100 text-sky-700 rounded-md flex items-center justify-center text-xs font-bold shrink-0">
