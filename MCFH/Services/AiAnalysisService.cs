@@ -145,6 +145,9 @@ public class AiAnalysisService
 
                     if (analysis.IsCrisisAlert) crisisCountInBatch++;
                     if (analysis.UsedAiModel) aiModelCount++;
+
+                    // Thêm delay nhẹ giữa các lượt phân tích để tránh spam API gây 429
+                    await Task.Delay(500);
                 }
                 catch (Exception ex)
                 {

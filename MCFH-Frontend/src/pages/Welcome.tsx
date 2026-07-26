@@ -1,5 +1,6 @@
 import { ArrowRight, PlayCircle, BarChart3, BrainCircuit, FileText, Zap, Globe, Shield } from 'lucide-react';
 import wellcome from '../assets/wellcome.png';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import McfhLogo from '../components/brand/McfhLogo';
 
@@ -29,13 +30,10 @@ const Welcome = () => {
           />
           
           <nav className="hidden md:flex items-center gap-1 bg-white/5 border border-white/10 p-1.5 rounded-full backdrop-blur-md">
-            <a href="#product" className="bg-[#00B4D8]/15 text-[#00B4D8] px-5 py-2 rounded-full text-sm font-semibold transition-all">
+            <a href="#product" onClick={(e) => handleScroll(e, 'product')} className="bg-[#00B4D8]/15 text-[#00B4D8] px-5 py-2 rounded-full text-sm font-semibold transition-all">
               Sản phẩm
             </a>
-            <a href="#ai-solutions" className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
-              Giải pháp AI
-            </a>
-            <a href="#bespoke" className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
+            <a href="#bespoke" onClick={(e) => handleScroll(e, 'bespoke')} className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
               Báo cáo Bespoke
             </a>
             <Link to="/pricing" className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
@@ -69,7 +67,7 @@ const Welcome = () => {
 
             {/* Headline */}
             <h1 className="text-5xl lg:text-[4rem] font-extrabold leading-[1.1] tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-400">
-              Làm chủ tiếng <br />
+              Lắng nghe tiếng <br />
               nói khách hàng <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00B4D8] to-[#3B82F6]">đa kênh với AI.</span>
             </h1>
@@ -150,41 +148,6 @@ const Welcome = () => {
                 <p className="text-[#9BA1B0] text-sm leading-relaxed">{item.desc}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* AI Solutions Section */}
-      <section id="ai-solutions" className="relative z-10 border-t border-white/5 py-24 scroll-mt-20">
-        <div className="container mx-auto px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div className="space-y-6">
-              <div className="text-[#00B4D8] font-bold tracking-wider text-sm uppercase">Công nghệ cốt lõi</div>
-              <h2 className="text-4xl font-extrabold tracking-tight">Giải pháp AI tạo ra sự khác biệt</h2>
-              <p className="text-[#9BA1B0] text-lg leading-relaxed">Không chỉ đếm số lượng Mention, AI của chúng tôi đi sâu vào sắc thái cảm xúc (Sentiment) và tự động phân loại chủ đề (Aspect Extraction).</p>
-              
-              <ul className="space-y-4 pt-4">
-                {[
-                  'Phân tích sắc thái (Tích cực, Tiêu cực, Trung lập) với độ chính xác 98%',
-                  'Tự động gom cụm và phát hiện xu hướng đang lên',
-                  'Xử lý ngôn ngữ tự nhiên (NLP) tối ưu cho tiếng Việt'
-                ].map((text, idx) => (
-                  <li key={idx} className="flex items-center gap-4 text-sm font-medium">
-                    <div className="w-6 h-6 rounded-full bg-[#3B82F6]/20 flex items-center justify-center text-[#3B82F6] shrink-0"><Zap size={14} /></div>
-                    {text}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="relative h-96 bg-[#050A15] rounded-3xl border border-white/10 overflow-hidden flex items-center justify-center">
-              {/* Fake AI Visual */}
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#00B4D8]/10 via-transparent to-transparent"></div>
-              <BrainCircuit size={120} className="text-[#00B4D8]/20 absolute" strokeWidth={1} />
-              <div className="relative z-10 bg-[#0A101D]/80 backdrop-blur p-6 rounded-2xl border border-white/10 text-center">
-                <div className="text-3xl font-bold text-[#00B4D8] mb-1">98.5%</div>
-                <div className="text-xs text-gray-400 uppercase tracking-widest">Độ tin cậy NLP</div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
