@@ -180,8 +180,8 @@ public static class SimplePptxBuilder
         """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-          <p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
-          <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+          <p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
+          <p:clrMap bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
           <p:sldLayoutIdLst><p:sldLayoutId id="1" r:id="rId1"/></p:sldLayoutIdLst>
         </p:sldMaster>
         """;
@@ -190,7 +190,7 @@ public static class SimplePptxBuilder
         """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">
-          <p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
+          <p:cSld name="Blank"><p:bg><p:bgPr><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
         </p:sldLayout>
         """;
 
@@ -208,8 +208,10 @@ public static class SimplePptxBuilder
                             new XElement(P + "cNvGrpSpPr"),
                             new XElement(P + "nvPr")),
                         new XElement(P + "grpSpPr"),
-                        TextBox(2, title, 457200, 2286000, 8229600, 914400, 4400, true),
-                        TextBox(3, "MCFH Social Listening Report", 457200, 3505200, 8229600, 457200, 2000, false)))));
+                        Rectangle(4, "", 7000000, -1000000, 5000000, 5000000, "EF4444", 100, "FFFFFF", "ellipse"),
+                        Rectangle(5, "", -1000000, 4500000, 4000000, 4000000, "0EA5E9", 100, "FFFFFF", "ellipse"),
+                        TextBox(2, title, 457200, 2286000, 8229600, 914400, 4800, true, "FFFFFF"),
+                        TextBox(3, "MCFH Social Listening Report", 457200, 3505200, 8229600, 457200, 2400, false, "CBD5E1")))));
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + doc;
     }
 
@@ -226,7 +228,7 @@ public static class SimplePptxBuilder
         };
 
         var bulletBody = string.Join("\n", slide.Bullets.Select(b => $"• {b}"));
-        children.Add(TextBox(3, bulletBody, 457200, 1371600, 8229600, 4572000, 1800, false));
+        children.Add(TextBox(3, bulletBody, 457200, 1371600, 8229600, 4572000, 1800, false, "CBD5E1"));
 
         var doc = new XDocument(
             new XElement(P + "sld",
@@ -258,8 +260,8 @@ public static class SimplePptxBuilder
 
         long startY = slide.Bullets.Count > 0 ? 2000000 : 1371600;
         long maxW = 6000000;
-        long h = 400000;
-        long gap = 150000;
+        long h = 350000;
+        long gap = 200000;
         long currentY = startY;
         long labelX = 457200;
         long barX = 2500000;
@@ -271,15 +273,15 @@ public static class SimplePptxBuilder
         foreach (var item in slide.ChartData)
         {
             // Label
-            children.Add(TextBox(id++, item.Label, labelX, currentY, 1900000, h, 1400, false));
+            children.Add(TextBox(id++, item.Label, labelX, currentY, 1900000, h, 1400, false, "CBD5E1"));
             
             // Bar
             long barW = (long)(maxW * (item.Value / maxVal));
             if (barW < 50000) barW = 50000;
-            children.Add(Rectangle(id++, "", barX, currentY, barW, h, item.ColorHex, 1400, "FFFFFF"));
+            children.Add(Rectangle(id++, "", barX, currentY, barW, h, item.ColorHex, 1400, "FFFFFF", "roundRect"));
             
             // Value Label (placed after bar)
-            children.Add(TextBox(id++, item.ValueLabel, barX + barW + 100000, currentY, 1500000, h, 1400, true));
+            children.Add(TextBox(id++, item.ValueLabel, barX + barW + 100000, currentY, 1500000, h, 1400, true, "FFFFFF"));
 
             currentY += h + gap;
         }
@@ -294,7 +296,7 @@ public static class SimplePptxBuilder
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" + doc;
     }
 
-    private static XElement TextBox(int id, string text, long x, long y, long cx, long cy, int fontSize, bool bold)
+    private static XElement TextBox(int id, string text, long x, long y, long cx, long cy, int fontSize, bool bold, string textColorHex = "FFFFFF")
     {
         var runs = text.Split('\n').SelectMany((line, index) =>
         {
@@ -304,7 +306,8 @@ public static class SimplePptxBuilder
                     new XElement(A + "rPr",
                         new XAttribute("lang", "vi-VN"),
                         new XAttribute("sz", fontSize),
-                        bold ? new XElement(A + "b") : null),
+                        bold ? new XElement(A + "b") : null,
+                        new XElement(A + "solidFill", new XElement(A + "srgbClr", new XAttribute("val", textColorHex)))),
                     new XElement(A + "t", new XAttribute(XNamespace.Xml + "space", "preserve"), line))
             };
             if (index < text.Split('\n').Length - 1)
@@ -329,7 +332,7 @@ public static class SimplePptxBuilder
                 new XElement(A + "p", runs)));
     }
 
-    private static XElement Rectangle(int id, string text, long x, long y, long cx, long cy, string colorHex, int fontSize, string textColorHex)
+    private static XElement Rectangle(int id, string text, long x, long y, long cx, long cy, string colorHex, int fontSize, string textColorHex, string prst = "rect")
     {
         var runs = text.Split('\n').SelectMany((line, index) =>
         {
@@ -356,7 +359,7 @@ public static class SimplePptxBuilder
                 new XElement(A + "xfrm",
                     new XElement(A + "off", new XAttribute("x", x), new XAttribute("y", y)),
                     new XElement(A + "ext", new XAttribute("cx", cx), new XAttribute("cy", cy))),
-                new XElement(A + "prstGeom", new XAttribute("prst", "rect"),
+                new XElement(A + "prstGeom", new XAttribute("prst", prst),
                     new XElement(A + "avLst")),
                 new XElement(A + "solidFill", new XElement(A + "srgbClr", new XAttribute("val", colorHex))),
                 new XElement(A + "ln", new XElement(A + "noFill"))),
