@@ -38,7 +38,8 @@ public class ProjectExtendedController : ControllerBase
         IServiceScopeFactory scopeFactory,
         IEmailService emailService,
         ILogger<ProjectExtendedController> logger,
-        ICommentBundleStorage bundleStorage)
+        ICommentBundleStorage bundleStorage,
+        IAiSentimentService aiSentiment)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
@@ -48,7 +49,7 @@ public class ProjectExtendedController : ControllerBase
         _analyticsService = new ProjectAnalyticsService(db, bundleStorage);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
-        _reportService = new ProjectReportService(db, _analyticsService);
+        _reportService = new ProjectReportService(db, _analyticsService, aiSentiment);
         _bespokeService = new BespokeReportService(db, _analyticsService, emailService);
     }
 
