@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -11,11 +11,11 @@ import {
   Settings,
   User,
   LogOut,
-  Search,
-  Radio,
-  HelpCircle,
+  ChevronDown,
+  ShieldCheck,
 } from 'lucide-react';
 import NotificationBell from '../notifications/NotificationBell';
+import { loadProfileFromStorage, clearAuthSession, getAvatarFallback } from '../../utils/authStorage';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -37,11 +37,34 @@ interface AdminLayoutProps {
 
 const AdminLayout = ({
   children,
-  searchPlaceholder = 'Search analytics or users...',
   adminName,
   adminRole,
 }: AdminLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const cachedProfile = loadProfileFromStorage();
+  const displayName = adminName || cachedProfile?.fullName || 'Trường Học';
+  const displayEmail = cachedProfile?.email || 'admin@mcfh.com';
+  const displayRole = adminRole || cachedProfile?.role || 'System Administrator';
+  const avatarSrc = cachedProfile?.avatarUrl || getAvatarFallback(displayName);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSignOut = () => {
+    clearAuthSession();
+    navigate('/login');
+  };
 
   return (
     <div className="min-h-screen flex bg-[#f9fafb] text-[#111827] font-sans">
@@ -58,11 +81,10 @@ const AdminLayout = ({
               <Link
                 key={item.label}
                 to={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border-l-4 ${
-                  isActive
-                    ? 'bg-red-50 text-[#ef4444] border-[#ef4444]'
-                    : 'text-[#6b7280] border-transparent hover:bg-gray-50 hover:text-[#111827]'
-                }`}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border-l-4 ${isActive
+                  ? 'bg-red-50 text-[#ef4444] border-[#ef4444]'
+                  : 'text-[#6b7280] border-transparent hover:bg-gray-50 hover:text-[#111827]'
+                  }`}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
                 {item.label}
@@ -74,58 +96,116 @@ const AdminLayout = ({
         <div className="px-3 py-4 border-t border-gray-100 space-y-1">
           <Link
             to="/admin/profile"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] transition-colors"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${location.pathname === '/admin/profile'
+              ? 'bg-red-50 text-[#ef4444]'
+              : 'text-[#6b7280] hover:bg-gray-50 hover:text-[#111827]'
+              }`}
           >
             <User className="w-5 h-5" />
             Profile
           </Link>
-          <Link
-            to="/login"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] transition-colors"
+          <button
+            onClick={handleSignOut}
+            type="button"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] transition-colors text-left cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
             Sign Out
-          </Link>
+          </button>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-          <div className="flex-1 max-w-xl mx-auto">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                className="w-full bg-gray-50 border border-gray-200 rounded-full pl-11 pr-4 py-2.5 text-sm text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-              />
-            </div>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">Hệ Thống Quản Trị Admin</h2>
           </div>
 
-          <div className="flex items-center gap-4 ml-6">
-            <NotificationBell theme="light" />
-            <button className="p-2 text-gray-500 hover:text-[#111827] hover:bg-gray-50 rounded-lg transition-colors">
-              <Radio className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-500 hover:text-[#111827] hover:bg-gray-50 rounded-lg transition-colors">
-              <HelpCircle className="w-5 h-5" />
-            </button>
-            {(adminName || adminRole) && (
-              <div className="hidden md:block text-right mr-1">
-                {adminName && (
-                  <p className="text-sm font-semibold text-[#111827] leading-tight">{adminName}</p>
-                )}
-                {adminRole && (
-                  <p className="text-[10px] font-bold text-[#6b7280] tracking-wider">{adminRole}</p>
-                )}
-              </div>
-            )}
-            <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-gray-200 ml-1">
-              <img
-                src="https://i.pravatar.cc/150?img=32"
-                alt="Admin avatar"
-                className="w-full h-full object-cover"
-              />
+          <div className="flex items-center gap-4">
+            <NotificationBell theme="light" isAdmin={true} />
+
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-gray-100 transition-colors focus:outline-none cursor-pointer group"
+                aria-label="Admin Profile Menu"
+              >
+                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-red-400/80 shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                  <img
+                    src={avatarSrc}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = getAvatarFallback(displayName);
+                    }}
+                  />
+                </div>
+                <div className="hidden md:block text-left">
+                  <p className="text-xs font-bold text-gray-900 leading-tight group-hover:text-red-600 transition-colors">{displayName}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 tracking-wide uppercase">{displayRole}</p>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isProfileOpen && (
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="p-4 bg-gradient-to-br from-red-50/50 to-orange-50/30 border-b border-gray-100 flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-red-300 shrink-0 shadow-xs">
+                      <img src={avatarSrc} alt={displayName} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-gray-900 truncate">{displayName}</h4>
+                      <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-100/80 px-2 py-0.5 rounded-full mt-1">
+                        <ShieldCheck className="w-3 h-3" />
+                        System Admin
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2 space-y-1">
+                    <Link
+                      to="/admin/profile"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-800 hover:bg-gray-50 hover:text-red-600 transition-colors"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-red-50 text-[#ef4444] flex items-center justify-center">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-bold">Chi tiết hồ sơ Admin</p>
+                        <p className="text-[10px] text-gray-400 font-normal">Cập nhật họ tên, SĐT, avatar</p>
+                      </div>
+                    </Link>
+
+                    <Link
+                      to="/admin/settings"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-800 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center">
+                        <Settings className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-bold">Cài đặt hệ thống</p>
+                        <p className="text-[10px] text-gray-400 font-normal">Thiết lập tham số Admin</p>
+                      </div>
+                    </Link>
+                  </div>
+
+                  <div className="p-2 border-t border-gray-100 bg-gray-50/50">
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Đăng xuất tài khoản
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

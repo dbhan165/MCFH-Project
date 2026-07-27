@@ -23,6 +23,7 @@ import FbSourceManagement from "./pages/admin/FbSourceManagement";
 import CookieManagement from "./pages/admin/CookieManagement";
 import ScrapingMonitor from "./pages/admin/ScrapingMonitor";
 import SystemSettings from "./pages/admin/SystemSettings";
+import AdminProfile from "./pages/admin/AdminProfile";
 import BespokeRequests from "./pages/reporter/BespokeRequests";
 import ReporterPlaceholder from "./pages/reporter/ReporterPlaceholder";
 import RequestDetail from "./pages/reporter/RequestDetail";
@@ -94,6 +95,7 @@ function AppRoutes() {
           <Route path="/admin/cookies" element={<CookieManagement />} />
           <Route path="/admin/scraping" element={<ScrapingMonitor />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
+          <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 
         <Route element={<PrivateRoute allowedRoles={["Reporter", "Admin"]} />}>

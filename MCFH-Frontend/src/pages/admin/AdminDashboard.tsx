@@ -1,14 +1,18 @@
 import type { ElementType } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Calendar,
-  Download,
-  DollarSign,
   UserPlus,
   ShieldCheck,
   Server,
   AlertTriangle,
   TrendingUp,
+  Wallet,
+  CreditCard,
+  CheckCircle2,
+  Layers,
+  Trophy,
+  Sparkles,
+  BarChart3,
 } from 'lucide-react';
 import {
   LineChart,
@@ -18,43 +22,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  BarChart,
+  Bar,
 } from 'recharts';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, type AdminDashboard as AdminDashboardData } from '../../api/portalApi';
-
-const revenueGrowthData = [
-  { month: 'Jan', revenue: 82000, users: 980 },
-  { month: 'Feb', revenue: 88000, users: 1050 },
-  { month: 'Mar', revenue: 91000, users: 1120 },
-  { month: 'Apr', revenue: 98000, users: 1180 },
-  { month: 'May', revenue: 105000, users: 1280 },
-  { month: 'Jun', revenue: 112000, users: 1350 },
-  { month: 'Jul', revenue: 118000, users: 1420 },
-  { month: 'Aug', revenue: 124000, users: 1450 },
-];
-
-const subscriptionData = [
-  { name: 'Enterprise', value: 192, color: '#111827' },
-  { name: 'Premium', value: 96, color: '#ef4444' },
-  { name: 'Basic', value: 32, color: '#3b82f6' },
-];
-
-const recentJobs = [
-  { id: 'JOB-9402', status: 'RUNNING' as const, progress: 75 },
-  { id: 'JOB-9401', status: 'COMPLETED' as const, progress: 100 },
-  { id: 'JOB-9398', status: 'FAILED' as const, progress: 40 },
-  { id: 'JOB-9395', status: 'COMPLETED' as const, progress: 100 },
-  { id: 'JOB-9392', status: 'RUNNING' as const, progress: 62 },
-];
-
-const proxyRegions = [
-  { name: 'US-EAST Node Cluster', health: 99.8 },
-  { name: 'EU-WEST Edge Proxies', health: 98.2 },
-  { name: 'APAC Residential Pool', health: 97.5 },
-];
 
 const statusStyles = {
   RUNNING: 'bg-blue-50 text-blue-600 border-blue-100',
@@ -68,9 +40,36 @@ const progressBarColors = {
   FAILED: 'bg-red-400',
 };
 
+const featureBadgeStyles: Record<string, string> = {
+  subscription: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  scrape_order: 'bg-blue-50 text-blue-700 border-blue-200',
+  bespoke: 'bg-purple-50 text-purple-700 border-purple-200',
+};
+
+const formatVND = (amount: number) => {
+  return amount.toLocaleString('vi-VN') + ' ₫';
+};
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return dateStr;
+  }
+};
+
 const AdminDashboard = () => {
-  const totalSubs = subscriptionData.reduce((sum, item) => sum + item.value, 0);
   const [stats, setStats] = useState<AdminDashboardData | null>(null);
+  const totalSubs = stats?.subscriptionData?.reduce((sum, item) => sum + item.value, 0) || 0;
+  const topFeature = stats?.revenueByType?.find((t) => t.isTopFeature) || stats?.revenueByType?.[0];
 
   const load = useCallback(async () => {
     try {
@@ -86,26 +85,24 @@ const AdminDashboard = () => {
 
   return (
     <AdminLayout>
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
-        <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Dashboard Overview</h2>
-          <p className="text-[#6b7280] text-sm mt-1">
-            Real-time performance metrics and system health monitoring.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            Last 30 Days
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-[#ef4444] hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-            <Download className="w-4 h-4" />
-            Export Report
-          </button>
-        </div>
+      <div className="mb-8">
+        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Dashboard Overview</h2>
+        <p className="text-[#6b7280] text-sm mt-1">
+          Thống kê hiệu năng hệ thống & Doanh thu thực tế theo từng tính năng riêng biệt.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      {/* Top Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+        <MetricCard
+          icon={Wallet}
+          iconBg="bg-emerald-50"
+          iconColor="text-emerald-600"
+          label="Tổng Doanh Thu"
+          value={stats ? formatVND(stats.totalRevenue) : '—'}
+          valueColor="text-emerald-600"
+          trend={stats?.revenueGrowthRate ? `${stats.revenueGrowthRate > 0 ? '+' : ''}${stats.revenueGrowthRate}%` : undefined}
+        />
         <MetricCard
           icon={UserPlus}
           iconBg="bg-blue-50"
@@ -129,13 +126,6 @@ const AdminDashboard = () => {
           valueColor="text-[#3b82f6]"
         />
         <MetricCard
-          icon={DollarSign}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-500"
-          label="Mentions"
-          value={stats ? stats.totalMentions.toLocaleString('vi-VN') : '—'}
-        />
-        <MetricCard
           icon={AlertTriangle}
           iconBg="bg-red-50"
           iconColor="text-[#ef4444]"
@@ -145,188 +135,284 @@ const AdminDashboard = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-semibold">Revenue & User Growth</h3>
-            <div className="flex items-center gap-4 text-xs text-[#6b7280]">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#111827]" />
-                Revenue
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
-                Users
+      {/* Feature Revenue Management & Comparison Section */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-gray-900">Quản Lý & So Sánh Doanh Thu Theo Tính Năng</h3>
+              <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-100 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Feature Analytics
               </span>
             </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Phân tích trực quan nguồn doanh thu từ <strong>Tạo Dự Án Mới (Scrape Order)</strong> vs <strong>Tạo Báo Cáo Chuyên Sâu (Bespoke Report)</strong> vs <strong>Gói Subscriptions</strong>.
+            </p>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={revenueGrowthData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
-                />
-                <YAxis
-                  yAxisId="left"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
-                  tickFormatter={(v) => `$${v / 1000}k`}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                    fontSize: '12px',
-                  }}
-                />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#111827"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="users"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-semibold">Recent Jobs</h3>
-            <button className="text-sm font-medium text-[#3b82f6] hover:text-blue-700 transition-colors">
-              View All
-            </button>
-          </div>
-          <div className="space-y-5">
-            {recentJobs.map((job) => (
-              <div key={job.id}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-[#111827]">#{job.id}</span>
-                  <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border ${statusStyles[job.status]}`}
-                  >
-                    {job.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${progressBarColors[job.status]}`}
-                      style={{ width: `${job.progress}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-[#6b7280] w-8 text-right">
-                    {job.progress}%
-                  </span>
+          {topFeature && topFeature.totalAmount > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-xl shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-sm">
+                <Trophy className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Tính Năng Thu Nhập Cao Nhất</div>
+                <div className="text-xs font-bold text-gray-900">
+                  {topFeature.typeName} <span className="text-emerald-600 ml-1">({formatVND(topFeature.totalAmount)})</span>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Feature Revenue Cards */}
+          {stats?.revenueByType && stats.revenueByType.length > 0 ? (
+            stats.revenueByType.map((item) => (
+              <div
+                key={item.type}
+                className={`p-5 rounded-xl border transition-all ${item.isTopFeature
+                  ? 'bg-gradient-to-b from-indigo-50/30 to-white border-indigo-200 shadow-sm ring-1 ring-indigo-100'
+                  : 'bg-white border-gray-200 hover:border-gray-300'
+                  }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border ${featureBadgeStyles[item.type] || 'bg-gray-50 text-gray-700 border-gray-200'
+                      }`}
+                  >
+                    {item.type === 'bespoke' && <Sparkles className="w-3 h-3" />}
+                    {item.type === 'scrape_order' && <Layers className="w-3 h-3" />}
+                    {item.typeName}
+                  </span>
+                  {item.isTopFeature && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                      #1 Top Revenue
+                    </span>
+                  )}
+                </div>
+
+                <div className="mb-4">
+                  <div className="text-xs font-medium text-gray-500 mb-1">Tổng doanh thu thực nhận</div>
+                  <div className="text-2xl font-bold text-gray-900">{formatVND(item.totalAmount)}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-100 text-xs mb-4">
+                  <div>
+                    <span className="text-gray-400 block text-[11px]">Số giao dịch</span>
+                    <span className="font-semibold text-gray-800">{item.transactionCount} lượt</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block text-[11px]">TB / Đơn hàng (AOV)</span>
+                    <span className="font-semibold text-emerald-600">{formatVND(item.averageOrderValue)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[11px] text-gray-500 mb-1">
+                    <span>Tỷ trọng đóng góp</span>
+                    <span className="font-bold text-gray-800">{item.percentage}%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${item.type === 'bespoke'
+                        ? 'bg-purple-500'
+                        : item.type === 'scrape_order'
+                          ? 'bg-blue-500'
+                          : 'bg-emerald-500'
+                        }`}
+                      style={{ width: `${Math.min(100, Math.max(4, item.percentage))}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-3 text-center text-xs text-gray-400 py-10">
+              Chưa phát sinh giao dịch thanh toán tính năng nào
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-base font-semibold mb-6">Subscription Breakdown</h3>
-          <div className="flex flex-col sm:flex-row items-center gap-8">
-            <div className="relative w-48 h-48 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={subscriptionData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="65%"
-                    outerRadius="85%"
-                    paddingAngle={2}
-                    startAngle={90}
-                    endAngle={-270}
-                    dataKey="value"
-                    stroke="rgba(255,255,255,0.05)"
-                    strokeWidth={2}
-                    cornerRadius={4}
-                  >
-                    {subscriptionData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-bold">{totalSubs}</span>
-                <span className="text-[10px] font-semibold text-[#6b7280] tracking-wider">TOTAL</span>
-              </div>
-            </div>
-            <div className="flex-1 w-full space-y-4">
-              {subscriptionData.map((item) => (
-                <div key={item.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="text-sm font-medium">{item.name}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-semibold">{item.value}</span>
-                    <span className="text-xs text-[#6b7280] ml-2">
-                      {Math.round((item.value / totalSubs) * 100)}% of total
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Revenue Growth Line Chart */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+          <div>
+            <h3 className="text-base font-semibold">Tăng Trưởng Doanh Thu & Người Dùng</h3>
+            <p className="text-xs text-[#6b7280] mt-0.5">
+              Trục trái: Doanh thu thực nhận (Triệu ₫) | Trục phải: Số lượng Users đăng ký mới
+            </p>
           </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-semibold">Proxy Health Overview</h3>
-            <span className="flex items-center gap-1.5 text-xs font-medium text-[#3b82f6]">
-              <span className="w-2 h-2 rounded-full bg-[#3b82f6] animate-pulse" />
-              Live Update
+          <div className="flex items-center gap-4 text-xs font-medium text-[#6b7280]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#111827]" />
+              Doanh Thu (Tr ₫)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
+              Users Mới (Người)
             </span>
           </div>
-          <div className="space-y-6">
-            {proxyRegions.map((region) => (
-              <div key={region.name}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-[#111827]">{region.name}</span>
-                  <span className="text-sm font-semibold text-[#3b82f6]">{region.health}%</span>
-                </div>
-                <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#3b82f6] rounded-full transition-all"
-                    style={{ width: `${region.health}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+        </div>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={stats?.revenueGrowth || []}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+              <XAxis
+                dataKey="month"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#9ca3af' }}
+              />
+              <YAxis
+                yAxisId="left"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#9ca3af' }}
+                tickFormatter={(v: number) => {
+                  if (v >= 1000000) {
+                    const millions = v / 1000000;
+                    return Number.isInteger(millions) ? `${millions} Tr ₫` : `${millions.toFixed(1)} Tr ₫`;
+                  }
+                  if (v >= 1000) return `${(v / 1000).toFixed(0)}k ₫`;
+                  return `${v.toLocaleString('vi-VN')} ₫`;
+                }}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+                domain={[0, (dataMax: number) => Math.max(dataMax, 10)]}
+                tick={{ fontSize: 12, fill: '#9ca3af' }}
+                tickFormatter={(v: number) => `${v} users`}
+              />
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  if (name === 'revenue') return [formatVND(value), 'Doanh Thu'];
+                  return [`${value} người`, 'Users Mới'];
+                }}
+                contentStyle={{
+                  borderRadius: '8px',
+                  border: '1px solid #e5e7eb',
+                  fontSize: '12px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                }}
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="revenue"
+                stroke="#111827"
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="users"
+                stroke="#ef4444"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Recent Feature Payments Table (Full Width) */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Giao Dịch Thanh Toán Tính Năng Gần Đây</h3>
+            <p className="text-xs text-[#6b7280] mt-0.5">Danh sách các giao dịch User đã trả tiền sử dụng từng tính năng hệ thống</p>
           </div>
+          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-semibold">
+            Live Verified
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="py-3 px-2">Mã GD / Trạng Thái</th>
+                <th className="py-3 px-2">User Thanh Toán</th>
+                <th className="py-3 px-2">Tính Năng Sử Dụng</th>
+                <th className="py-3 px-2 text-right">Số Tiền (₫)</th>
+                <th className="py-3 px-2 text-right">Ngày Giờ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 text-sm">
+              {stats?.recentRevenueTransactions && stats.recentRevenueTransactions.length > 0 ? (
+                stats.recentRevenueTransactions.map((tx) => (
+                  <tr key={tx.paymentId} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-3 px-2">
+                      <div className="font-mono text-xs font-semibold text-gray-900">{tx.transactionRef}</div>
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium mt-0.5">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {tx.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2">
+                      <div className="font-medium text-gray-900">{tx.userName}</div>
+                      <div className="text-xs text-gray-500">{tx.userEmail}</div>
+                    </td>
+                    <td className="py-3 px-2">
+                      <span
+                        className={`inline-block px-2.5 py-1 rounded text-xs font-medium border ${featureBadgeStyles[tx.type] || 'bg-gray-50 text-gray-700 border-gray-200'
+                          }`}
+                      >
+                        {tx.featureName}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-right font-bold text-gray-900">
+                      {formatVND(tx.amount)}
+                    </td>
+                    <td className="py-3 px-2 text-right text-xs text-gray-500">
+                      {formatDate(tx.paidAt)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-xs text-gray-400">
+                    Chưa có giao dịch thanh toán nào gần đây
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Proxy Health */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-base font-semibold">Proxy Health Overview</h3>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-[#3b82f6]">
+            <span className="w-2 h-2 rounded-full bg-[#3b82f6] animate-pulse" />
+            Live Update
+          </span>
+        </div>
+        <div className="space-y-6">
+          {stats?.proxyHealthOverview?.map((region) => (
+            <div key={region.name}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-[#111827]">{region.name}</span>
+                <span className="text-sm font-semibold text-[#3b82f6]">{region.health}%</span>
+              </div>
+              <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#3b82f6] rounded-full transition-all"
+                  style={{ width: `${region.health}%` }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </AdminLayout>
@@ -360,7 +446,7 @@ const MetricCard = ({
     <div className="flex items-end justify-between gap-2">
       <span className={`text-2xl font-bold ${valueColor}`}>{value}</span>
       {trend && (
-        <span className="flex items-center gap-0.5 text-xs font-semibold text-[#3b82f6] mb-1">
+        <span className="flex items-center gap-0.5 text-xs font-semibold text-emerald-600 mb-1">
           <TrendingUp className="w-3.5 h-3.5" />
           {trend}
         </span>
