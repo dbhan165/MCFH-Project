@@ -139,20 +139,20 @@ const Login = () => {
         <div className="relative z-10 bg-[#0A101D]/60 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl">
           <div className="flex items-center gap-3 mb-6">
             <Sparkles className="text-[#00B4D8] w-6 h-6" />
-            <h3 className="text-white text-2xl font-bold tracking-tight">MCFH Update v2.0</h3>
+            <h3 className="text-white text-2xl font-bold tracking-tight">Trải nghiệm tính năng mới</h3>
           </div>
           <ul className="space-y-4">
             <li className="flex items-center gap-4 text-gray-300 text-sm font-medium hover:text-white transition-colors">
               <div className="bg-[#00B4D8]/10 p-1.5 rounded-full"><CheckCircle2 className="text-[#00B4D8] w-4 h-4" /></div>
-              Tích hợp SignalR Real-time Connection
+              Cập nhật dữ liệu theo thời gian thực
             </li>
             <li className="flex items-center gap-4 text-gray-300 text-sm font-medium hover:text-white transition-colors">
               <div className="bg-[#00B4D8]/10 p-1.5 rounded-full"><CheckCircle2 className="text-[#00B4D8] w-4 h-4" /></div>
-              AI Aspect Extraction & Sentiment
+              Phân tích cảm xúc chuyên sâu bằng AI
             </li>
             <li className="flex items-center gap-4 text-gray-300 text-sm font-medium hover:text-white transition-colors">
               <div className="bg-[#00B4D8]/10 p-1.5 rounded-full"><CheckCircle2 className="text-[#00B4D8] w-4 h-4" /></div>
-              VNPay Checkout Gateway Security
+              Giao dịch an toàn, bảo mật tuyệt đối
             </li>
           </ul>
         </div>

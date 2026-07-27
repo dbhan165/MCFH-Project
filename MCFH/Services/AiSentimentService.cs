@@ -73,10 +73,10 @@ public class AiSentimentService : IAiSentimentService
 
 
 
-    private async Task<(string ApiKey, string Model)> ResolveSettingsAsync(CancellationToken ct)
+    private async Task<(string ApiKey, string Model, string BaseUrl)> ResolveSettingsAsync(CancellationToken ct)
     {
         var cacheKey = "GeminiSettings";
-        if (_cache.TryGetValue(cacheKey, out (string ApiKey, string Model) cachedSettings))
+        if (_cache.TryGetValue(cacheKey, out (string ApiKey, string Model, string BaseUrl) cachedSettings))
         {
             return cachedSettings;
         }
@@ -87,7 +87,8 @@ public class AiSentimentService : IAiSentimentService
         // Giữ key cũ GEMINI_* trong DB để không phá dữ liệu SystemSettings đã có.
         var settingsList = await db.SystemSettings
             .Where(s => s.SettingKey == "AI_MODEL_API_KEY" || s.SettingKey == "AI_MODEL_NAME"
-                     || s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL")
+                     || s.SettingKey == "GEMINI_API_KEY" || s.SettingKey == "GEMINI_MODEL"
+                     || s.SettingKey == "AI_MODEL_BASE_URL")
             .ToListAsync(ct);
 
         var settings = settingsList.ToDictionary(
@@ -102,9 +103,12 @@ public class AiSentimentService : IAiSentimentService
         if (string.IsNullOrWhiteSpace(dbModel))
             settings.TryGetValue("GEMINI_MODEL", out dbModel);
 
+        settings.TryGetValue("AI_MODEL_BASE_URL", out var dbBaseUrl);
+
         var result = (
             !string.IsNullOrWhiteSpace(dbKey) ? dbKey : _options.ApiKey,
-            !string.IsNullOrWhiteSpace(dbModel) ? dbModel : _options.Model
+            !string.IsNullOrWhiteSpace(dbModel) ? dbModel : _options.Model,
+            !string.IsNullOrWhiteSpace(dbBaseUrl) ? dbBaseUrl : _options.BaseUrl
         );
 
         _cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
@@ -116,7 +120,7 @@ public class AiSentimentService : IAiSentimentService
 
     public async Task<AiModelTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
-        var (apiKey, model) = await ResolveSettingsAsync(cancellationToken);
+        var (apiKey, model, baseUrl) = await ResolveSettingsAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             return new AiModelTestResultDto
@@ -190,7 +194,7 @@ public class AiSentimentService : IAiSentimentService
         string? combinedText = null,
         CancellationToken cancellationToken = default)
     {
-        var (apiKey, dynamicModel) = await ResolveSettingsAsync(cancellationToken);
+        var (apiKey, dynamicModel, dynamicBaseUrl) = await ResolveSettingsAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey) || IsQuotaCoolingDown)
             return null;
 
@@ -223,7 +227,7 @@ public class AiSentimentService : IAiSentimentService
         foreach (var model in models)
         {
             _lastAttemptedModel = model;
-            var baseUrl = string.IsNullOrWhiteSpace(_options.BaseUrl) ? "https://api.tokenrouter.com/v1" : _options.BaseUrl;
+            var baseUrl = string.IsNullOrWhiteSpace(dynamicBaseUrl) ? "https://api.tokenrouter.com/v1" : dynamicBaseUrl;
             var url = $"{baseUrl.TrimEnd('/')}/chat/completions";
 
             var requestBody = new
@@ -237,61 +241,73 @@ public class AiSentimentService : IAiSentimentService
                 temperature = 0.2
             };
 
-            try
+            int maxRetries = 2;
+            for (int retry = 0; retry <= maxRetries; retry++)
             {
-                var request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-                request.Content = JsonContent.Create(requestBody);
-
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
-                var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                if (!response.IsSuccessStatusCode)
+                try
                 {
-                    _lastErrorMessage = ExtractApiError(raw) ?? $"HTTP {(int)response.StatusCode}";
+                    var request = new HttpRequestMessage(HttpMethod.Post, url);
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                    request.Content = JsonContent.Create(requestBody);
 
-                    if ((int)response.StatusCode == 429)
+                    using var response = await _httpClient.SendAsync(request, cancellationToken);
+                    var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                    if (!response.IsSuccessStatusCode)
                     {
-                        quotaHits++;
-                        _logger.LogWarning("AI model {Model} hết quota — thử model khác.", model);
-                        continue;
+                        _lastErrorMessage = ExtractApiError(raw) ?? $"HTTP {(int)response.StatusCode}";
+
+                        if ((int)response.StatusCode == 429)
+                        {
+                            if (retry < maxRetries)
+                            {
+                                _logger.LogWarning("AI model {Model} bị 429 (Rate Limit) — chờ 2s rồi thử lại (Lần {Retry}).", model, retry + 1);
+                                await Task.Delay(2000, cancellationToken);
+                                continue;
+                            }
+                            
+                            quotaHits++;
+                            _logger.LogWarning("AI model {Model} hết quota/rate limit sau {Max} lần — thử model khác.", model, maxRetries);
+                            break; // Hết số lần thử, bỏ model này
+                        }
+
+                        _logger.LogWarning("AI API lỗi {StatusCode} ({Model}): {Body}",
+                            response.StatusCode, model, raw);
+                        break; // Lỗi khác, bỏ qua model này luôn
                     }
 
-                    _logger.LogWarning("AI API lỗi {StatusCode} ({Model}): {Body}",
-                        response.StatusCode, model, raw);
-                    continue;
+                    var openAiResponse = JsonSerializer.Deserialize<OpenAiChatResponse>(raw, JsonOptions);
+                    var text = openAiResponse?.Choices?.FirstOrDefault()?.Message?.Content;
+
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        _lastErrorMessage = "AI trả về rỗng.";
+                        _logger.LogWarning("AI trả về rỗng (model {Model}). Raw response: {Raw}", model, raw);
+                        break;
+                    }
+
+                    var parsed = JsonSerializer.Deserialize<AiSentimentPayload>(text, JsonOptions);
+                    if (parsed == null)
+                        break;
+
+                    _lastSuccessfulModel = model;
+                    _lastErrorMessage = null;
+
+                    return new SentimentAnalysisResult
+                    {
+                        Sentiment = NormalizeSentiment(parsed.Sentiment),
+                        Confidence = ClampConfidence(parsed.Confidence),
+                        IsCrisisAlert = parsed.IsCrisisAlert,
+                        Summary = parsed.Summary,
+                        UsedAiModel = true
+                    };
                 }
-
-                var openAiResponse = JsonSerializer.Deserialize<OpenAiChatResponse>(raw, JsonOptions);
-                var text = openAiResponse?.Choices?.FirstOrDefault()?.Message?.Content;
-
-                if (string.IsNullOrWhiteSpace(text))
+                catch (Exception ex)
                 {
-                    _lastErrorMessage = "AI trả về rỗng.";
-                    _logger.LogWarning("AI trả về rỗng (model {Model}).", model);
-                    continue;
+                    _lastErrorMessage = ex.Message;
+                    _logger.LogError(ex, "Gọi AI sentiment thất bại (model {Model}).", model);
+                    break;
                 }
-
-                var parsed = JsonSerializer.Deserialize<AiSentimentPayload>(text, JsonOptions);
-                if (parsed == null)
-                    continue;
-
-                _lastSuccessfulModel = model;
-                _lastErrorMessage = null;
-
-                return new SentimentAnalysisResult
-                {
-                    Sentiment = NormalizeSentiment(parsed.Sentiment),
-                    Confidence = ClampConfidence(parsed.Confidence),
-                    IsCrisisAlert = parsed.IsCrisisAlert,
-                    Summary = parsed.Summary,
-                    UsedAiModel = true
-                };
-            }
-            catch (Exception ex)
-            {
-                _lastErrorMessage = ex.Message;
-                _logger.LogError(ex, "Gọi AI sentiment thất bại (model {Model}).", model);
             }
         }
 
