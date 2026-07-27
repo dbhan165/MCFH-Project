@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 // import axios from 'axios'; // Mở comment dòng này khi BE C# đã sẵn sàng
 
 interface PricingPlan {
@@ -110,6 +112,14 @@ const Pricing = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
         
+        {/* Back Button */}
+        <div className="absolute top-4 left-4 sm:static sm:mb-8">
+          <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-[#9BA1B0] hover:text-white transition-colors bg-white/5 px-4 py-2 rounded-lg hover:bg-white/10 border border-white/10">
+            <ArrowLeft className="w-4 h-4" />
+            Trở về Trang chủ
+          </Link>
+        </div>
+
         {/* Header Section */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-sm font-bold text-[#FF7575] tracking-widest uppercase mb-3 flex items-center justify-center gap-2">

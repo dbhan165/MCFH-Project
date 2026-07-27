@@ -387,7 +387,7 @@ const Workspaces = () => {
             <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#FF7575] to-orange-500 flex items-center justify-center mx-auto mb-6 shadow-[0_12px_40px_rgba(255,117,117,0.3)]">
               <Building2 className="w-10 h-10 text-white" />
             </div>
-            <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3">Bắt đầu hành trình MCFH</h3>
+            <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3">Bắt đầu hành trình lắng nghe khách hàng đa kênh</h3>
             <p className="text-gray-400 mb-8 max-w-lg mx-auto leading-relaxed">
               Tạo workspace đầu tiên để theo dõi thương hiệu trên Facebook, YouTube, TikTok và biên soạn báo cáo chuyên sâu cùng team.
             </p>

@@ -2,6 +2,7 @@ using MCFH.DTOs;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Services;
+using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
@@ -37,7 +38,7 @@ public class ProjectExtendedController : ControllerBase
         IServiceScopeFactory scopeFactory,
         IEmailService emailService,
         ILogger<ProjectExtendedController> logger,
-        MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
+        ICommentBundleStorage bundleStorage)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;

@@ -32,6 +32,7 @@ const SystemSettings = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKey, setApiKey] = useState('sk-xxxxxxxxxxxxxxxxxxxx');
   const [defaultModel, setDefaultModel] = useState(defaultModelValue);
+  const [baseUrl, setBaseUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [isTestingAiModel, setIsTestingAiModel] = useState(false);
@@ -46,6 +47,9 @@ const SystemSettings = () => {
       const model = settings.find((s) => s.settingKey === 'AI_MODEL_NAME')
         ?? settings.find((s) => s.settingKey === 'GEMINI_MODEL');
       if (model?.settingValue) setDefaultModel(model.settingValue);
+      
+      const bUrl = settings.find((s) => s.settingKey === 'AI_MODEL_BASE_URL');
+      if (bUrl?.settingValue) setBaseUrl(bUrl.settingValue);
     }).catch(() => undefined);
   }, []);
 
@@ -73,6 +77,7 @@ const SystemSettings = () => {
       await adminApi.updateSettings({
         AI_MODEL_API_KEY: apiKey,
         AI_MODEL_NAME: defaultModel,
+        AI_MODEL_BASE_URL: baseUrl,
         VNPAY_TMN_CODE: null,
         VNPAY_SECRET_KEY: null,
       });
@@ -163,6 +168,20 @@ const SystemSettings = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
+                      Base URL
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={baseUrl}
+                        onChange={(e) => setBaseUrl(e.target.value)}
+                        placeholder="e.g. https://api.groq.com/openai/v1"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
                       Default Model
