@@ -234,3 +234,15 @@ public class AssignBespokeGlobalDto
 {
     public int ReporterId { get; set; }
 }
+
+public class AdminAuditLogDto
+{
+    public int LogId { get; set; }
+    public string Action { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public string ActorName { get; set; } = null!;
+    public string ActorEmail { get; set; } = null!;
+    public string Category { get; set; } = null!;
+    public string Severity { get; set; } = "info";
+    public DateTime Timestamp { get; set; }
+}

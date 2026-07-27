@@ -234,7 +234,35 @@ function mapPortalRequest(r: Record<string, unknown>): PortalBespokeRequest {
   };
 }
 
+export interface AdminAuditLog {
+  logId: number;
+  action: string;
+  description: string;
+  actorName: string;
+  actorEmail: string;
+  category: 'PAYMENT' | 'USER' | 'PROJECT' | 'SYSTEM' | string;
+  severity: 'info' | 'success' | 'warning' | string;
+  timestamp: string;
+}
+
 export const adminApi = {
+  getAuditLogs: async (limit = 50): Promise<AdminAuditLog[]> => {
+    const res = await axiosClient.get<unknown[]>('/api/admin/audit-logs', { params: { limit } });
+    return (res.data ?? []).map((item) => {
+      const d = item as Record<string, unknown>;
+      return {
+        logId: pickNumber(d, 'logId', 'LogId'),
+        action: pickString(d, 'action', 'Action'),
+        description: pickString(d, 'description', 'Description'),
+        actorName: pickString(d, 'actorName', 'ActorName'),
+        actorEmail: pickString(d, 'actorEmail', 'ActorEmail'),
+        category: pickString(d, 'category', 'Category'),
+        severity: pickString(d, 'severity', 'Severity'),
+        timestamp: pickString(d, 'timestamp', 'Timestamp'),
+      };
+    });
+  },
+
   getDashboard: async (): Promise<AdminDashboard> => {
     const res = await axiosClient.get<Record<string, unknown>>('/api/admin/dashboard');
     const d = res.data;

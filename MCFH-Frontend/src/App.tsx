@@ -21,9 +21,9 @@ import SubscriptionPlans from "./pages/admin/SubscriptionPlans";
 import ProxyManagement from "./pages/admin/ProxyManagement";
 import FbSourceManagement from "./pages/admin/FbSourceManagement";
 import CookieManagement from "./pages/admin/CookieManagement";
-import ScrapingMonitor from "./pages/admin/ScrapingMonitor";
 import SystemSettings from "./pages/admin/SystemSettings";
 import AdminProfile from "./pages/admin/AdminProfile";
+import AuditLogs from "./pages/admin/AuditLogs";
 import BespokeRequests from "./pages/reporter/BespokeRequests";
 import ReporterPlaceholder from "./pages/reporter/ReporterPlaceholder";
 import RequestDetail from "./pages/reporter/RequestDetail";
@@ -93,9 +93,9 @@ function AppRoutes() {
           <Route path="/admin/proxies" element={<ProxyManagement />} />
           <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
           <Route path="/admin/cookies" element={<CookieManagement />} />
-          <Route path="/admin/scraping" element={<ScrapingMonitor />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
+          <Route path="/admin/audit-logs" element={<AuditLogs />} />
         </Route>
 
         <Route element={<PrivateRoute allowedRoles={["Reporter", "Admin"]} />}>

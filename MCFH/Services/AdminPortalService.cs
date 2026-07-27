@@ -737,6 +737,119 @@ public class AdminPortalService
         return await ListSettingsAsync(adminUserId);
     }
 
+    public async Task<List<AdminAuditLogDto>> GetAuditLogsAsync(int adminUserId, int limit = 50)
+    {
+        if (!await IsAdminAsync(adminUserId)) return new();
+
+        var logs = new List<AdminAuditLogDto>();
+
+        // 1. Payment audit logs
+        var payments = await _context.Payments
+            .Include(p => p.CreatedByNavigation)
+            .Where(p => p.Status == "success" || p.Status == "paid")
+            .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync();
+
+        foreach (var p in payments)
+        {
+            var user = p.CreatedByNavigation;
+            var refText = !string.IsNullOrEmpty(p.TransactionRef) 
+                ? p.TransactionRef 
+                : (p.OrderCode.HasValue ? $"PAYOS-{p.OrderCode}" : $"PAY-{p.PaymentId}");
+
+            logs.Add(new AdminAuditLogDto
+            {
+                Action = "Thanh toán đơn cào thành công",
+                Description = $"Xác nhận biến động số dư +{p.Amount:N0} ₫ (Mã GD: {refText})",
+                ActorName = user?.FullName ?? "Hệ thống PayOS",
+                ActorEmail = user?.Email ?? "system@payos.vn",
+                Category = "PAYMENT",
+                Severity = "success",
+                Timestamp = p.PaidAt ?? p.CreatedAt ?? DateTime.Now
+            });
+        }
+
+        // 2. User registration audit logs
+        var users = await _context.Users
+            .OrderByDescending(u => u.CreatedAt)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync();
+
+        foreach (var u in users)
+        {
+            logs.Add(new AdminAuditLogDto
+            {
+                Action = "Tài khoản mới đăng ký",
+                Description = $"Thành viên [{u.FullName}] ({u.Email}) gia nhập hệ thống với vai trò [{u.SystemRole}]",
+                ActorName = u.FullName,
+                ActorEmail = u.Email,
+                Category = "USER",
+                Severity = "info",
+                Timestamp = u.CreatedAt ?? DateTime.Now
+            });
+        }
+
+        // 3. Scrape orders audit logs
+        var orders = await _context.ScrapeOrders
+            .Include(o => o.User)
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync();
+
+        foreach (var o in orders)
+        {
+            var user = o.User;
+            logs.Add(new AdminAuditLogDto
+            {
+                Action = "Khởi tạo dự án cào dữ liệu",
+                Description = $"Đơn cào [Từ khóa: {o.Keyword ?? "Mặc định"}] (Giá: {o.QuotedPrice:N0} ₫, Trạng thái: {o.Status})",
+                ActorName = user?.FullName ?? "Khách hàng",
+                ActorEmail = user?.Email ?? "N/A",
+                Category = "PROJECT",
+                Severity = o.Status == "completed" ? "success" : "info",
+                Timestamp = o.CreatedAt
+            });
+        }
+
+        // 4. System settings audit logs
+        var settings = await _context.SystemSettings
+            .Where(s => s.UpdatedAt.HasValue)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Take(10)
+            .AsNoTracking()
+            .ToListAsync();
+
+        foreach (var s in settings)
+        {
+            logs.Add(new AdminAuditLogDto
+            {
+                Action = "Cấu hình tham số hệ thống",
+                Description = $"Khóa cấu hình [{s.SettingKey}] vừa được cập nhật giá trị bảo mật mới",
+                ActorName = "System Administrator",
+                ActorEmail = "admin@mcfh.com",
+                Category = "SYSTEM",
+                Severity = "warning",
+                Timestamp = s.UpdatedAt ?? DateTime.Now
+            });
+        }
+
+        var result = logs
+            .OrderByDescending(l => l.Timestamp)
+            .Take(limit)
+            .Select((l, index) =>
+            {
+                l.LogId = index + 1;
+                return l;
+            })
+            .ToList();
+
+        return result;
+    }
+
     private async Task<bool> IsAdminAsync(int userId)
     {
         var user = await _context.Users.FindAsync(userId);

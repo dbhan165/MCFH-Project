@@ -7,7 +7,7 @@ import {
   Server,
   Globe,
   Cookie,
-  Activity,
+  Clock,
   Settings,
   User,
   LogOut,
@@ -24,7 +24,7 @@ const navItems = [
   { label: 'Proxy Management', icon: Server, href: '/admin/proxies' },
   { label: 'Facebook Sources', icon: Globe, href: '/admin/fb-sources' },
   { label: 'Platform Cookies', icon: Cookie, href: '/admin/cookies' },
-  { label: 'Scraping Monitor', icon: Activity, href: '/admin/scraping' },
+  { label: 'Audit Logs', icon: Clock, href: '/admin/audit-logs' },
   { label: 'System Settings', icon: Settings, href: '/admin/settings' },
 ];
 
