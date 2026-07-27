@@ -30,6 +30,232 @@ public class AdminPortalService
             .Take(8)
             .ToListAsync();
 
+        var subs = await _context.Subscriptions
+            .Include(s => s.Plan)
+            .Where(s => s.Status == "active" && s.Plan != null)
+            .GroupBy(s => s.Plan.Name)
+            .Select(g => new { Name = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var subColors = new[] { "#111827", "#ef4444", "#3b82f6", "#10b981", "#f59e0b" };
+        var subscriptionData = subs.Select((s, i) => new AdminSubscriptionChartDto
+        {
+            Name = s.Name,
+            Value = s.Count,
+            Color = subColors[i % subColors.Length]
+        }).ToList();
+
+        var jobs = await _context.ScrapingJobs
+            .OrderByDescending(j => j.StartedAt)
+            .Take(5)
+            .ToListAsync();
+
+        var recentJobs = jobs.Select(j => new AdminRecentJobDto
+        {
+            Id = j.JobId.Length > 8 ? j.JobId[..8] : j.JobId,
+            Status = string.IsNullOrWhiteSpace(j.Status) ? "RUNNING" : j.Status.ToUpper(),
+            Progress = (j.Status?.ToLower()) switch
+            {
+                "completed" => 100,
+                "failed" => 100, // failed is also 100% of its lifespan but colored red in UI
+                _ => 50
+            }
+        }).ToList();
+
+        var proxies = await _context.SystemProxies.ToListAsync();
+        var proxyOverview = proxies.Select(p => new AdminProxyHealthDto
+        {
+            Name = p.IpAddress,
+            Health = Math.Max(0, 100 - (p.FailCount ?? 0) * 5)
+        }).Take(5).ToList();
+
+        var startDate = DateTime.UtcNow.AddMonths(-7);
+        startDate = new DateTime(startDate.Year, startDate.Month, 1);
+        var now = DateTime.UtcNow;
+
+        // Auto-sync payment status for ScrapeOrders that are paid, scraping, or completed
+        var paidScrapeOrders = await _context.ScrapeOrders
+            .Include(o => o.User)
+            .Where(o => o.Status == "paid" || o.Status == "scraping" || o.Status == "completed")
+            .AsNoTracking()
+            .ToListAsync();
+
+        var pendingPaymentIdsForPaidOrders = paidScrapeOrders
+            .Where(o => o.PaymentId.HasValue)
+            .Select(o => o.PaymentId!.Value)
+            .ToList();
+
+        if (pendingPaymentIdsForPaidOrders.Count > 0)
+        {
+            var pendingPaymentsToFix = await _context.Payments
+                .Where(p => pendingPaymentIdsForPaidOrders.Contains(p.PaymentId) && p.Status != "success" && p.Status != "paid")
+                .ToListAsync();
+
+            if (pendingPaymentsToFix.Count > 0)
+            {
+                foreach (var p in pendingPaymentsToFix)
+                {
+                    p.Status = "success";
+                    if (!p.PaidAt.HasValue) p.PaidAt = p.CreatedAt ?? now;
+                }
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        var allSuccessfulPayments = await _context.Payments
+            .Include(p => p.CreatedByNavigation)
+            .Include(p => p.Plan)
+            .Include(p => p.Request)
+            .Where(p => (p.Status == "success" || p.Status == "paid") && p.RequestId == null && (p.Type == null || p.Type.ToLower() == "scrape_order"))
+            .AsNoTracking()
+            .ToListAsync();
+
+        var existingPaymentIds = new HashSet<int>(allSuccessfulPayments.Select(p => p.PaymentId));
+
+        // Add paid ScrapeOrders if payment record was not in allSuccessfulPayments
+        foreach (var order in paidScrapeOrders)
+        {
+            if (!order.PaymentId.HasValue || !existingPaymentIds.Contains(order.PaymentId.Value))
+            {
+                var paymentId = order.PaymentId ?? (100000 + order.OrderId);
+                if (existingPaymentIds.Add(paymentId))
+                {
+                    allSuccessfulPayments.Add(new Payment
+                    {
+                        PaymentId = paymentId,
+                        TransactionRef = $"SCRAPE-{order.OrderId}",
+                        Amount = order.QuotedPrice,
+                        Status = "success",
+                        Type = "scrape_order",
+                        CreatedBy = order.UserId,
+                        CreatedByNavigation = order.User,
+                        CreatedAt = order.PaidAt ?? order.CreatedAt,
+                        PaidAt = order.PaidAt ?? order.CreatedAt
+                    });
+                }
+            }
+        }
+
+        var totalRevenue = allSuccessfulPayments.Sum(p => p.Amount);
+
+        var monthlyRevenue = allSuccessfulPayments
+            .Where(p => p.CreatedAt.HasValue && p.CreatedAt.Value.Year == now.Year && p.CreatedAt.Value.Month == now.Month)
+            .Sum(p => p.Amount);
+
+        var prevMonth = now.AddMonths(-1);
+        var prevMonthlyRevenue = allSuccessfulPayments
+            .Where(p => p.CreatedAt.HasValue && p.CreatedAt.Value.Year == prevMonth.Year && p.CreatedAt.Value.Month == prevMonth.Month)
+            .Sum(p => p.Amount);
+
+        var revenueGrowthRate = prevMonthlyRevenue > 0
+            ? Math.Round((double)((monthlyRevenue - prevMonthlyRevenue) / prevMonthlyRevenue * 100), 1)
+            : 0;
+
+        // Build revenue breakdown by feature (Only Scrape Order has real revenue; Bespoke is set to 0 until officially implemented)
+        var scrapePayments = allSuccessfulPayments.Where(p => (p.Type ?? "scrape_order").ToLower() == "scrape_order").ToList();
+        var scrapeTotal = scrapePayments.Sum(p => p.Amount);
+        var scrapeCount = scrapePayments.Count;
+        var scrapeAvg = scrapeCount > 0 ? scrapeTotal / scrapeCount : 0;
+
+        var revenueByTypeGroup = new List<AdminRevenueByTypeDto>
+        {
+            new AdminRevenueByTypeDto
+            {
+                Type = "scrape_order",
+                TypeName = "Tạo Dự Án Mới (Scrape Order)",
+                TotalAmount = scrapeTotal,
+                TransactionCount = scrapeCount,
+                AverageOrderValue = scrapeAvg,
+                Percentage = totalRevenue > 0 ? Math.Round((double)(scrapeTotal / totalRevenue * 100), 1) : (scrapeTotal > 0 ? 100 : 0),
+                IsTopFeature = scrapeTotal > 0
+            },
+            new AdminRevenueByTypeDto
+            {
+                Type = "bespoke",
+                TypeName = "Tạo Báo Cáo Chuyên Sâu (Bespoke)",
+                TotalAmount = 0,
+                TransactionCount = 0,
+                AverageOrderValue = 0,
+                Percentage = 0,
+                IsTopFeature = false
+            }
+        };
+
+        var revenueByPlanGroup = allSuccessfulPayments
+            .GroupBy(p =>
+            {
+                if (p.Plan != null) return p.Plan.Name;
+                var t = (p.Type ?? "").ToLower();
+                if (t == "scrape_order") return "Đơn Cào Dữ Liệu Custom";
+                if (t == "bespoke") return "Báo Cáo Bespoke";
+                return "Gói Tiêu Chuẩn";
+            })
+            .Select(g => new AdminRevenueByPlanDto
+            {
+                Name = g.Key,
+                TotalAmount = g.Sum(x => x.Amount),
+                TransactionCount = g.Count()
+            })
+            .OrderByDescending(x => x.TotalAmount)
+            .ToList();
+
+        var recentRevenueTransactions = allSuccessfulPayments
+            .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
+            .Take(10)
+            .Select(p =>
+            {
+                var typeKey = (p.Type ?? "").ToLower();
+                var featureName = typeKey switch
+                {
+                    "subscription" => $"Gói {p.Plan?.Name ?? "Đăng Ký System"}",
+                    "scrape_order" => "Đơn cào dữ liệu custom",
+                    "bespoke" => $"Báo cáo Bespoke #{p.RequestId}",
+                    _ => "Tính năng hệ thống"
+                };
+
+                return new AdminRecentRevenueTransactionDto
+                {
+                    PaymentId = p.PaymentId,
+                    TransactionRef = !string.IsNullOrEmpty(p.TransactionRef) 
+                        ? p.TransactionRef 
+                        : (p.OrderCode.HasValue ? $"PAYOS-{p.OrderCode}" : $"PAY-{p.PaymentId}"),
+                    UserName = p.CreatedByNavigation?.FullName ?? "User Hệ Thống",
+                    UserEmail = p.CreatedByNavigation?.Email ?? "N/A",
+                    FeatureName = featureName,
+                    Type = typeKey,
+                    Amount = p.Amount,
+                    Status = "Thành công",
+                    PaidAt = p.PaidAt ?? p.CreatedAt
+                };
+            })
+            .ToList();
+
+        var revenueQuery = allSuccessfulPayments
+            .Where(p => p.CreatedAt >= startDate)
+            .GroupBy(p => new { Year = p.CreatedAt!.Value.Year, Month = p.CreatedAt!.Value.Month })
+            .Select(g => new { g.Key.Year, g.Key.Month, Total = g.Sum(p => p.Amount) })
+            .ToList();
+
+        var userQuery = await _context.Users
+            .Where(u => u.CreatedAt >= startDate)
+            .GroupBy(u => new { Year = u.CreatedAt!.Value.Year, Month = u.CreatedAt!.Value.Month })
+            .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+            .ToListAsync();
+
+        var revenueGrowth = new List<AdminRevenueChartDto>();
+        for (int i = 0; i < 8; i++)
+        {
+            var d = startDate.AddMonths(i);
+            var rev = revenueQuery.FirstOrDefault(x => x.Year == d.Year && x.Month == d.Month)?.Total ?? 0;
+            var usrs = userQuery.FirstOrDefault(x => x.Year == d.Year && x.Month == d.Month)?.Count ?? 0;
+            revenueGrowth.Add(new AdminRevenueChartDto
+            {
+                Month = $"Tháng {d.Month}",
+                Revenue = (int)rev,
+                Users = usrs
+            });
+        }
+
         return new AdminDashboardDto
         {
             TotalUsers = await _context.Users.CountAsync(),
@@ -49,7 +275,17 @@ public class AdminPortalService
                 ClientName = r.Client?.FullName,
                 ReporterName = r.Reporter?.FullName,
                 Deadline = r.Deadline
-            }).ToList()
+            }).ToList(),
+            RevenueGrowth = revenueGrowth,
+            SubscriptionData = subscriptionData,
+            RecentJobs = recentJobs,
+            ProxyHealthOverview = proxyOverview,
+            TotalRevenue = totalRevenue,
+            MonthlyRevenue = monthlyRevenue,
+            RevenueGrowthRate = revenueGrowthRate,
+            RevenueByType = revenueByTypeGroup,
+            RevenueByPlan = revenueByPlanGroup,
+            RecentRevenueTransactions = recentRevenueTransactions
         };
     }
 

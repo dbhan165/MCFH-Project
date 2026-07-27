@@ -1,4 +1,4 @@
-﻿namespace MCFH.DTOs;
+namespace MCFH.DTOs;
 
 public class AdminDashboardDto
 {
@@ -12,6 +12,74 @@ public class AdminDashboardDto
     public int InProgressBespoke { get; set; }
     public int CompletedBespoke { get; set; }
     public List<AdminRecentBespokeDto> RecentBespoke { get; set; } = new();
+    public List<AdminRevenueChartDto> RevenueGrowth { get; set; } = new();
+    public List<AdminSubscriptionChartDto> SubscriptionData { get; set; } = new();
+    public List<AdminRecentJobDto> RecentJobs { get; set; } = new();
+    public List<AdminProxyHealthDto> ProxyHealthOverview { get; set; } = new();
+    public decimal TotalRevenue { get; set; }
+    public decimal MonthlyRevenue { get; set; }
+    public double RevenueGrowthRate { get; set; }
+    public List<AdminRevenueByTypeDto> RevenueByType { get; set; } = new();
+    public List<AdminRevenueByPlanDto> RevenueByPlan { get; set; } = new();
+    public List<AdminRecentRevenueTransactionDto> RecentRevenueTransactions { get; set; } = new();
+}
+
+public class AdminRevenueByTypeDto
+{
+    public string Type { get; set; } = null!;
+    public string TypeName { get; set; } = null!;
+    public decimal TotalAmount { get; set; }
+    public int TransactionCount { get; set; }
+    public decimal AverageOrderValue { get; set; }
+    public double Percentage { get; set; }
+    public bool IsTopFeature { get; set; }
+}
+
+public class AdminRevenueByPlanDto
+{
+    public string Name { get; set; } = null!;
+    public decimal TotalAmount { get; set; }
+    public int TransactionCount { get; set; }
+}
+
+public class AdminRecentRevenueTransactionDto
+{
+    public int PaymentId { get; set; }
+    public string? TransactionRef { get; set; }
+    public string UserName { get; set; } = null!;
+    public string UserEmail { get; set; } = null!;
+    public string FeatureName { get; set; } = null!;
+    public string Type { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = null!;
+    public DateTime? PaidAt { get; set; }
+}
+
+public class AdminRevenueChartDto
+{
+    public string Month { get; set; } = null!;
+    public int Revenue { get; set; }
+    public int Users { get; set; }
+}
+
+public class AdminSubscriptionChartDto
+{
+    public string Name { get; set; } = null!;
+    public int Value { get; set; }
+    public string Color { get; set; } = null!;
+}
+
+public class AdminRecentJobDto
+{
+    public string Id { get; set; } = null!;
+    public string Status { get; set; } = null!;
+    public int Progress { get; set; }
+}
+
+public class AdminProxyHealthDto
+{
+    public string Name { get; set; } = null!;
+    public double Health { get; set; }
 }
 
 public class AdminRecentBespokeDto

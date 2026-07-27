@@ -19,6 +19,53 @@ export interface AdminDashboard {
     reporterName: string | null;
     deadline: string | null;
   }[];
+  revenueGrowth: {
+    month: string;
+    revenue: number;
+    users: number;
+  }[];
+  subscriptionData: {
+    name: string;
+    value: number;
+    color: string;
+  }[];
+  recentJobs: {
+    id: string;
+    status: 'RUNNING' | 'COMPLETED' | 'FAILED' | string;
+    progress: number;
+  }[];
+  proxyHealthOverview: {
+    name: string;
+    health: number;
+  }[];
+  totalRevenue: number;
+  monthlyRevenue: number;
+  revenueGrowthRate: number;
+  revenueByType: {
+    type: string;
+    typeName: string;
+    totalAmount: number;
+    transactionCount: number;
+    averageOrderValue: number;
+    percentage: number;
+    isTopFeature: boolean;
+  }[];
+  revenueByPlan: {
+    name: string;
+    totalAmount: number;
+    transactionCount: number;
+  }[];
+  recentRevenueTransactions: {
+    paymentId: number;
+    transactionRef: string | null;
+    userName: string;
+    userEmail: string;
+    featureName: string;
+    type: string;
+    amount: number;
+    status: string;
+    paidAt: string | null;
+  }[];
 }
 
 export interface AdminUser {
@@ -192,6 +239,14 @@ export const adminApi = {
     const res = await axiosClient.get<Record<string, unknown>>('/api/admin/dashboard');
     const d = res.data;
     const recent = (pickField<unknown[]>(d, 'recentBespoke', 'RecentBespoke') ?? []) as Record<string, unknown>[];
+    const revenueGrowth = (pickField<unknown[]>(d, 'revenueGrowth', 'RevenueGrowth') ?? []) as Record<string, unknown>[];
+    const subscriptionData = (pickField<unknown[]>(d, 'subscriptionData', 'SubscriptionData') ?? []) as Record<string, unknown>[];
+    const recentJobs = (pickField<unknown[]>(d, 'recentJobs', 'RecentJobs') ?? []) as Record<string, unknown>[];
+    const proxyHealthOverview = (pickField<unknown[]>(d, 'proxyHealthOverview', 'ProxyHealthOverview') ?? []) as Record<string, unknown>[];
+    const revenueByType = (pickField<unknown[]>(d, 'revenueByType', 'RevenueByType') ?? []) as Record<string, unknown>[];
+    const revenueByPlan = (pickField<unknown[]>(d, 'revenueByPlan', 'RevenueByPlan') ?? []) as Record<string, unknown>[];
+    const recentRevenueTransactions = (pickField<unknown[]>(d, 'recentRevenueTransactions', 'RecentRevenueTransactions') ?? []) as Record<string, unknown>[];
+
     return {
       totalUsers: pickNumber(d, 'totalUsers', 'TotalUsers'),
       totalReporters: pickNumber(d, 'totalReporters', 'TotalReporters'),
@@ -209,6 +264,53 @@ export const adminApi = {
         clientName: pickNullableString(r, 'clientName', 'ClientName'),
         reporterName: pickNullableString(r, 'reporterName', 'ReporterName'),
         deadline: pickNullableString(r, 'deadline', 'Deadline'),
+      })),
+      revenueGrowth: revenueGrowth.map((r) => ({
+        month: pickString(r, 'month', 'Month'),
+        revenue: pickNumber(r, 'revenue', 'Revenue'),
+        users: pickNumber(r, 'users', 'Users'),
+      })),
+      subscriptionData: subscriptionData.map((s) => ({
+        name: pickString(s, 'name', 'Name'),
+        value: pickNumber(s, 'value', 'Value'),
+        color: pickString(s, 'color', 'Color'),
+      })),
+      recentJobs: recentJobs.map((j) => ({
+        id: pickString(j, 'id', 'Id'),
+        status: pickString(j, 'status', 'Status'),
+        progress: pickNumber(j, 'progress', 'Progress'),
+      })),
+      proxyHealthOverview: proxyHealthOverview.map((p) => ({
+        name: pickString(p, 'name', 'Name'),
+        health: pickNumber(p, 'health', 'Health'),
+      })),
+      totalRevenue: pickNumber(d, 'totalRevenue', 'TotalRevenue'),
+      monthlyRevenue: pickNumber(d, 'monthlyRevenue', 'MonthlyRevenue'),
+      revenueGrowthRate: pickNumber(d, 'revenueGrowthRate', 'RevenueGrowthRate'),
+      revenueByType: revenueByType.map((t) => ({
+        type: pickString(t, 'type', 'Type'),
+        typeName: pickString(t, 'typeName', 'TypeName'),
+        totalAmount: pickNumber(t, 'totalAmount', 'TotalAmount'),
+        transactionCount: pickNumber(t, 'transactionCount', 'TransactionCount'),
+        averageOrderValue: pickNumber(t, 'averageOrderValue', 'AverageOrderValue'),
+        percentage: pickNumber(t, 'percentage', 'Percentage'),
+        isTopFeature: pickField(t, 'isTopFeature', 'IsTopFeature') === true,
+      })),
+      revenueByPlan: revenueByPlan.map((p) => ({
+        name: pickString(p, 'name', 'Name'),
+        totalAmount: pickNumber(p, 'totalAmount', 'TotalAmount'),
+        transactionCount: pickNumber(p, 'transactionCount', 'TransactionCount'),
+      })),
+      recentRevenueTransactions: recentRevenueTransactions.map((tx) => ({
+        paymentId: pickNumber(tx, 'paymentId', 'PaymentId'),
+        transactionRef: pickNullableString(tx, 'transactionRef', 'TransactionRef'),
+        userName: pickString(tx, 'userName', 'UserName'),
+        userEmail: pickString(tx, 'userEmail', 'UserEmail'),
+        featureName: pickString(tx, 'featureName', 'FeatureName'),
+        type: pickString(tx, 'type', 'Type'),
+        amount: pickNumber(tx, 'amount', 'Amount'),
+        status: pickString(tx, 'status', 'Status'),
+        paidAt: pickNullableString(tx, 'paidAt', 'PaidAt'),
       })),
     };
   },
