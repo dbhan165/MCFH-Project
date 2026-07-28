@@ -14,6 +14,12 @@ public class PayOsOptions
     /// <summary>URL PayOS redirect về khi người dùng hủy thanh toán. Để trống → dùng {Auth:FrontendBaseUrl}/payment/return.</summary>
     public string CancelUrl { get; set; } = "";
 
+    /// <summary>
+    /// Local/dev: bỏ qua PayOS, coi như đã thanh toán và bắt đầu scrape ngay.
+    /// Chỉ bật trong appsettings.Development.json — không dùng production.
+    /// </summary>
+    public bool Bypass { get; set; }
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ClientId) &&
         !string.IsNullOrWhiteSpace(ApiKey) &&

@@ -17,7 +17,8 @@ public class ReporterController : ControllerBase
     public ReporterController(McfhDbContext db, IEmailService emailService, MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
     {
         var analytics = new ProjectAnalyticsService(db, bundleStorage);
-        var bespoke = new BespokeReportService(db, analytics, emailService);
+        var reports = new ProjectReportService(db, analytics);
+        var bespoke = new BespokeReportService(db, analytics, emailService, reportService: reports);
         _reporter = new ReporterPortalService(db, bespoke, analytics);
     }
 

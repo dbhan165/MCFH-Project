@@ -43,7 +43,7 @@ public class PayOsService
         var baseUrl = string.IsNullOrWhiteSpace(_options.ReturnUrl)
             ? $"{_authOptions.FrontendBaseUrl.TrimEnd('/')}/payment/return"
             : _options.ReturnUrl;
-        return AppendOrderId(baseUrl, orderId);
+        return AppendQuery(baseUrl, $"orderId={orderId}");
     }
 
     public string BuildCancelUrl(int orderId)
@@ -51,11 +51,31 @@ public class PayOsService
         var baseUrl = string.IsNullOrWhiteSpace(_options.CancelUrl)
             ? $"{_authOptions.FrontendBaseUrl.TrimEnd('/')}/payment/return"
             : _options.CancelUrl;
-        return AppendOrderId(baseUrl, orderId);
+        return AppendQuery(baseUrl, $"orderId={orderId}");
     }
 
-    private static string AppendOrderId(string url, int orderId) =>
-        url.Contains('?') ? $"{url}&orderId={orderId}" : $"{url}?orderId={orderId}";
+    /// <summary>
+    /// Return URL cho báo cáo chuyên sâu — PaymentReturn phân biệt bằng type=bespoke.
+    /// Kèm workspaceId/projectId vì trang return cần chúng để gọi API confirm (không có trong orderId như scrape order).
+    /// </summary>
+    public string BuildBespokeReturnUrl(int requestId, int workspaceId, int projectId)
+    {
+        var baseUrl = string.IsNullOrWhiteSpace(_options.ReturnUrl)
+            ? $"{_authOptions.FrontendBaseUrl.TrimEnd('/')}/payment/return"
+            : _options.ReturnUrl;
+        return AppendQuery(baseUrl, $"type=bespoke&requestId={requestId}&workspaceId={workspaceId}&projectId={projectId}");
+    }
+
+    public string BuildBespokeCancelUrl(int requestId, int workspaceId, int projectId)
+    {
+        var baseUrl = string.IsNullOrWhiteSpace(_options.CancelUrl)
+            ? $"{_authOptions.FrontendBaseUrl.TrimEnd('/')}/payment/return"
+            : _options.CancelUrl;
+        return AppendQuery(baseUrl, $"type=bespoke&requestId={requestId}&workspaceId={workspaceId}&projectId={projectId}");
+    }
+
+    private static string AppendQuery(string url, string query) =>
+        url.Contains('?') ? $"{url}&{query}" : $"{url}?{query}";
 
     public async Task<CreatePaymentLinkResponse> CreatePaymentLinkAsync(
         long orderCode,

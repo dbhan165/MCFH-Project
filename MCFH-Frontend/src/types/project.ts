@@ -226,6 +226,15 @@ export interface CreateBespokePayload {
   format: string;
 }
 
+export interface BespokeCheckout {
+  request: BespokeRequestItem;
+  orderCode: number;
+  paymentLinkId: string;
+  checkoutUrl: string;
+  qrCode: string;
+  amount: number;
+}
+
 export interface ScrapeResult {
   keyword?: string;
   message?: string;

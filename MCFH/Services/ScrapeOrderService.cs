@@ -20,6 +20,7 @@ public class ScrapeOrderService
     private readonly ScrapeJobRunner _jobRunner;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ScrapeOptions _scrapeOptions;
+    private readonly PayOsOptions _payOsOptions;
     private readonly PayOsService _payOs;
     private readonly ILogger<ScrapeOrderService> _logger;
 
@@ -28,6 +29,7 @@ public class ScrapeOrderService
         ScrapeJobRunner jobRunner,
         IServiceScopeFactory scopeFactory,
         IOptions<ScrapeOptions> scrapeOptions,
+        IOptions<PayOsOptions> payOsOptions,
         PayOsService payOs,
         ILogger<ScrapeOrderService> logger)
     {
@@ -35,6 +37,7 @@ public class ScrapeOrderService
         _jobRunner = jobRunner;
         _scopeFactory = scopeFactory;
         _scrapeOptions = scrapeOptions.Value;
+        _payOsOptions = payOsOptions.Value;
         _payOs = payOs;
         _logger = logger;
     }
@@ -98,6 +101,10 @@ public class ScrapeOrderService
             .FirstOrDefaultAsync(o => o.OrderId == orderId && o.UserId == userId);
         if (order == null || order.Status is not ("quoted" or "pending_payment"))
             return null;
+
+        // Dev hardcode: bỏ qua PayOS — đánh dấu đã trả + khởi động scrape ngay.
+        if (_payOsOptions.Bypass)
+            return await PayOrderBypassAsync(userId, order);
 
         // Đã có checkout đang chờ → kiểm tra lại trên PayOS trước khi tạo link mới.
         Payment? payment = null;
@@ -171,6 +178,51 @@ public class ScrapeOrderService
         await _context.SaveChangesAsync();
 
         return await BuildCheckoutDtoAsync(order, payment, link2.CheckoutUrl, link2.QrCode);
+    }
+
+    /// <summary>Local bypass: tạo payment success + fulfill (scrape) — không gọi PayOS.</summary>
+    private async Task<ScrapeOrderCheckoutDto?> PayOrderBypassAsync(int userId, ScrapeOrder order)
+    {
+        var now = DateTime.Now;
+        var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 100 + Random.Shared.Next(100);
+
+        Payment? payment = null;
+        if (order.PaymentId != null)
+        {
+            payment = await _context.Payments.FindAsync(order.PaymentId);
+            if (payment != null && payment.Status == "success")
+            {
+                await FulfillPaidOrderAsync(order, payment);
+                return await BuildCheckoutDtoAsync(order, payment, "", "");
+            }
+        }
+
+        payment = new Payment
+        {
+            TransactionRef = $"BYPASS-{orderCode}",
+            Amount = order.QuotedPrice,
+            Status = "pending",
+            Type = "scrape_order",
+            CreatedBy = userId,
+            CreatedAt = now,
+            OrderCode = orderCode,
+            PaymentLinkId = "local-bypass",
+            CheckoutUrl = null
+        };
+        _context.Payments.Add(payment);
+        await _context.SaveChangesAsync();
+
+        order.PaymentId = payment.PaymentId;
+        order.Status = "pending_payment";
+        order.StatusMessage = "Dev bypass PayOS — đang kích hoạt đơn...";
+        await _context.SaveChangesAsync();
+
+        _logger.LogWarning(
+            "PayOS Bypass bật: order {OrderId} được đánh dấu đã thanh toán (local only).",
+            order.OrderId);
+
+        await FulfillPaidOrderAsync(order, payment);
+        return await BuildCheckoutDtoAsync(order, payment, "", "");
     }
 
     private async Task<ScrapeOrderCheckoutDto?> BuildCheckoutDtoAsync(

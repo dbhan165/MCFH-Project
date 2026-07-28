@@ -66,7 +66,7 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      await projectApi.createBespokeRequest(wid, projectId, {
+      const request = await projectApi.createBespokeRequest(wid, projectId, {
         title,
         keyword,
         packageType,
@@ -74,9 +74,17 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         modules,
-        format: 'html',
+        format: 'pdf',
       });
 
+      const checkout = await projectApi.payBespokeRequest(wid, projectId, request.requestId);
+
+      if (checkout.checkoutUrl) {
+        window.location.href = checkout.checkoutUrl;
+        return;
+      }
+
+      // Bypass PayOS (dev) — đã được đánh dấu thanh toán và bắt đầu cào ngay.
       onSuccess();
       onClose();
     } catch (error) {
@@ -126,7 +134,7 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
                   </div>
                 </div>
                 <span className="text-sm text-gray-400">Phân tích tiêu chuẩn, giới hạn 100 mention.</span>
-                <span className="text-sm font-semibold text-[#FF7575] mt-2">500,000 VND</span>
+                <span className="text-sm font-semibold text-[#FF7575] mt-2">10,000 VND</span>
               </label>
 
               <label className={`flex flex-col p-4 rounded-xl border cursor-pointer transition-colors ${packageType === 'pro' ? 'border-[#FF7575] bg-[#FF7575]/10' : 'border-white/10 bg-[#0A101D] hover:border-white/20'}`} onClick={() => setPackageType('pro')}>
@@ -137,7 +145,7 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
                   </div>
                 </div>
                 <span className="text-sm text-gray-400">Phân tích sâu, giới hạn 250 mention.</span>
-                <span className="text-sm font-semibold text-[#FF7575] mt-2">1,000,000 VND</span>
+                <span className="text-sm font-semibold text-[#FF7575] mt-2">20,000 VND</span>
               </label>
             </div>
 

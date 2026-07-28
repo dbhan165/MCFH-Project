@@ -609,7 +609,7 @@ export const reporterApi = {
     const disposition = res.headers['content-disposition'] as string | undefined;
     const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
     const rawName = match?.[1]?.replace(/['"]/g, '');
-    const fileName = rawName || `bespoke-report-${requestId}.html`;
+    const fileName = rawName || `bespoke-report-${requestId}.pdf`;
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
