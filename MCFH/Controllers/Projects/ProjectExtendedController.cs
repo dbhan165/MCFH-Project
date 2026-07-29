@@ -341,9 +341,13 @@ public class ProjectExtendedController : ControllerBase
     }
 
     [HttpPost("{projectId}/bespoke/{requestId}/send-to-reporter")]
-    public async Task<IActionResult> SendBespokeToReporter(int workspaceId, int projectId, int requestId)
+    public async Task<IActionResult> SendBespokeToReporter(
+        int workspaceId, int projectId, int requestId, [FromBody] SendBespokeToReporterDto dto)
     {
-        var result = await _bespokeService.SendToReporterAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (string.IsNullOrWhiteSpace(dto?.Note))
+            return BadRequest(new { message = "Vui lòng nhập nội dung cần Reporter chỉnh sửa." });
+
+        var result = await _bespokeService.SendToReporterAsync(workspaceId, projectId, GetUserId(), requestId, dto);
         if (result == null) return BadRequest(new { message = "Không thể gửi Reporter. Cần báo cáo đã sẵn sàng." });
         return Ok(result);
     }

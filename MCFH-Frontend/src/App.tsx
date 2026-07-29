@@ -24,12 +24,12 @@ import CookieManagement from "./pages/admin/CookieManagement";
 import ScrapingMonitor from "./pages/admin/ScrapingMonitor";
 import SystemSettings from "./pages/admin/SystemSettings";
 import BespokeRequests from "./pages/reporter/BespokeRequests";
-import ReporterPlaceholder from "./pages/reporter/ReporterPlaceholder";
 import RequestDetail from "./pages/reporter/RequestDetail";
 import MyPerformance from "./pages/reporter/MyPerformance";
-import PipelineConfig from "./pages/reporter/PipelineConfig";
-import RequestDelivery from "./pages/reporter/RequestDelivery";
-import AnalystWorkspace from "./pages/reporter/AnalystWorkspace";
+import ReporterDashboard from "./pages/reporter/ReporterDashboard";
+import ReporterArchive from "./pages/reporter/ReporterArchive";
+import ReporterProfile from "./pages/reporter/ReporterProfile";
+import ReporterSettings from "./pages/reporter/ReporterSettings";
 
 // Workspace + Project (local)
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -104,43 +104,15 @@ function AppRoutes() {
           />
           <Route path="/reporter/tasks" element={<BespokeRequests />} />
           <Route path="/reporter/requests/:id" element={<RequestDetail />} />
-          <Route
-            path="/reporter/dashboard"
-            element={
-              <ReporterPlaceholder
-                title="Dashboard"
-                description="Tổng quan hiệu suất và đơn yêu cầu của bạn."
-                activeTopNav="dashboard"
-              />
-            }
-          />
+          <Route path="/reporter/dashboard" element={<ReporterDashboard />} />
           <Route path="/reporter/performance" element={<MyPerformance />} />
-          <Route
-            path="/reporter/settings"
-            element={
-              <ReporterPlaceholder
-                title="Settings"
-                description="Cấu hình tài khoản và tùy chọn làm việc."
-                activeTopNav="settings"
-              />
-            }
-          />
-          <Route
-            path="/reporter/archive"
-            element={
-              <ReporterPlaceholder
-                title="Archive"
-                description="Lưu trữ các báo cáo và đơn yêu cầu đã hoàn thành."
-                activeTopNav="archive"
-              />
-            }
-          />
-          <Route path="/reporter/pipeline/:id" element={<PipelineConfig />} />
-          <Route path="/reporter/delivery/:id" element={<RequestDelivery />} />
-          <Route
-            path="/reporter/workspace/:id"
-            element={<AnalystWorkspace />}
-          />
+          <Route path="/reporter/archive" element={<ReporterArchive />} />
+          <Route path="/reporter/profile" element={<ReporterProfile />} />
+          <Route path="/reporter/settings" element={<ReporterSettings />} />
+          {/* Legacy mock routes → Tasks */}
+          <Route path="/reporter/pipeline/:id" element={<Navigate to="/reporter/tasks" replace />} />
+          <Route path="/reporter/delivery/:id" element={<Navigate to="/reporter/tasks" replace />} />
+          <Route path="/reporter/workspace/:id" element={<Navigate to="/reporter/tasks" replace />} />
         </Route>
 
         {/* Workspace */}

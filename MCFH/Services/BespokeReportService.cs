@@ -620,9 +620,9 @@ public class BespokeReportService
         }
     }
 
-    /// <summary>Khách gửi báo cáo hệ thống (report_ready) cho Reporter chỉnh tay.</summary>
+    /// <summary>Khách gửi báo cáo hệ thống (report_ready) cho Reporter chỉnh tay, kèm ghi chú cần sửa.</summary>
     public async Task<BespokeRequestItemDto?> SendToReporterAsync(
-        int workspaceId, int projectId, int userId, int requestId)
+        int workspaceId, int projectId, int userId, int requestId, SendBespokeToReporterDto dto)
     {
         var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
         if (user == null || IsAdmin(user) || IsReporter(user)) return null;
@@ -631,10 +631,16 @@ public class BespokeReportService
         if (request == null || request.ClientId != userId) return null;
         if (!string.Equals(request.Status, "report_ready", StringComparison.OrdinalIgnoreCase)) return null;
         if (request.BespokeReports.Count == 0) return null;
+        if (string.IsNullOrWhiteSpace(dto.Note)) return null;
 
+        var meta = ParseMeta(request.CustomMetrics);
+        meta.RevisionFeedback = dto.Note.Trim();
+        request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
         request.Status = "awaiting_reporter";
         request.ReporterId = null;
         await _context.SaveChangesAsync();
+
+        await NotifyReportersAwaitingAsync(request, meta.ProjectId, dto.Note.Trim());
 
         await LoadRequestNavigationsAsync(request);
         return MapRequest(request, user);
@@ -662,6 +668,8 @@ public class BespokeReportService
 
         // Đảm bảo Reporter có sẵn bản nháp hệ thống mới nhất để tải về chỉnh.
         await EnsureSystemDraftAsync(workspaceId, projectId, adminUserId, requestId);
+
+        await NotifyReporterAssignedAsync(request, projectId, reporterId);
 
         await _context.Entry(request).Reference(r => r.Reporter).LoadAsync();
         await _context.Entry(request).Reference(r => r.Client).LoadAsync();
@@ -934,6 +942,62 @@ public class BespokeReportService
         catch
         {
             // không chặn luồng upload nếu email lỗi
+        }
+    }
+
+    /// <summary>Khách gửi yêu cầu chỉnh sửa → báo tất cả Reporter.</summary>
+    private async Task NotifyReportersAwaitingAsync(BespokeRequest request, int projectId, string note)
+    {
+        try
+        {
+            var recipientIds = await _context.Users
+                .Where(u => u.SystemRole == "Reporter")
+                .Select(u => u.UserId)
+                .ToListAsync();
+
+            if (recipientIds.Count == 0) return;
+
+            var notePreview = note.Length > 120 ? note[..120] + "…" : note;
+            var title = "Khách gửi báo cáo cần chỉnh sửa";
+            var body = $"«{request.Title}»: {notePreview}";
+            var notify = new NotificationService(_context);
+
+            foreach (var userId in recipientIds)
+            {
+                await notify.NotifyAsync(
+                    userId,
+                    title,
+                    body,
+                    "bespoke_revision_request",
+                    "bespoke_request",
+                    request.RequestId,
+                    projectId);
+            }
+        }
+        catch
+        {
+            // không chặn luồng gửi Reporter nếu notify lỗi
+        }
+    }
+
+    /// <summary>Admin giao đơn → báo Reporter được chọn.</summary>
+    private async Task NotifyReporterAssignedAsync(BespokeRequest request, int projectId, int reporterId)
+    {
+        try
+        {
+            var notify = new NotificationService(_context);
+            await notify.NotifyAsync(
+                reporterId,
+                "Bạn được giao báo cáo chuyên sâu",
+                $"Đơn «{request.Title}» đã được giao cho bạn. Vào Tasks để tải và chỉnh sửa.",
+                "bespoke_assigned",
+                "bespoke_request",
+                request.RequestId,
+                projectId);
+        }
+        catch
+        {
+            // không chặn luồng giao Reporter nếu notify lỗi
         }
     }
 

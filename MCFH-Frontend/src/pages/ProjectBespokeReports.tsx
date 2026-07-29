@@ -9,7 +9,7 @@ import type { BespokeCenter, BespokeRequestItem, ReporterOption } from '../types
 import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { isSystemAdmin, isSystemReporter } from '../utils/workspaceHelpers';
 import ProjectCreateBespokeModal from './ProjectCreateBespoke';
-import { UploadRevisionModal } from './ProjectMockModals';
+import { UploadRevisionModal, SendToReporterModal } from './ProjectMockModals';
 
 function bespokeStatusClass(status: string) {
     switch (status) {
@@ -62,6 +62,7 @@ const ProjectBespokeReports = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
     const [uploadRevisionModalOpen, setUploadRevisionModalOpen] = useState(false);
+    const [sendToReporterModalOpen, setSendToReporterModalOpen] = useState(false);
     const [selectedReqId, setSelectedReqId] = useState<number | null>(null);
 
     const isAdmin = isSystemAdmin(userRole);
@@ -206,17 +207,19 @@ const ProjectBespokeReports = () => {
         }
     };
 
-    const handleSendToReporter = async (requestId: number) => {
-        const projectId = getProjectIdForRequest(requestId);
-        if (!wid || !projectId) return;
-        setBespokeActionId(requestId);
+    const handleSendToReporter = async (note: string) => {
+        if (!selectedReqId || !wid) return;
+        const projectId = getProjectIdForRequest(selectedReqId);
+        if (!projectId) return;
+        setBespokeActionId(selectedReqId);
         setErrorMessage('');
         try {
-            await projectApi.sendBespokeToReporter(wid, projectId, requestId);
+            await projectApi.sendBespokeToReporter(wid, projectId, selectedReqId, note);
             setSuccessMessage('Đã gửi yêu cầu tới Reporter.');
             await loadBespokeData();
         } catch (error) {
             setErrorMessage(extractApiError(error, 'Không thể gửi Reporter.'));
+            throw error;
         } finally {
             setBespokeActionId(null);
         }
@@ -339,7 +342,10 @@ const ProjectBespokeReports = () => {
                                 onPay={() => handlePay(req.requestId)}
                                 onStart={() => handleStartWork(req.requestId)}
                                 onDeliver={() => handleDeliver(req.requestId)}
-                                onSendToReporter={() => handleSendToReporter(req.requestId)}
+                                onSendToReporter={() => {
+                                    setSelectedReqId(req.requestId);
+                                    setSendToReporterModalOpen(true);
+                                }}
                                 onDownload={() => handleDownloadBespoke(req)}
                                 onUploadRevision={() => { setSelectedReqId(req.requestId); setUploadRevisionModalOpen(true); }}
                                 isBusy={bespokeActionId === req.requestId}
@@ -367,6 +373,12 @@ const ProjectBespokeReports = () => {
                 isOpen={uploadRevisionModalOpen} 
                 onClose={() => setUploadRevisionModalOpen(false)} 
                 onSubmit={handleUploadRevision} 
+            />
+
+            <SendToReporterModal
+                isOpen={sendToReporterModalOpen}
+                onClose={() => setSendToReporterModalOpen(false)}
+                onSubmit={handleSendToReporter}
             />
         </div>
     );
@@ -416,7 +428,6 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                         <span>Khách hàng: {req.clientName ?? '—'}</span>
                         {req.reporterName && <span>Reporter: {req.reporterName}</span>}
                         {priceLabel && <span className="text-amber-400">Gói: {priceLabel}</span>}
-                        {req.deadline && <span>Hạn: {req.deadline.slice(0, 10)}</span>}
                         {(req.dateFrom || req.dateTo) && <span>Giai đoạn: {req.dateFrom} → {req.dateTo}</span>}
                         <span>{req.modules.length} module</span>
                     </div>

@@ -470,10 +470,12 @@ export const projectApi = {
   sendBespokeToReporter: async (
     workspaceId: number,
     projectId: number,
-    requestId: number
+    requestId: number,
+    note: string
   ): Promise<BespokeRequestItem> => {
     const response = await axiosClient.post<Record<string, unknown>>(
-      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/send-to-reporter`
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/send-to-reporter`,
+      { note }
     );
     return mapBespokeRequest(response.data);
   },

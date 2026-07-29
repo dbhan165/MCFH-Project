@@ -592,18 +592,6 @@ export const reporterApi = {
     return mapPortalRequest(res.data);
   },
 
-  quote: async (requestId: number, payload: { agreedPrice: number; deadline?: string; note?: string }) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/quote`, payload);
-  },
-
-  startWork: async (requestId: number) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/start`);
-  },
-
-  deliver: async (requestId: number) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/deliver`);
-  },
-
   download: async (requestId: number) => {
     const res = await axiosClient.get(`/api/reporter/requests/${requestId}/download`, { responseType: 'blob' });
     const disposition = res.headers['content-disposition'] as string | undefined;
@@ -638,19 +626,6 @@ export const reporterApi = {
       pendingCount: pickNumber(d, 'pendingCount', 'PendingCount'),
       avgProcessingDays: pickField<number>(d, 'avgProcessingDays', 'AvgProcessingDays') ?? null,
       history: history.map(mapPortalRequest),
-    };
-  },
-
-  getAnalyticsPreview: async (requestId: number) => {
-    const res = await axiosClient.get<Record<string, unknown>>(`/api/reporter/requests/${requestId}/analytics-preview`);
-    const d = res.data;
-    return {
-      projectName: pickString(d, 'projectName', 'ProjectName'),
-      totalMentions: pickNumber(d, 'totalMentions', 'TotalMentions'),
-      totalComments: pickNumber(d, 'totalComments', 'TotalComments'),
-      negativeCount: pickNumber(d, 'negativeCount', 'NegativeCount'),
-      positiveCount: pickNumber(d, 'positiveCount', 'PositiveCount'),
-      nsrScore: pickField<number>(d, 'nsrScore', 'NsrScore') ?? 0,
     };
   },
 };
