@@ -23,6 +23,13 @@ public interface IAiSentimentService
         string? combinedText = null,
         CancellationToken cancellationToken = default);
     Task<AiModelTestResultDto> TestConnectionAsync(CancellationToken cancellationToken = default);
+    Task<ReportInsightsResultDto?> GenerateReportInsightsAsync(
+        string projectName,
+        int totalMentions,
+        double nsrScore,
+        string topChannelInfo,
+        string topNegativeAspects,
+        CancellationToken cancellationToken = default);
 }
 
 public class AiSentimentService : IAiSentimentService
@@ -365,6 +372,90 @@ public class AiSentimentService : IAiSentimentService
             // ignore parse errors
         }
 
+        return null;
+    }
+
+    public async Task<ReportInsightsResultDto?> GenerateReportInsightsAsync(
+        string projectName,
+        int totalMentions,
+        double nsrScore,
+        string topChannelInfo,
+        string topNegativeAspects,
+        CancellationToken cancellationToken = default)
+    {
+        var (apiKey, dynamicModel, dynamicBaseUrl) = await ResolveSettingsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(apiKey) || IsQuotaCoolingDown)
+            return null;
+
+        var prompt = 
+            $"Bạn là chuyên gia tư vấn chiến lược truyền thông (PR Consultant). " +
+            $"Hãy đọc các dữ liệu tóm tắt sau đây của dự án '{projectName}' và viết báo cáo.\n\n" +
+            $"Dữ liệu:\n" +
+            $"- Tổng mentions: {totalMentions}\n" +
+            $"- NSR Score (Net Sentiment Rate): {nsrScore}%\n" +
+            $"- Kênh dẫn đầu/nổi bật: {topChannelInfo}\n" +
+            $"- Các khía cạnh bị chê nhiều (Negative Aspects): {topNegativeAspects}\n\n" +
+            "Yêu cầu:\n" +
+            "1. Viết 3-4 câu 'executiveInsights' (Tóm tắt điều hành) thật sắc bén, chỉ ra điểm sáng và rủi ro lớn nhất.\n" +
+            "2. Đề xuất 2-3 'actionItems' (Gợi ý hành động) cụ thể, mang tính thực chiến cho đội ngũ Marketing/CSKH.\n" +
+            "Trả về JSON ĐÚNG cấu trúc sau (không bọc trong markdown):\n" +
+            "{\"executiveInsights\": [\"câu 1\", \"câu 2\"], \"actionItems\": [\"hành động 1\", \"hành động 2\"]}";
+
+        var models = GetModelCandidates(dynamicModel).ToList();
+        
+        foreach (var model in models)
+        {
+            var baseUrl = string.IsNullOrWhiteSpace(dynamicBaseUrl) ? "https://api.tokenrouter.com/v1" : dynamicBaseUrl;
+            var url = $"{baseUrl.TrimEnd('/')}/chat/completions";
+
+            var requestBody = new
+            {
+                model = model,
+                messages = new[] { new { role = "user", content = prompt } },
+                response_format = new { type = "json_object" },
+                temperature = 0.3
+            };
+
+            for (int retry = 0; retry <= 2; retry++)
+            {
+                try
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Post, url);
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                    request.Content = JsonContent.Create(requestBody);
+
+                    using var response = await _httpClient.SendAsync(request, cancellationToken);
+                    
+                    if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    {
+                        await Task.Delay(2000, cancellationToken);
+                        continue;
+                    }
+
+                    response.EnsureSuccessStatusCode();
+
+                    var contentString = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var openAiResponse = JsonSerializer.Deserialize<OpenAiChatResponse>(contentString, JsonOptions);
+                    var jsonContent = openAiResponse?.Choices?.FirstOrDefault()?.Message?.Content;
+
+                    if (!string.IsNullOrWhiteSpace(jsonContent))
+                    {
+                        var result = JsonSerializer.Deserialize<ReportInsightsResultDto>(jsonContent, JsonOptions);
+                        if (result != null && (result.ExecutiveInsights.Any() || result.ActionItems.Any()))
+                        {
+                            return result;
+                        }
+                    }
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[GenerateReportInsightsAsync] Lỗi khi gọi model {Model} (retry {Retry})", model, retry);
+                    if (retry == 2) break;
+                    await Task.Delay(1000, cancellationToken);
+                }
+            }
+        }
         return null;
     }
 

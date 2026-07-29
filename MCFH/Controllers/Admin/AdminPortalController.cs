@@ -105,4 +105,8 @@ public class AdminPortalController : ControllerBase
         if (result.Count == 0) return Forbid();
         return Ok(result);
     }
+
+    [HttpGet("audit-logs")]
+    public async Task<IActionResult> GetAuditLogs([FromQuery] int limit = 50) =>
+        Ok(await _admin.GetAuditLogsAsync(GetUserId(), limit));
 }

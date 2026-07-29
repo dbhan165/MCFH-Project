@@ -13,6 +13,7 @@ public class ProjectReportService
 {
     private readonly McfhDbContext _context;
     private readonly ProjectAnalyticsService _analytics;
+    private readonly IAiSentimentService _aiSentiment;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -56,10 +57,11 @@ public class ProjectReportService
         }
     ];
 
-    public ProjectReportService(McfhDbContext context, ProjectAnalyticsService analytics)
+    public ProjectReportService(McfhDbContext context, ProjectAnalyticsService analytics, IAiSentimentService aiSentiment)
     {
         _context = context;
         _analytics = analytics;
+        _aiSentiment = aiSentiment;
     }
 
     public async Task<ReportCenterDto?> GetReportCenterAsync(int workspaceId, int projectId, int userId)
@@ -285,17 +287,31 @@ public class ProjectReportService
             .OrderByDescending(i => i.InfluenceScore)
             .ThenByDescending(i => i.Mentions)
             .FirstOrDefault();
-        var executiveInsights = BuildExecutiveInsights(
-            totalMentions,
-            totalComments,
-            pendingCount,
-            coverage,
-            dominantSentiment,
-            topChannel,
-            topRiskChannel,
-            topInfluencer,
-            aspects);
-        var actionItems = BuildActionItems(pendingCount, topRiskChannel, topInfluencer, aspects);
+        var nsrScore = overview?.NsrScore ?? sentiment?.NsrScore ?? 0;
+        var topChannelInfo = topChannel != null ? $"{topChannel.Label} ({topChannel.MentionShare:0.#}% SOV, {topChannel.TotalComments} comments)" : "Không có dữ liệu";
+        var topNegativeAspects = aspects != null && aspects.Aspects.Count > 0 
+            ? string.Join(", ", aspects.Aspects.OrderByDescending(a => a.NegativePercent).Take(3).Select(a => $"{a.Label} ({a.NegativePercent:0.#}% tiêu cực)")) 
+            : "Không có";
+
+        var aiInsights = await _aiSentiment.GenerateReportInsightsAsync(
+            projectName, totalMentions, nsrScore, topChannelInfo, topNegativeAspects);
+
+        var executiveInsights = aiInsights?.ExecutiveInsights?.Count > 0 
+            ? aiInsights.ExecutiveInsights 
+            : BuildExecutiveInsights(
+                totalMentions,
+                totalComments,
+                pendingCount,
+                coverage,
+                dominantSentiment,
+                topChannel,
+                topRiskChannel,
+                topInfluencer,
+                aspects);
+
+        var actionItems = aiInsights?.ActionItems?.Count > 0 
+            ? aiInsights.ActionItems 
+            : BuildActionItems(pendingCount, topRiskChannel, topInfluencer, aspects);
         var mentionHighlights = mentions
             .OrderByDescending(m => string.Equals(m.Sentiment, "negative", StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(m => m.CommentsCount)
@@ -307,23 +323,41 @@ public class ProjectReportService
         sb.AppendLine("<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\"/>");
         sb.AppendLine($"<title>Báo cáo — {EscapeHtml(projectName)}</title>");
         sb.AppendLine("<style>");
-        sb.AppendLine(":root{color-scheme:light;--bg:#f4f7fb;--panel:#ffffff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#ff7575;--brand-2:#00b4d8;--good:#10b981;--warn:#f59e0b;--bad:#ef4444;}");
-        sb.AppendLine("*{box-sizing:border-box;} body{font-family:Segoe UI,Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px;}");
-        sb.AppendLine(".page{max-width:1180px;margin:0 auto;} .hero{background:linear-gradient(135deg,#151b2b 0%,#0f172a 58%,#10263a 100%);color:#fff;border-radius:28px;padding:32px;position:relative;overflow:hidden;}");
-        sb.AppendLine(".hero:before,.hero:after{content:'';position:absolute;border-radius:999px;filter:blur(50px);opacity:.28;} .hero:before{width:220px;height:220px;background:var(--brand);top:-100px;right:-40px;} .hero:after{width:180px;height:180px;background:var(--brand-2);bottom:-100px;left:-20px;}");
-        sb.AppendLine(".hero-inner{position:relative;z-index:1;} .eyebrow{display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;}");
-        sb.AppendLine("h1{font-size:34px;line-height:1.15;margin:16px 0 8px;} .hero p{margin:0;color:#cbd5e1;line-height:1.65;} .hero-meta{display:flex;flex-wrap:wrap;gap:20px;margin-top:18px;font-size:13px;color:#e2e8f0;}");
-        sb.AppendLine(".section{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:24px;margin-top:20px;box-shadow:0 12px 30px rgba(15,23,42,.05);} .section h2{margin:0 0 8px;font-size:22px;} .section p.sub{margin:0 0 18px;color:var(--muted);font-size:14px;line-height:1.6;}");
-        sb.AppendLine(".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:22px;} .stat-card{background:rgba(15,23,42,.03);border:1px solid var(--line);border-radius:18px;padding:18px;} .stat-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px;} .stat-value{font-size:28px;font-weight:800;color:var(--text);} .stat-note{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.5;}");
-        sb.AppendLine(".two-col{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;} .stack{display:flex;flex-direction:column;gap:18px;} .insight-list,.action-list{margin:0;padding-left:18px;} .insight-list li,.action-list li{margin:0 0 12px;color:#1e293b;line-height:1.65;}");
-        sb.AppendLine(".callout{border-radius:18px;padding:18px;border:1px solid var(--line);} .callout.good{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.18);} .callout.warn{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.18);} .callout.bad{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.18);}");
-        sb.AppendLine(".callout-title{font-weight:800;font-size:14px;margin-bottom:8px;} .callout-body{color:#334155;line-height:1.65;font-size:14px;}");
-        sb.AppendLine("table{width:100%;border-collapse:collapse;} th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;font-size:13px;} th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);} tr:last-child td{border-bottom:none;}");
-        sb.AppendLine(".num{font-variant-numeric:tabular-nums;} .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid transparent;} .pill.positive{background:rgba(16,185,129,.1);color:#047857;border-color:rgba(16,185,129,.18);} .pill.negative{background:rgba(239,68,68,.1);color:#b91c1c;border-color:rgba(239,68,68,.18);} .pill.neutral{background:rgba(245,158,11,.12);color:#b45309;border-color:rgba(245,158,11,.18);} .pill.pending{background:rgba(100,116,139,.12);color:#475569;border-color:rgba(100,116,139,.18);}");
-        sb.AppendLine(".mentions{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;} .mention{border:1px solid var(--line);border-radius:20px;padding:18px;background:#fff;} .mention-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;} .mention-meta{font-size:12px;color:var(--muted);line-height:1.5;} .mention-title{font-weight:800;color:var(--text);margin-bottom:4px;} .mention-content{color:#1e293b;line-height:1.65;font-size:14px;margin-bottom:12px;} .mention-summary{background:rgba(15,23,42,.03);border-radius:14px;padding:12px 14px;color:#334155;font-size:13px;line-height:1.6;} .link{color:#0284c7;text-decoration:none;font-weight:600;}");
-        sb.AppendLine(".footnote{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.6;} .footer{margin-top:28px;text-align:center;color:#64748b;font-size:12px;}");
-        sb.AppendLine("@media (max-width:920px){body{padding:16px;} .hero{padding:24px;} .two-col{grid-template-columns:1fr;} .section{padding:18px;}}");
-        sb.AppendLine("@media print{body{background:#fff;padding:0;} .page{max-width:none;} .hero{box-shadow:none;} .section{box-shadow:none;break-inside:avoid;} a{text-decoration:none;color:inherit;}}");
+        sb.AppendLine(":root{color-scheme:light;--bg:#f8fafc;--panel:#ffffff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#ef4444;--brand-2:#0ea5e9;--good:#10b981;--warn:#f59e0b;--bad:#ef4444;}");
+        sb.AppendLine("*{box-sizing:border-box;} body{font-family:'Segoe UI',Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}");
+        sb.AppendLine(".page{max-width:1180px;margin:0 auto;} .hero{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;border-radius:24px;padding:36px;position:relative;overflow:hidden;box-shadow:0 20px 40px -15px rgba(0,0,0,0.15);}");
+        sb.AppendLine(".hero:before,.hero:after{content:'';position:absolute;border-radius:999px;filter:blur(60px);opacity:.4;} .hero:before{width:250px;height:250px;background:var(--brand);top:-120px;right:-50px;} .hero:after{width:200px;height:200px;background:var(--brand-2);bottom:-100px;left:-40px;}");
+        sb.AppendLine(".hero-inner{position:relative;z-index:1;} .eyebrow{display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#f8fafc;backdrop-filter:blur(4px);}");
+        sb.AppendLine("h1{font-size:36px;font-weight:800;line-height:1.2;margin:18px 0 10px;} .hero p{margin:0;color:#cbd5e1;line-height:1.6;font-size:15px;max-width:800px;} .hero-meta{display:flex;flex-wrap:wrap;gap:24px;margin-top:24px;font-size:13px;color:#e2e8f0;background:rgba(0,0,0,0.2);padding:12px 18px;border-radius:12px;}");
+        sb.AppendLine(".section{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:28px;margin-top:24px;box-shadow:0 8px 20px -8px rgba(15,23,42,.06);}");
+        sb.AppendLine(".section h2{margin:0 0 10px;font-size:22px;font-weight:700;color:#1e293b;} .section p.sub{margin:0 0 20px;color:var(--muted);font-size:14px;line-height:1.6;}");
+        sb.AppendLine(".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:24px;} .stat-card{background:#f8fafc;border:1px solid var(--line);border-radius:16px;padding:20px;transition:transform 0.2s;} .stat-card:hover{transform:translateY(-2px);}");
+        sb.AppendLine(".stat-label{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px;} .stat-value{font-size:30px;font-weight:800;color:var(--text);letter-spacing:-0.02em;} .stat-note{margin-top:10px;color:var(--muted);font-size:13px;line-height:1.5;}");
+        sb.AppendLine(".hero .stat-card{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.12);} .hero .stat-value{color:#ffffff;} .hero .stat-label{color:#94a3b8;} .hero .stat-note{color:#cbd5e1;}");
+        sb.AppendLine(".two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;} .stack{display:flex;flex-direction:column;gap:16px;} .insight-list,.action-list{margin:0;padding-left:20px;} .insight-list li,.action-list li{margin:0 0 14px;color:#334155;line-height:1.6;font-size:15px;}");
+        sb.AppendLine(".callout{border-radius:16px;padding:20px;border:1px solid var(--line);} .callout.good{background:#ecfdf5;border-color:#a7f3d0;} .callout.warn{background:#fffbeb;border-color:#fde68a;} .callout.bad{background:#fef2f2;border-color:#fecaca;}");
+        sb.AppendLine(".callout-title{font-weight:700;font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px;} .callout.good .callout-title{color:#059669;} .callout.bad .callout-title{color:#dc2626;} .callout.warn .callout-title{color:#d97706;} .callout-body{color:#334155;line-height:1.6;font-size:14px;}");
+        sb.AppendLine("table{width:100%;border-collapse:separate;border-spacing:0;} th,td{padding:14px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;font-size:14px;color:#334155;} th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;background:#f8fafc;} tr:last-child td{border-bottom:none;} tbody tr:hover{background:#f8fafc;}");
+        sb.AppendLine(".num{font-variant-numeric:tabular-nums;font-weight:500;} .pill{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;} .pill.positive{background:#d1fae5;color:#047857;} .pill.negative{background:#fee2e2;color:#b91c1c;} .pill.neutral{background:#fef3c7;color:#b45309;} .pill.pending{background:#f1f5f9;color:#475569;}");
+        sb.AppendLine(".mentions{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;} .mention{border:1px solid var(--line);border-radius:16px;padding:20px;background:#fff;box-shadow:0 4px 12px -8px rgba(0,0,0,0.05);} .mention-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px;} .mention-meta{font-size:12px;color:var(--muted);line-height:1.5;} .mention-title{font-weight:700;color:#1e293b;margin-bottom:6px;font-size:15px;} .mention-content{color:#334155;line-height:1.6;font-size:14px;margin-bottom:14px;} .mention-summary{background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:0 8px 8px 0;padding:12px 16px;color:#475569;font-size:13px;line-height:1.6;} .link{color:#0ea5e9;text-decoration:none;font-weight:600;font-size:13px;} .link:hover{text-decoration:underline;}");
+        sb.AppendLine(".footnote{margin-top:24px;color:var(--muted);font-size:13px;line-height:1.6;} .footer{margin-top:32px;text-align:center;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:20px;}");
+        sb.AppendLine("@media (max-width:920px){body{padding:16px;} .hero{padding:24px;} .two-col{grid-template-columns:1fr;} .section{padding:20px;}}");
+        sb.AppendLine("@media print{");
+        sb.AppendLine("  body{background:#fff;padding:0;} .page{max-width:none;}");
+        sb.AppendLine("  .hero{background:#f8fafc!important;color:#0f172a!important;box-shadow:none;border:1px solid #e2e8f0;padding:24px;}");
+        sb.AppendLine("  .hero:before,.hero:after{display:none;} .eyebrow{background:#e2e8f0;color:#475569;border-color:#cbd5e1;}");
+        sb.AppendLine("  .hero p, .hero-meta{color:#475569!important;} .hero-meta{background:#f1f5f9;border:1px solid #e2e8f0;}");
+        sb.AppendLine("  .hero .stat-card{background:#fff!important;border-color:#e2e8f0!important;} .hero .stat-value{color:#0f172a!important;} .hero .stat-label{color:#64748b!important;} .hero .stat-note{color:#64748b!important;}");
+        sb.AppendLine("  .section{box-shadow:none;break-inside:avoid;page-break-inside:avoid;padding:24px 0;border:none;border-top:2px solid #f1f5f9;border-radius:0;margin-top:24px;}");
+        sb.AppendLine("  .section:first-of-type{border-top:none;}");
+        sb.AppendLine("  a{text-decoration:none;color:inherit;}");
+        sb.AppendLine("  table, tr, td, th { page-break-inside: avoid; break-inside: avoid; }");
+        sb.AppendLine("  .stat-card, .mention, .callout, .insight-list li { break-inside: avoid; page-break-inside: avoid; }");
+        sb.AppendLine("  .two-col{display:flex;flex-direction:row;gap:24px;} .two-col > div{flex:1;}");
+        sb.AppendLine("  .stats{grid-template-columns:repeat(3,1fr);gap:16px;}");
+        sb.AppendLine("  .mentions{grid-template-columns:1fr;gap:20px;}");
+        sb.AppendLine("  .mention{border:1px solid #e2e8f0;background:#fff;}");
+        sb.AppendLine("}");
         sb.AppendLine("</style></head><body>");
         sb.AppendLine("<div class=\"page\">");
         sb.AppendLine("<section class=\"hero\"><div class=\"hero-inner\">");
@@ -519,7 +553,7 @@ public class ProjectReportService
                         Label = c.Label,
                         Value = c.Mentions,
                         ValueLabel = $"{FormatNumber(c.Mentions)} ({c.MentionShare:0.#}%)",
-                        ColorHex = c.Mentions > (overview?.TotalMentions * 0.5 ?? 0) ? "00B4D8" : "10B981"
+                        ColorHex = c.Mentions > (overview?.TotalMentions * 0.5 ?? 0) ? "0EA5E9" : "10B981"
                     }).ToList()
             });
         }
@@ -538,7 +572,7 @@ public class ProjectReportService
                         Label = a.Label,
                         Value = a.TotalMentions,
                         ValueLabel = $"{FormatNumber(a.TotalMentions)} mentions",
-                        ColorHex = a.NegativePercent > a.PositivePercent ? "FF7575" : "F59E0B"
+                        ColorHex = a.NegativePercent > a.PositivePercent ? "EF4444" : "F59E0B"
                     }).ToList()
             });
         }
