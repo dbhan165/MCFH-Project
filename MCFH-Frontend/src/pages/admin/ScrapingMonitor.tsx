@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import {
@@ -179,7 +179,7 @@ const ScrapingMonitor = () => {
                     border: '1px solid #e5e7eb',
                     fontSize: '12px',
                   }}
-                  formatter={(value) => [`${value}`, 'Throughput']}
+                  formatter={(value: any) => [`${value}`, 'Throughput']}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {throughputData.map((entry, index) => (

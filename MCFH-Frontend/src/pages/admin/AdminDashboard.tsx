@@ -7,12 +7,10 @@ import {
   AlertTriangle,
   TrendingUp,
   Wallet,
-  CreditCard,
   CheckCircle2,
   Layers,
   Trophy,
   Sparkles,
-  BarChart3,
 } from 'lucide-react';
 import {
   LineChart,
@@ -22,23 +20,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
 } from 'recharts';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, type AdminDashboard as AdminDashboardData } from '../../api/portalApi';
-
-const statusStyles = {
-  RUNNING: 'bg-blue-50 text-blue-600 border-blue-100',
-  COMPLETED: 'bg-slate-800 text-white border-slate-800',
-  FAILED: 'bg-red-50 text-red-500 border-red-100',
-};
-
-const progressBarColors = {
-  RUNNING: 'bg-blue-500',
-  COMPLETED: 'bg-slate-800',
-  FAILED: 'bg-red-400',
-};
 
 const featureBadgeStyles: Record<string, string> = {
   subscription: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -68,7 +52,6 @@ const formatDate = (dateStr: string | null) => {
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState<AdminDashboardData | null>(null);
-  const totalSubs = stats?.subscriptionData?.reduce((sum, item) => sum + item.value, 0) || 0;
   const topFeature = stats?.revenueByType?.find((t) => t.isTopFeature) || stats?.revenueByType?.[0];
 
   const load = useCallback(async () => {
@@ -289,9 +272,10 @@ const AdminDashboard = () => {
                 tickFormatter={(v: number) => `${v} users`}
               />
               <Tooltip
-                formatter={(value: number, name: string) => {
-                  if (name === 'revenue') return [formatVND(value), 'Doanh Thu'];
-                  return [`${value} người`, 'Users Mới'];
+                formatter={(value: any, name: any) => {
+                  const valNum = typeof value === 'number' ? value : Number(value || 0);
+                  if (name === 'revenue') return [formatVND(valNum), 'Doanh Thu'];
+                  return [`${valNum} người`, 'Users Mới'];
                 }}
                 contentStyle={{
                   borderRadius: '8px',
