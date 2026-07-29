@@ -55,17 +55,19 @@ export interface AdminDashboard {
     totalAmount: number;
     transactionCount: number;
   }[];
-  recentRevenueTransactions: {
-    paymentId: number;
-    transactionRef: string | null;
-    userName: string;
-    userEmail: string;
-    featureName: string;
-    type: string;
-    amount: number;
-    status: string;
-    paidAt: string | null;
-  }[];
+  recentRevenueTransactions: AdminRecentRevenueTransaction[];
+}
+
+export interface AdminRecentRevenueTransaction {
+  paymentId: number;
+  transactionRef: string | null;
+  userName: string;
+  userEmail: string;
+  featureName: string;
+  type: string;
+  amount: number;
+  status: string;
+  paidAt: string | null;
 }
 
 export interface AdminUser {

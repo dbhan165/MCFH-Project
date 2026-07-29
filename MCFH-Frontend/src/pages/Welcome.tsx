@@ -1,6 +1,5 @@
 import { ArrowRight, PlayCircle, BarChart3, FileText, Globe, Shield } from 'lucide-react';
 import wellcome from '../assets/wellcome.png';
-import React from 'react';
 import { Link } from 'react-router-dom';
 import McfhLogo from '../components/brand/McfhLogo';
 
