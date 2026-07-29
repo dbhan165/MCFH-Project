@@ -1,6 +1,7 @@
 using MCFH.DTOs;
 using MCFH.Models;
 using MCFH.Services;
+using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -14,10 +15,10 @@ public class ReporterController : ControllerBase
 {
     private readonly ReporterPortalService _reporter;
 
-    public ReporterController(McfhDbContext db, IEmailService emailService, MCFH.Services.Scraping.ICommentBundleStorage bundleStorage)
+    public ReporterController(McfhDbContext db, IEmailService emailService, ICommentBundleStorage bundleStorage, IAiSentimentService aiSentiment)
     {
         var analytics = new ProjectAnalyticsService(db, bundleStorage);
-        var reports = new ProjectReportService(db, analytics);
+        var reports = new ProjectReportService(db, analytics, aiSentiment);
         var bespoke = new BespokeReportService(db, analytics, emailService, reportService: reports);
         _reporter = new ReporterPortalService(db, bespoke, analytics);
     }

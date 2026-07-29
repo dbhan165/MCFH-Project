@@ -1,38 +1,53 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, Check, Loader2, Mail, AlertTriangle } from 'lucide-react';
+import { Bell, Check, Loader2, Mail, AlertTriangle, ArrowDownLeft, Landmark, CheckCircle2 } from 'lucide-react';
 import { meApi, type AppNotification } from '../../api/meApi';
+import { adminApi, type AdminRecentRevenueTransaction } from '../../api/portalApi';
 import { formatWorkspaceDateTime } from '../../utils/workspaceHelpers';
 
 interface NotificationBellProps {
   theme?: 'light' | 'dark';
+  isAdmin?: boolean;
 }
 
-const NotificationBell = ({ theme = 'dark' }: NotificationBellProps) => {
+const formatVND = (amount: number) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+};
+
+const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellProps) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [revenueTransactions, setRevenueTransactions] = useState<AdminRecentRevenueTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [count, list] = await Promise.all([
-        meApi.getUnreadCount(),
-        meApi.getNotifications(15),
-      ]);
-      setUnreadCount(count);
-      setNotifications(list);
+      if (isAdmin) {
+        const dashboard = await adminApi.getDashboard();
+        const txs = dashboard.recentRevenueTransactions || [];
+        setRevenueTransactions(txs);
+        setUnreadCount(txs.length);
+      } else {
+        const [count, list] = await Promise.all([
+          meApi.getUnreadCount(),
+          meApi.getNotifications(15),
+        ]);
+        setUnreadCount(count);
+        setNotifications(list);
+      }
     } catch {
       setUnreadCount(0);
       setNotifications([]);
+      setRevenueTransactions([]);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     refresh();
-    const timer = window.setInterval(refresh, 60_000);
+    const timer = window.setInterval(refresh, 30_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
 
@@ -121,19 +136,32 @@ const NotificationBell = ({ theme = 'dark' }: NotificationBellProps) => {
         }
         aria-label="Thông báo"
       >
-        <Bell className={theme === 'dark' ? "w-5 h-5" : "w-5 h-5"} />
+        <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF7575] text-white text-[10px] font-bold flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-[#151B2B] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-            <span className="font-bold text-sm">Thông báo</span>
-            {inviteCount > 0 && (
+        <div className={`absolute right-0 top-full mt-2 w-84 sm:w-96 rounded-2xl shadow-2xl z-50 overflow-hidden border ${
+          theme === 'dark' ? 'bg-[#151B2B] border-white/10 text-white' : 'bg-white border-gray-200 text-gray-900'
+        }`}>
+          <div className={`px-4 py-3 border-b flex items-center justify-between ${
+            theme === 'dark' ? 'border-white/5' : 'border-gray-100'
+          }`}>
+            <div className="flex items-center gap-2">
+              {isAdmin ? (
+                <Landmark className="w-4 h-4 text-emerald-500" />
+              ) : (
+                <Bell className="w-4 h-4 text-blue-500" />
+              )}
+              <span className="font-bold text-sm">
+                {isAdmin ? 'Thông Báo Doanh Thu (App Ngân Hàng)' : 'Thông báo'}
+              </span>
+            </div>
+            {inviteCount > 0 && !isAdmin && (
               <Link
                 to="/invitations"
                 onClick={() => setOpen(false)}
@@ -144,11 +172,60 @@ const NotificationBell = ({ theme = 'dark' }: NotificationBellProps) => {
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto p-2 space-y-2">
             {isLoading ? (
               <div className="py-10 flex justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-[#FF7575]" />
+                <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
               </div>
+            ) : isAdmin ? (
+              revenueTransactions.length === 0 ? (
+                <p className="py-10 text-center text-xs text-gray-400">Chưa có thông báo biến động số dư nào</p>
+              ) : (
+                revenueTransactions.map((tx) => (
+                  <div
+                    key={tx.paymentId}
+                    className="p-3 bg-gradient-to-br from-emerald-50/60 to-teal-50/40 border border-emerald-200/70 rounded-xl hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+                          <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide">
+                            THÔNG BÁO BIẾN ĐỘNG SỐ DƯ (+)
+                          </p>
+                          <p className="text-xs font-semibold text-gray-900">{tx.userName}</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-extrabold text-emerald-600 shrink-0">
+                        + {formatVND(tx.amount)}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1 bg-white/70 backdrop-blur-xs p-2.5 rounded-lg border border-emerald-100/60 text-gray-700">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Tính năng:</span>
+                        <span className="font-semibold text-gray-900">{tx.featureName}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Email User:</span>
+                        <span className="text-gray-700">{tx.userEmail}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-[11px]">
+                        <span className="font-mono text-gray-400">Mã GD: {tx.transactionRef}</span>
+                        <span className="text-emerald-700 font-medium flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Thành công
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-1.5 text-right text-[10px] text-gray-400 font-medium">
+                      {formatWorkspaceDateTime(tx.paidAt)}
+                    </div>
+                  </div>
+                ))
+              )
             ) : notifications.length === 0 ? (
               <p className="py-10 text-center text-sm text-gray-500">Không có thông báo</p>
             ) : (
@@ -188,15 +265,17 @@ const NotificationBell = ({ theme = 'dark' }: NotificationBellProps) => {
             )}
           </div>
 
-          <div className="p-3 border-t border-white/5">
-            <Link
-              to="/invitations"
-              onClick={() => setOpen(false)}
-              className="block text-center text-xs font-semibold text-[#00B4D8] hover:underline"
-            >
-              Xem tất cả lời mời
-            </Link>
-          </div>
+          {!isAdmin && (
+            <div className="p-3 border-t border-white/5">
+              <Link
+                to="/invitations"
+                onClick={() => setOpen(false)}
+                className="block text-center text-xs font-semibold text-[#00B4D8] hover:underline"
+              >
+                Xem tất cả lời mời
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

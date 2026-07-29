@@ -4,6 +4,7 @@ using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Services;
 using MCFH.Services.Payments;
+using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
@@ -41,10 +42,11 @@ public class ProjectExtendedController : ControllerBase
         IEmailService emailService,
         ILogger<ProjectExtendedController> logger,
         ILogger<BespokeReportService> bespokeLogger,
-        MCFH.Services.Scraping.ICommentBundleStorage bundleStorage,
-        MCFH.Services.Scraping.ScrapeJobRunner scrapeJobRunner,
+        ICommentBundleStorage bundleStorage,
+        ScrapeJobRunner scrapeJobRunner,
         PayOsService payOs,
-        IOptions<PayOsOptions> payOsOptions)
+        IOptions<PayOsOptions> payOsOptions,
+        IAiSentimentService aiSentiment)
     {
         _projectService = projectService;
         _aiAnalysisService = aiAnalysisService;
@@ -54,7 +56,7 @@ public class ProjectExtendedController : ControllerBase
         _analyticsService = new ProjectAnalyticsService(db, bundleStorage);
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
-        _reportService = new ProjectReportService(db, _analyticsService);
+        _reportService = new ProjectReportService(db, _analyticsService, aiSentiment);
         _bespokeService = new BespokeReportService(
             db, _analyticsService, emailService, scrapeJobRunner, scopeFactory, _reportService,
             payOs, payOsOptions, bespokeLogger);

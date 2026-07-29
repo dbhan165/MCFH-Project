@@ -1269,6 +1269,27 @@ public class BespokeReportService
 
         request.Status = "assigned";
         if (!request.AssignedAt.HasValue) request.AssignedAt = DateTime.Now;
+
+        if (request.AgreedPrice.HasValue && request.AgreedPrice.Value > 0)
+        {
+            var existingPayment = await _context.Payments
+                .FirstOrDefaultAsync(p => p.RequestId == request.RequestId && p.Type == "bespoke");
+            if (existingPayment == null)
+            {
+                _context.Payments.Add(new Payment
+                {
+                    TransactionRef = $"BESPOKE-{request.RequestId}",
+                    Amount = request.AgreedPrice.Value,
+                    Status = "success",
+                    Type = "bespoke",
+                    RequestId = request.RequestId,
+                    CreatedBy = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    PaidAt = DateTime.UtcNow
+                });
+            }
+        }
+
         await _context.SaveChangesAsync();
 
         await LoadRequestNavigationsAsync(request);
