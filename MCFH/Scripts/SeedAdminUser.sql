@@ -1,6 +1,11 @@
 -- Tạo tài khoản Admin hệ thống (dev/demo).
+--
+-- ⚠️  SECURITY WARNING: Mật khẩu "123" rất yếu.
+--    Chỉ dùng cho môi trường LOCAL / DEMO.
+--    Trong production: xóa script này và tạo tài khoản admin mạnh qua API.
+--
 -- Email: admin@gmail.com
--- Mật khẩu: 123 (BCrypt hash bên dưới, giống AuthController)
+-- Mật khẩu: 123 (BCrypt hash bên dưới)
 --
 -- Chạy trong SSMS trên database MCFH_DB.
 
