@@ -12,10 +12,14 @@ namespace MCFH.Controllers.Admin;
 public class AdminPlatformCookieController : ControllerBase
 {
     private readonly PlatformCookieAdminService _cookieAdmin;
+    private readonly ILogger<AdminPlatformCookieController> _logger;
 
-    public AdminPlatformCookieController(PlatformCookieAdminService cookieAdmin)
+    public AdminPlatformCookieController(
+        PlatformCookieAdminService cookieAdmin,
+        ILogger<AdminPlatformCookieController> logger)
     {
         _cookieAdmin = cookieAdmin;
+        _logger = logger;
     }
 
     private int GetUserId() =>
@@ -27,7 +31,19 @@ public class AdminPlatformCookieController : ControllerBase
         if (GetUserId() <= 0)
             return Unauthorized();
 
-        return Ok(await _cookieAdmin.ListAsync(GetUserId()));
+        try
+        {
+            return Ok(await _cookieAdmin.ListAsync(GetUserId()));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GET /api/admin/platform-cookies thất bại");
+            return StatusCode(500, new
+            {
+                message = "Không thể tải danh sách platform cookies.",
+                detail = ex.Message
+            });
+        }
     }
 
     [HttpGet("{platform}")]

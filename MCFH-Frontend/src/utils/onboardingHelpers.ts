@@ -36,10 +36,27 @@ export async function resolvePostLoginPath(): Promise<string> {
 }
 
 export function getPrimaryKeyword(keywords: string): string {
-  return keywords
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)[0] ?? '';
+  return parseKeywordList(keywords)[0] ?? '';
+}
+
+export function parseKeywordList(keywords: string): string[] {
+  if (!keywords) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of keywords.split(/[,;\n\r]/)) {
+    const value = raw.trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+export function countUniqueKeywords(keywords: string | null | undefined): number {
+  if (!keywords) return 0;
+  return parseKeywordList(keywords).length;
 }
 
 export const SCRAPABLE_PLATFORMS = ['facebook', 'youtube', 'news'] as const;

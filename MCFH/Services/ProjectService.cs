@@ -63,7 +63,10 @@ namespace MCFH.Services
                     Name = p.Name,
                     Description = p.Description,
                     SearchQuery = p.SearchQuery,
-                    DataSourceCount = p.DataSources.Count,
+                    DataSourceCount = p.DataSources
+                        .Select(d => d.Platform)
+                        .Distinct()
+                        .Count(),
                     CreatedAt = p.CreatedAt
                 })
                 .ToListAsync();
@@ -86,7 +89,10 @@ namespace MCFH.Services
                     Name = p.Name,
                     Description = p.Description,
                     SearchQuery = p.SearchQuery,
-                    DataSourceCount = p.DataSources.Count,
+                    DataSourceCount = p.DataSources
+                        .Select(d => d.Platform)
+                        .Distinct()
+                        .Count(),
                     CreatedAt = p.CreatedAt
                 })
                 .FirstOrDefaultAsync();

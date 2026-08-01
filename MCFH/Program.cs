@@ -136,6 +136,9 @@ namespace MCFH
             builder.Services.AddScoped<ProxyRotationService>();
             builder.Services.AddScoped<ProxyAdminService>();
             builder.Services.AddScoped<FbSourceAdminService>();
+            builder.Services.AddScoped<ScrapePackageAdminService>();
+            builder.Services.AddScoped<ScrapePackagePublicService>();
+            builder.Services.AddSingleton<ScrapePackageCatalog>();
             builder.Services.AddSingleton<IPlatformCookiePathProvider, PlatformCookiePathProvider>();
             builder.Services.AddScoped<PlatformCookieAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();

@@ -9,6 +9,11 @@ namespace MCFH.Services.Scraping;
 /// <summary>
 /// Hangfire — lên lịch cào theo từng project (UC-76).
 /// Căn cứ SCRAPING_JOBS.started_at: mỗi project cách lần bắt đầu trước ≥ PerProjectScrapeIntervalMinutes.
+///
+/// Lưu ý quan trọng: Hệ thống đã chuyển sang mô hình **pay-per-scrape**. Scheduler CHỈ auto-scrape
+/// project có ít nhất 1 order đã thanh toán (paid/scraping/analyzing/completed) HOẶC project có
+/// gói Full Unlimited. Project mới tạo (chưa thanh toán) sẽ bị skip — tránh leak cào dữ liệu khi user
+/// huỷ giữa chừng ở bước PayOS.
 /// </summary>
 public class ScrapingJobService
 {
@@ -16,17 +21,20 @@ public class ScrapingJobService
     private readonly ScrapeByKeywordService _scrapeService;
     private readonly ScrapeOptions _scrapeOptions;
     private readonly INotificationService _notifications;
+    private readonly ILogger<ScrapingJobService> _logger;
 
     public ScrapingJobService(
         McfhDbContext db,
         ScrapeByKeywordService scrapeService,
         IOptions<ScrapeOptions> scrapeOptions,
-        INotificationService notifications)
+        INotificationService notifications,
+        ILogger<ScrapingJobService> logger)
     {
         _db = db;
         _scrapeService = scrapeService;
         _scrapeOptions = scrapeOptions.Value;
         _notifications = notifications;
+        _logger = logger;
     }
 
     /// <summary>
@@ -46,9 +54,33 @@ public class ScrapingJobService
             .Select(p => p.ProjectId)
             .ToListAsync();
 
+        // Pay-per-scrape gate: project phải có order đã paid HOẶC full-unlimited mới được auto-scrape.
+        // Trước đây không có gate này → user tạo project → huỷ PayOS → Hangfire vẫn tự cào (leak quota).
+        var paidProjectIds = await _db.ScrapeOrders
+            .Where(o => o.Status == "paid" || o.Status == "scraping"
+                        || o.Status == "analyzing" || o.Status == "completed")
+            .Select(o => o.ProjectId)
+            .Distinct()
+            .ToListAsync();
+
+        var paidSet = paidProjectIds.ToHashSet();
+
+        var eligibleIds = await _db.Projects
+            .Where(p => paidSet.Contains(p.ProjectId) || p.MentionsFullUnlimited == true)
+            .Select(p => p.ProjectId)
+            .ToListAsync();
+
+        var eligibleSet = eligibleIds.ToHashSet();
         var dueIds = new List<int>();
         foreach (var projectId in projectIds)
         {
+            if (!eligibleSet.Contains(projectId))
+            {
+                _logger.LogInformation(
+                    "[Hangfire] Scheduler skip project {ProjectId} — chưa có order paid và không phải Full Unlimited.",
+                    projectId);
+                continue;
+            }
             if (await ScrapingJobPersistence.IsProjectDueForScrapeAsync(_db, projectId, interval, stale))
                 dueIds.Add(projectId);
         }
