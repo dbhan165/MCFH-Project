@@ -457,7 +457,7 @@ MCFH/cookies/
 # Cursor editor config (local, không commit)
 .cursor/
 
-# ASP.NET secret config - DEV ONLY (production dùng env vars)
+# ASP.NET secret config (local only — không commit)
+MCFH/appsettings.json
 MCFH/appsettings.Development.json
 MCFH/appsettings.Production.json
-!MCFH/appsettings.json

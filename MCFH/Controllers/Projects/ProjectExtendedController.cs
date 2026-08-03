@@ -381,10 +381,17 @@ public class ProjectExtendedController : ControllerBase
     [HttpGet("{projectId}/bespoke/{requestId}/download")]
     public async Task<IActionResult> DownloadBespokeReport(int workspaceId, int projectId, int requestId)
     {
-        var file = await _bespokeService.DownloadDeliverableAsync(workspaceId, projectId, GetUserId(), requestId);
-        if (file == null) return NotFound();
-        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
-        return File(file.Value.Content, contentType, file.Value.FileName);
+        try
+        {
+            var file = await _bespokeService.DownloadDeliverableAsync(workspaceId, projectId, GetUserId(), requestId);
+            if (file == null) return NotFound(new { message = "Chưa có file báo cáo để tải." });
+            var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+            return File(file.Value.Content, contentType, file.Value.FileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
+        }
     }
 
     [HttpPost("{projectId}/bespoke/{requestId}/accept-quote")]

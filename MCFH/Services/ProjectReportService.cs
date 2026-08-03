@@ -174,9 +174,19 @@ public class ProjectReportService
         if (project == null) return null;
 
         var titleName = string.IsNullOrWhiteSpace(displayName) ? project.Name : displayName.Trim();
-        var (pdfBytes, _, _) = await BuildAnalyticsPdfAsync(workspaceId, projectId, userId, titleName, filter);
-        var fileName = $"{SanitizeFileName($"Bao-cao-{titleName}")}.pdf";
-        return (pdfBytes, fileName);
+        try
+        {
+            var (pdfBytes, _, _) = await BuildAnalyticsPdfAsync(workspaceId, projectId, userId, titleName, filter);
+            var fileName = $"{SanitizeFileName($"Bao-cao-{titleName}")}.pdf";
+            return (pdfBytes, fileName);
+        }
+        catch (PlaywrightException ex)
+        {
+            // Thiếu Chromium / PLAYWRIGHT_BROWSERS_PATH sai — không để 500 trắng.
+            throw new InvalidOperationException(
+                "Không xuất được PDF: Playwright Chromium chưa được cài. Chạy: pwsh bin/Debug/net8.0/playwright.ps1 install chromium",
+                ex);
+        }
     }
 
     public async Task<(byte[] Content, string ContentType, string FileName)?> DownloadReportAsync(
