@@ -16,15 +16,13 @@ interface CreateBespokeModalProps {
   isOpen: boolean;
   onClose: () => void;
   wid: number;
-  projectId: number;
   onSuccess: () => void;
 }
 
-const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess }: CreateBespokeModalProps) => {
+const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, onSuccess }: CreateBespokeModalProps) => {
   const [title, setTitle] = useState('');
   const [keyword, setKeyword] = useState('');
   const [packageType, setPackageType] = useState('basic');
-  const [requirements, setRequirements] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [modules, setModules] = useState<string[]>(['overview', 'sentiment', 'channel']);
@@ -44,7 +42,6 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
       setTitle('');
       setKeyword('');
       setPackageType('basic');
-      setRequirements('');
       setDateFrom('');
       setDateTo('');
       setModules(['overview', 'sentiment', 'channel']);
@@ -61,23 +58,28 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wid || !projectId || modules.length === 0) return;
+    if (!wid || modules.length === 0) return;
 
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      const request = await projectApi.createBespokeRequest(wid, projectId, {
+      // Tạo Project mới + BespokeRequest — không gắn project monitoring có sẵn.
+      const request = await projectApi.createBespokeRequestStandalone(wid, {
         title,
         keyword,
         packageType,
-        requirements: requirements || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         modules,
         format: 'pdf',
       });
 
-      const checkout = await projectApi.payBespokeRequest(wid, projectId, request.requestId);
+      if (!request.projectId) {
+        setErrorMessage('Không nhận được projectId từ server sau khi tạo yêu cầu.');
+        return;
+      }
+
+      const checkout = await projectApi.payBespokeRequest(wid, request.projectId, request.requestId);
 
       if (checkout.checkoutUrl) {
         window.location.href = checkout.checkoutUrl;
@@ -112,7 +114,8 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
         <div className="p-6 border-b border-white/5 shrink-0">
           <h2 className="text-2xl font-bold text-white mb-2">Yêu cầu Báo cáo Chuyên sâu</h2>
           <p className="text-gray-400 text-sm">
-            Chọn gói dịch vụ — hệ thống gửi báo cáo cho bạn. Nếu chưa đủ, dùng Yêu cầu sửa để Reporter chỉnh lại.
+            Mỗi yêu cầu tạo một project riêng trong workspace — hệ thống cào &amp; xuất báo cáo theo keyword.
+            Nếu chưa đủ, dùng Yêu cầu sửa để Reporter chỉnh lại.
           </p>
         </div>
 
@@ -170,17 +173,6 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, projectId, onSuccess 
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="VD: Báo cáo khủng hoảng truyền thông Q2/2026..."
                 className="w-full px-4 py-3 bg-[#0A101D] border border-white/10 rounded-xl focus:outline-none focus:border-[#FF7575] text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-300 mb-2">Yêu cầu chi tiết</label>
-              <textarea
-                value={requirements}
-                onChange={(e) => setRequirements(e.target.value)}
-                rows={3}
-                placeholder="Mô tả mục tiêu, đối tượng đọc, insight cần làm rõ, góc phân tích đặc biệt..."
-                className="w-full px-4 py-3 bg-[#0A101D] border border-white/10 rounded-xl focus:outline-none focus:border-[#FF7575] text-white resize-none"
               />
             </div>
 

@@ -94,23 +94,64 @@ public class BespokeReportService
         return dto;
     }
 
+    /// <summary>
+    /// Tạo báo cáo chuyên sâu: luôn tạo Project mới trong workspace (không gắn project monitoring có sẵn).
+    /// <paramref name="projectId"/> từ URL cũ bị bỏ qua — giữ signature để endpoint cũ không gãy.
+    /// </summary>
     public async Task<BespokeRequestItemDto?> CreateRequestAsync(
         int workspaceId, int projectId, int userId, CreateBespokeRequestDto dto)
+        => await CreateStandaloneRequestAsync(workspaceId, userId, dto);
+
+    /// <summary>
+    /// Tạo Project mới (keyword = SearchQuery) + BespokeRequest pending_payment.
+    /// Scrape/PDF chỉ chạy sau thanh toán — không đổi pipeline.
+    /// </summary>
+    public async Task<BespokeRequestItemDto?> CreateStandaloneRequestAsync(
+        int workspaceId, int userId, CreateBespokeRequestDto dto)
     {
-        var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+        var user = await GetWorkspaceEditorAsync(workspaceId, userId);
         if (user == null) return null;
 
-        if (string.IsNullOrWhiteSpace(dto.Keyword))
+        if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Keyword))
             return null;
 
+        var keyword = dto.Keyword.Trim();
+        var title = dto.Title.Trim();
         var packageType = NormalizePackageType(dto.PackageType);
         var packagePrice = packageType == "pro" ? ProPackagePrice : BasicPackagePrice;
 
+        var project = new Project
+        {
+            WorkspaceId = workspaceId,
+            Name = title,
+            Description = $"Báo cáo chuyên sâu — keyword: {keyword}",
+            SearchQuery = keyword,
+            EnableFacebook = true,
+            EnableYoutube = true,
+            EnableTiktok = true,
+            IsDeleted = false,
+            CreatedAt = DateTime.Now
+        };
+        _context.Projects.Add(project);
+        await _context.SaveChangesAsync();
+
+        _context.WorkspaceActivityLogs.Add(new WorkspaceActivityLog
+        {
+            WorkspaceId = workspaceId,
+            UserId = userId,
+            ActionType = "CREATE_PROJECT",
+            TargetType = "project",
+            TargetId = project.ProjectId,
+            TargetName = project.Name,
+            Description = $"Tạo project bespoke \"{project.Name}\"",
+            CreatedAt = DateTime.Now
+        });
+
         var meta = new BespokeMeta
         {
-            ProjectId = projectId,
+            ProjectId = project.ProjectId,
             WorkspaceId = workspaceId,
-            Keyword = dto.Keyword.Trim(),
+            Keyword = keyword,
             PackageType = packageType,
             PackagePrice = packagePrice,
             DateFrom = dto.DateFrom,
@@ -122,7 +163,7 @@ public class BespokeReportService
         var request = new BespokeRequest
         {
             ClientId = userId,
-            Title = dto.Title.Trim(),
+            Title = title,
             Requirements = dto.Requirements?.Trim(),
             CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions),
             AgreedPrice = packagePrice,
@@ -134,7 +175,7 @@ public class BespokeReportService
         await _context.SaveChangesAsync();
 
         // KHÔNG khởi động scrape ở đây — chỉ bắt đầu sau khi thanh toán được xác nhận (PayRequestAsync/webhook).
-        var reloaded = await GetProjectRequestAsync(projectId, request.RequestId);
+        var reloaded = await GetProjectRequestAsync(project.ProjectId, request.RequestId);
         if (reloaded == null) return null;
 
         await LoadRequestNavigationsAsync(reloaded);
@@ -528,6 +569,7 @@ public class BespokeReportService
                 await Task.Delay(TimeSpan.FromSeconds(10));
 
                 var job = _jobRunner.GetJob(jobId, userId);
+                // job == null: store mất sau restart → coi như xong, finalize với data hiện có.
                 if (job == null || job.Status is "completed" or "failed" or "cancelled")
                 {
                     await FinalizeBespokeReportAsync(_scopeFactory, requestId);
@@ -554,6 +596,74 @@ public class BespokeReportService
             catch
             {
                 // best-effort — không chặn luồng nếu khôi phục SearchQuery lỗi
+            }
+        }
+    }
+
+    /// <summary>
+    /// Nhặt đơn bespoke kẹt <c>gathering_data</c> (thường sau restart backend — watcher in-memory mất).
+    /// Job scrape xong / mất / chạy quá 25 phút → finalize PDF + report_ready.
+    /// </summary>
+    public async Task RecoverStuckBespokeRequestsAsync()
+    {
+        if (_scopeFactory == null) return;
+
+        var stuck = await _context.BespokeRequests
+            .Where(r => r.Status == "gathering_data")
+            .ToListAsync();
+
+        foreach (var request in stuck)
+        {
+            var meta = ParseMeta(request.CustomMetrics);
+            if (meta.ProjectId <= 0 || meta.WorkspaceId <= 0) continue;
+
+            ScrapingJob? job = null;
+            if (!string.IsNullOrWhiteSpace(meta.ScrapeJobId))
+            {
+                job = await _context.ScrapingJobs
+                    .FirstOrDefaultAsync(j => j.JobId == meta.ScrapeJobId);
+            }
+
+            var finishedStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "completed", "failed", "cancelled", "completed_with_errors"
+            };
+
+            var jobDone = job == null
+                || (!string.IsNullOrWhiteSpace(job.Status) && finishedStatuses.Contains(job.Status))
+                || (job.StartedAt.HasValue && DateTime.Now - job.StartedAt.Value >= TimeSpan.FromMinutes(25));
+
+            // In-memory job còn "running" trên process hiện tại → để watcher xử lý, trừ khi quá hạn DB.
+            if (!jobDone) continue;
+            if (!PostScrapeRunning.TryAdd(request.RequestId, 0)) continue;
+
+            try
+            {
+                if (job != null && string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+                {
+                    var count = await _context.ScrapedFeedbacks
+                        .CountAsync(f => f.ProjectId == meta.ProjectId && f.IsDeleted != true);
+                    job.Status = count > 0 ? "completed" : "completed_with_errors";
+                    job.TotalScraped = count;
+                    job.FinishedAt = DateTime.Now;
+                    job.ErrorLog = string.IsNullOrWhiteSpace(job.ErrorLog)
+                        ? "[Recover] Job treo / mất watcher sau restart — force finalize."
+                        : job.ErrorLog + "\n[Recover] Job treo / mất watcher sau restart — force finalize.";
+                    await _context.SaveChangesAsync();
+                }
+
+                _logger?.LogWarning(
+                    "Recover bespoke request {RequestId}: finalize sau khi kẹt gathering_data.",
+                    request.RequestId);
+                await FinalizeBespokeReportAsync(_scopeFactory, request.RequestId);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Recover bespoke request {RequestId} thất bại.", request.RequestId);
+            }
+            finally
+            {
+                PostScrapeRunning.TryRemove(request.RequestId, out _);
             }
         }
     }
@@ -733,25 +843,28 @@ public class BespokeReportService
             if (member == null) return null;
         }
 
-        var report = request.BespokeReports.OrderByDescending(r => r.UploadedAt).FirstOrDefault();
-        var isSystemDraft = report?.Version != null && report.Version.Contains("draft", StringComparison.OrdinalIgnoreCase);
-        var needsRegenerate = report == null
-            || isSystemDraft // luôn rebuild bản nháp hệ thống khi tải — áp dụng filter keyword/scrape mới nhất, không cần cào lại
-            || !string.Equals(Path.GetExtension(report.FileUrl), ".pdf", StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(ResolveFilePath(report.FileUrl));
+        // Ưu tiên bản có file trên disk (Reporter upload hoặc draft đã render).
+        // Không rebuild PDF mỗi lần tải — Playwright rất chậm; PDF tạo lúc finalize.
+        var report = request.BespokeReports
+            .OrderByDescending(r => r.UploadedAt)
+            .FirstOrDefault(r =>
+                !string.IsNullOrWhiteSpace(r.FileUrl) &&
+                File.Exists(ResolveFilePath(r.FileUrl)));
 
-        if (needsRegenerate && _reportService != null)
+        if (report == null && _reportService != null)
         {
             await EnsureSystemDraftAsync(workspaceId, projectId, userId, requestId);
             request = await GetProjectRequestAsync(projectId, requestId);
-            report = request?.BespokeReports.OrderByDescending(r => r.UploadedAt).FirstOrDefault();
+            report = request?.BespokeReports
+                .OrderByDescending(r => r.UploadedAt)
+                .FirstOrDefault(r =>
+                    !string.IsNullOrWhiteSpace(r.FileUrl) &&
+                    File.Exists(ResolveFilePath(r.FileUrl)));
         }
 
         if (report == null) return null;
 
         var path = ResolveFilePath(report.FileUrl);
-        if (!File.Exists(path)) return null;
-
         var bytes = await File.ReadAllBytesAsync(path);
         var fileName = Path.GetFileName(path);
         return (bytes, fileName);
@@ -829,8 +942,12 @@ public class BespokeReportService
         return MapRequest(request, user);
     }
 
-    /// <summary>Đảm bảo có bản nháp hệ thống mới nhất — xoá bản nháp cũ, giữ nguyên file Reporter đã upload.</summary>
-    private async Task EnsureSystemDraftAsync(int workspaceId, int projectId, int userId, int requestId)
+    /// <summary>
+    /// Đảm bảo có bản nháp hệ thống. Mặc định giữ PDF đã có (tải nhanh).
+    /// forceRebuild=true khi vừa cào xong / cần áp dụng filter mới.
+    /// </summary>
+    private async Task EnsureSystemDraftAsync(
+        int workspaceId, int projectId, int userId, int requestId, bool forceRebuild = false)
     {
         if (_reportService == null) return;
 
@@ -844,6 +961,21 @@ public class BespokeReportService
             .Where(r => r.Version != null && r.Version.Contains("draft", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
+        // Reporter đã upload bản riêng — không ghi đè bằng bản nháp hệ thống.
+        var nonDraftCount = totalBefore - draftReports.Count;
+        if (nonDraftCount > 0) return;
+
+        // Đã có PDF nháp hợp lệ → phục vụ luôn, không Playwright lại.
+        if (!forceRebuild)
+        {
+            var readyDraft = draftReports
+                .OrderByDescending(r => r.UploadedAt)
+                .FirstOrDefault(r =>
+                    !string.IsNullOrWhiteSpace(r.FileUrl) &&
+                    File.Exists(ResolveFilePath(r.FileUrl)));
+            if (readyDraft != null) return;
+        }
+
         foreach (var draft in draftReports)
         {
             DeleteDeliverableFile(draft.FileUrl);
@@ -852,14 +984,11 @@ public class BespokeReportService
         if (draftReports.Count > 0)
             await _context.SaveChangesAsync();
 
-        var remaining = totalBefore - draftReports.Count;
-        if (remaining > 0) return; // Reporter đã upload bản riêng — không ghi đè bằng bản nháp hệ thống.
-
         await SaveAnalyticsPdfDraftAsync(workspaceId, projectId, userId, requestId, request, "v01-draft", "system-draft");
     }
 
     public Task EnsureSystemDraftPublicAsync(int workspaceId, int projectId, int userId, int requestId) =>
-        EnsureSystemDraftAsync(workspaceId, projectId, userId, requestId);
+        EnsureSystemDraftAsync(workspaceId, projectId, userId, requestId, forceRebuild: true);
 
     /// <summary>
     /// Render PDF analytics (không đụng Reports index của project) rồi lưu làm 1 bản BESPOKE_REPORTS.
@@ -1037,6 +1166,7 @@ public class BespokeReportService
         return new BespokeRequestItemDto
         {
             RequestId = r.RequestId,
+            ProjectId = meta.ProjectId,
             Title = r.Title,
             Requirements = r.Requirements,
             Status = r.Status ?? "pending",
@@ -1078,6 +1208,27 @@ public class BespokeReportService
         var projectExists = await _context.Projects
             .AnyAsync(p => p.ProjectId == projectId && p.WorkspaceId == workspaceId && p.IsDeleted != true);
         if (!projectExists) return null;
+
+        return await _context.Users.FindAsync(userId);
+    }
+
+    /// <summary>Owner/Editor của workspace — dùng khi tạo bespoke standalone (chưa có project).</summary>
+    private async Task<User?> GetWorkspaceEditorAsync(int workspaceId, int userId)
+    {
+        var canEdit = await _context.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId &&
+                           m.UserId == userId &&
+                           (m.Role.RoleName == "Owner" || m.Role.RoleName == "Editor"));
+        if (!canEdit)
+        {
+            // Admin hệ thống vẫn được tạo trong workspace mà họ là member.
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return null;
+            var isMember = await _context.WorkspaceMembers
+                .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == userId);
+            if (isMember && IsAdmin(user)) return user;
+            return null;
+        }
 
         return await _context.Users.FindAsync(userId);
     }

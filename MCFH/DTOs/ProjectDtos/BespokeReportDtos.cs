@@ -42,6 +42,8 @@ public class AssignBespokeReporterDto
 public class BespokeRequestItemDto
 {
     public int RequestId { get; set; }
+    /// <summary>Project riêng được tạo cho đơn bespoke (dùng cho pay/download/assign).</summary>
+    public int ProjectId { get; set; }
     public string Title { get; set; } = null!;
     public string? Requirements { get; set; }
     public string Status { get; set; } = null!;

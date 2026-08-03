@@ -52,7 +52,6 @@ const ProjectBespokeReports = () => {
 
     const [bespoke, setBespoke] = useState<BespokeCenter | null>(null);
     const [requestProjectMap, setRequestProjectMap] = useState<Record<number, number>>({});
-    const [firstProjectId, setFirstProjectId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [bespokeActionId, setBespokeActionId] = useState<number | null>(null);
@@ -83,7 +82,6 @@ const ProjectBespokeReports = () => {
         setErrorMessage('');
         try {
             const projectList = await projectApi.getProjects(wid);
-            setFirstProjectId(projectList[0]?.projectId ?? null);
 
             if (projectList.length === 0) {
                 setBespoke({ userSystemRole: userRole, requests: [], reporters: [] });
@@ -114,8 +112,9 @@ const ProjectBespokeReports = () => {
                     merged.reporters = data.reporters;
                 }
                 for (const req of data.requests) {
-                    allRequests.push(req);
-                    projectMap[req.requestId] = projectId;
+                    const resolvedProjectId = req.projectId > 0 ? req.projectId : projectId;
+                    allRequests.push({ ...req, projectId: resolvedProjectId });
+                    projectMap[req.requestId] = resolvedProjectId;
                 }
             }
 
@@ -129,7 +128,6 @@ const ProjectBespokeReports = () => {
         } catch (error) {
             setBespoke({ userSystemRole: userRole, requests: [], reporters: [] });
             setRequestProjectMap({});
-            setFirstProjectId(null);
             setErrorMessage(extractApiError(error, 'Không tải được phần báo cáo chuyên sâu. Hãy thử lại sau.'));
         } finally {
             setIsLoading(false);
@@ -313,7 +311,7 @@ const ProjectBespokeReports = () => {
                             <button
                                 type="button"
                                 onClick={() => setIsCreateModalOpen(true)}
-                                className={`inline-flex items-center gap-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl transition-colors shrink-0 ${!firstProjectId ? 'opacity-50 pointer-events-none' : ''}`}
+                                className="inline-flex items-center gap-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl transition-colors shrink-0"
                             >
                                 <Plus className="w-4 h-4" /> Yêu cầu báo cáo
                             </button>
@@ -356,18 +354,15 @@ const ProjectBespokeReports = () => {
                 )}
             </div>
 
-            {firstProjectId && (
-                <ProjectCreateBespokeModal
-                    isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
-                    wid={wid}
-                    projectId={firstProjectId}
-                    onSuccess={() => {
-                        setSuccessMessage('Đã tạo yêu cầu — hệ thống đang cào dữ liệu và xuất báo cáo.');
-                        loadBespokeData();
-                    }}
-                />
-            )}
+            <ProjectCreateBespokeModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                wid={wid}
+                onSuccess={() => {
+                    setSuccessMessage('Đã tạo yêu cầu — hệ thống đang cào dữ liệu và xuất báo cáo.');
+                    loadBespokeData();
+                }}
+            />
 
             <UploadRevisionModal 
                 isOpen={uploadRevisionModalOpen} 
