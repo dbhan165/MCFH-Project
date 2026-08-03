@@ -122,7 +122,7 @@ function ProjectCard({
 }) {
   const gradient = CARD_GRADIENTS[pickGradientIndex(project.name)];
   const platforms = getPlatformTags(project);
-  const pendingPayment = isPendingPayment(activeOrder);
+  const pendingPayment = isPendingPayment(activeOrder ?? undefined);
 
   return (
     <article
