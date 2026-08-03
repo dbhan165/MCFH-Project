@@ -832,24 +832,12 @@ export const reporterApi = {
     return mapPortalRequest(res.data);
   },
 
-  quote: async (requestId: number, payload: { agreedPrice: number; deadline?: string; note?: string }) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/quote`, payload);
-  },
-
-  startWork: async (requestId: number) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/start`);
-  },
-
-  deliver: async (requestId: number) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/deliver`);
-  },
-
   download: async (requestId: number) => {
     const res = await axiosClient.get(`/api/reporter/requests/${requestId}/download`, { responseType: 'blob' });
     const disposition = res.headers['content-disposition'] as string | undefined;
     const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
     const rawName = match?.[1]?.replace(/['"]/g, '');
-    const fileName = rawName || `bespoke-report-${requestId}.html`;
+    const fileName = rawName || `bespoke-report-${requestId}.pdf`;
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
@@ -878,19 +866,6 @@ export const reporterApi = {
       pendingCount: pickNumber(d, 'pendingCount', 'PendingCount'),
       avgProcessingDays: pickField<number>(d, 'avgProcessingDays', 'AvgProcessingDays') ?? null,
       history: history.map(mapPortalRequest),
-    };
-  },
-
-  getAnalyticsPreview: async (requestId: number) => {
-    const res = await axiosClient.get<Record<string, unknown>>(`/api/reporter/requests/${requestId}/analytics-preview`);
-    const d = res.data;
-    return {
-      projectName: pickString(d, 'projectName', 'ProjectName'),
-      totalMentions: pickNumber(d, 'totalMentions', 'TotalMentions'),
-      totalComments: pickNumber(d, 'totalComments', 'TotalComments'),
-      negativeCount: pickNumber(d, 'negativeCount', 'NegativeCount'),
-      positiveCount: pickNumber(d, 'positiveCount', 'PositiveCount'),
-      nsrScore: pickField<number>(d, 'nsrScore', 'NsrScore') ?? 0,
     };
   },
 };

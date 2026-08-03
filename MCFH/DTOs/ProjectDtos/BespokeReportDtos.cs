@@ -12,9 +12,26 @@ public class CreateBespokeRequestDto
     public string Format { get; set; } = "html";
 }
 
+/// <summary>Kết quả checkout PayOS cho yêu cầu báo cáo chuyên sâu.</summary>
+public class BespokeCheckoutDto
+{
+    public BespokeRequestItemDto Request { get; set; } = null!;
+    public long OrderCode { get; set; }
+    public string PaymentLinkId { get; set; } = null!;
+    public string CheckoutUrl { get; set; } = null!;
+    public string QrCode { get; set; } = null!;
+    public decimal Amount { get; set; }
+}
+
 public class RequestBespokeRevisionDto
 {
     public string Feedback { get; set; } = null!;
+}
+
+/// <summary>Khách gửi báo cáo hệ thống cho Reporter kèm nội dung cần chỉnh sửa.</summary>
+public class SendBespokeToReporterDto
+{
+    public string Note { get; set; } = null!;
 }
 
 public class AssignBespokeReporterDto

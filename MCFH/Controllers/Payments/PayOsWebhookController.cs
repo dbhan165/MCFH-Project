@@ -84,15 +84,18 @@ public class PayOsWebhookController : ControllerBase
 {
     private readonly PayOsService _payOs;
     private readonly ScrapeOrderService _scrapeOrders;
+    private readonly BespokeReportService _bespoke;
     private readonly ILogger<PayOsWebhookController> _logger;
 
     public PayOsWebhookController(
         PayOsService payOs,
         ScrapeOrderService scrapeOrders,
+        BespokeReportService bespoke,
         ILogger<PayOsWebhookController> logger)
     {
         _payOs = payOs;
         _scrapeOrders = scrapeOrders;
+        _bespoke = bespoke;
         _logger = logger;
     }
 
@@ -146,6 +149,7 @@ public class PayOsWebhookController : ControllerBase
             }
 
             await _scrapeOrders.HandlePayOsWebhookAsync(data);
+            await _bespoke.HandlePayOsWebhookAsync(data);
             return Ok(new { success = true });
         }
         catch (Exception ex)

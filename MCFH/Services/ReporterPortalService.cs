@@ -30,7 +30,7 @@ public class ReporterPortalService
         return new ReporterKanbanDto
         {
             // Cần chỉnh sửa: khách mới gửi / đã giao / khách yêu cầu sửa lại
-            Pending = all.Where(r => r.Status is "pending" or "assigned" or "revision_requested").ToList(),
+            Pending = all.Where(r => r.Status is "awaiting_reporter" or "assigned" or "revision_requested").ToList(),
             // Đang xử lý: đã tải file về chỉnh
             InProgress = all.Where(r => r.Status == "in_progress").ToList(),
             // Đã gửi khách: upload xong

@@ -19,6 +19,7 @@ import type {
   BespokeCenter,
   BespokeRequestItem,
   CreateBespokePayload,
+  BespokeCheckout,
 } from '../types/project';
 import { pickField, pickNullableString, pickNumber, pickString } from '../utils/normalizeApi';
 
@@ -420,6 +421,39 @@ export const projectApi = {
     return mapBespokeRequest(response.data);
   },
 
+  /** Tạo checkout PayOS cho yêu cầu bespoke — redirect người dùng sang checkoutUrl để thanh toán. */
+  payBespokeRequest: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number
+  ): Promise<BespokeCheckout> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/pay`
+    );
+    const d = response.data;
+    const requestRaw = (pickField<Record<string, unknown>>(d, 'request', 'Request') ?? {}) as Record<string, unknown>;
+    return {
+      request: mapBespokeRequest(requestRaw),
+      orderCode: pickNumber(d, 'orderCode', 'OrderCode'),
+      paymentLinkId: pickString(d, 'paymentLinkId', 'PaymentLinkId'),
+      checkoutUrl: pickString(d, 'checkoutUrl', 'CheckoutUrl'),
+      qrCode: pickString(d, 'qrCode', 'QrCode'),
+      amount: pickNumber(d, 'amount', 'Amount'),
+    };
+  },
+
+  /** Trang return gọi hàm này — backend tự tra cứu lại PayOS, không tin query param. */
+  getBespokePaymentStatus: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.get<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/payment-status`
+    );
+    return mapBespokeRequest(response.data);
+  },
+
   assignBespokeReporter: async (
     workspaceId: number,
     projectId: number,
@@ -429,6 +463,19 @@ export const projectApi = {
     const response = await axiosClient.post<Record<string, unknown>>(
       `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/assign`,
       { reporterId }
+    );
+    return mapBespokeRequest(response.data);
+  },
+
+  sendBespokeToReporter: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number,
+    note: string
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/send-to-reporter`,
+      { note }
     );
     return mapBespokeRequest(response.data);
   },
@@ -452,27 +499,15 @@ export const projectApi = {
       `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/download`,
       { responseType: 'blob' }
     );
-    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const contentType = String(response.headers['content-type'] ?? 'application/pdf');
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `bespoke-report-${requestId}.html`);
+    link.setAttribute('download', `bespoke-report-${requestId}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-  },
-
-  requestBespokeRevision: async (
-    workspaceId: number,
-    projectId: number,
-    requestId: number,
-    feedback: string
-  ): Promise<BespokeRequestItem> => {
-    const response = await axiosClient.post<Record<string, unknown>>(
-      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/request-revision`,
-      { feedback }
-    );
-    return mapBespokeRequest(response.data);
   },
 
   uploadBespokeRevision: async (

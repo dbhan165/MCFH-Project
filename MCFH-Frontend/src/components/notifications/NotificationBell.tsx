@@ -100,6 +100,24 @@ const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellP
       navigate(`/workspace/${notification.workspaceId}/orders/${notification.relatedId}`);
       return;
     }
+
+    if (
+      (notification.type === 'bespoke_revision_request' ||
+        notification.type === 'bespoke_assigned' ||
+        notification.type === 'bespoke_ready' ||
+        notification.type === 'bespoke_delivered') &&
+      notification.relatedId
+    ) {
+      setOpen(false);
+      if (notification.type === 'bespoke_ready' || notification.type === 'bespoke_delivered') {
+        if (notification.workspaceId) {
+          navigate(`/workspace/${notification.workspaceId}/project/bespoke-reports`);
+        }
+      } else {
+        navigate(`/reporter/requests/${notification.relatedId}`);
+      }
+      return;
+    }
   };
 
   const inviteCount = notifications.filter(

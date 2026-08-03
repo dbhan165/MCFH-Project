@@ -1,10 +1,18 @@
+using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
+using MCFH.Configuration;
 using MCFH.DTOs;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
+using MCFH.Services.Payments;
+using MCFH.Services.Scraping;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using PayOS.Models.V2.PaymentRequests;
+using PayOS.Models.Webhooks;
 
 namespace MCFH.Services;
 
@@ -13,9 +21,15 @@ public class BespokeReportService
     private readonly McfhDbContext _context;
     private readonly ProjectAnalyticsService _analytics;
     private readonly IEmailService? _emailService;
+    private readonly ScrapeJobRunner? _jobRunner;
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly ProjectReportService? _reportService;
+    private readonly PayOsService? _payOs;
+    private readonly PayOsOptions _payOsOptions;
+    private readonly ILogger<BespokeReportService>? _logger;
 
-    private const decimal BasicPackagePrice = 500_000m;
-    private const decimal ProPackagePrice = 1_000_000m;
+    private const decimal BasicPackagePrice = 10_000m;
+    private const decimal ProPackagePrice = 20_000m;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -23,14 +37,32 @@ public class BespokeReportService
         WriteIndented = false
     };
 
+    /// <summary>Chặn nhiều watcher chạy song song cho cùng 1 request (poll trùng / retry).</summary>
+    private static readonly ConcurrentDictionary<int, byte> PostScrapeRunning = new();
+
+    /// <summary>Chặn nhiều thanh toán fulfill song song cho cùng 1 request (webhook + confirm chạy đè nhau).</summary>
+    private static readonly ConcurrentDictionary<int, byte> FulfillRunning = new();
+
     public BespokeReportService(
         McfhDbContext context,
         ProjectAnalyticsService analytics,
-        IEmailService? emailService = null)
+        IEmailService? emailService = null,
+        ScrapeJobRunner? jobRunner = null,
+        IServiceScopeFactory? scopeFactory = null,
+        ProjectReportService? reportService = null,
+        PayOsService? payOs = null,
+        IOptions<PayOsOptions>? payOsOptions = null,
+        ILogger<BespokeReportService>? logger = null)
     {
         _context = context;
         _analytics = analytics;
         _emailService = emailService;
+        _jobRunner = jobRunner;
+        _scopeFactory = scopeFactory;
+        _reportService = reportService;
+        _payOs = payOs;
+        _payOsOptions = payOsOptions?.Value ?? new PayOsOptions();
+        _logger = logger;
     }
 
     public async Task<BespokeCenterDto?> GetBespokeCenterAsync(int workspaceId, int projectId, int userId)
@@ -84,7 +116,7 @@ public class BespokeReportService
             DateFrom = dto.DateFrom,
             DateTo = dto.DateTo,
             Modules = dto.Modules.Count > 0 ? dto.Modules : DefaultModules(),
-            Format = dto.Format ?? "html"
+            Format = string.IsNullOrWhiteSpace(dto.Format) ? "pdf" : dto.Format
         };
 
         var request = new BespokeRequest
@@ -94,14 +126,523 @@ public class BespokeReportService
             Requirements = dto.Requirements?.Trim(),
             CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions),
             AgreedPrice = packagePrice,
-            Status = "pending",
+            Status = "pending_payment",
             Deadline = ParseDate(dto.DateTo)?.AddDays(7)
         };
 
         _context.BespokeRequests.Add(request);
         await _context.SaveChangesAsync();
 
-        request.Client = user;
+        // KHÔNG khởi động scrape ở đây — chỉ bắt đầu sau khi thanh toán được xác nhận (PayRequestAsync/webhook).
+        var reloaded = await GetProjectRequestAsync(projectId, request.RequestId);
+        if (reloaded == null) return null;
+
+        await LoadRequestNavigationsAsync(reloaded);
+        return MapRequest(reloaded, user);
+    }
+
+    /// <summary>
+    /// Tạo checkout PayOS cho yêu cầu bespoke: Payment status "pending".
+    /// Frontend redirect sang CheckoutUrl; job cào CHỈ chạy sau khi webhook/confirm xác thực đã trả tiền.
+    /// </summary>
+    public async Task<BespokeCheckoutDto?> PayRequestAsync(int workspaceId, int projectId, int userId, int requestId)
+    {
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.ClientId != userId) return null;
+        if (request.Status is not ("pending_payment")) return null;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        if (meta.WorkspaceId != workspaceId) return null;
+
+        var amount = request.AgreedPrice ?? meta.PackagePrice ?? BasicPackagePrice;
+
+        // Đã có payment success trước đó (VD: thanh toán rồi nhưng khởi động cào thất bại) —
+        // chỉ cần retry fulfill, KHÔNG tạo thêm payment mới / tính phí lại.
+        var successPayment = await _context.Payments
+            .Where(p => p.RequestId == requestId && p.Type == "bespoke" && p.Status == "success")
+            .OrderByDescending(p => p.PaymentId)
+            .FirstOrDefaultAsync();
+        if (successPayment != null)
+        {
+            await FulfillPaidBespokeAsync(request, successPayment);
+            return await BuildCheckoutDtoAsync(projectId, requestId, userId, successPayment, "", "");
+        }
+
+        if (_payOsOptions.Bypass || _payOs == null)
+            return await PayRequestBypassAsync(userId, request, meta, amount);
+
+        // Đã có checkout đang chờ → kiểm tra lại trên PayOS trước khi tạo link mới.
+        var existingPayment = await _context.Payments
+            .Where(p => p.RequestId == requestId && p.Type == "bespoke")
+            .OrderByDescending(p => p.PaymentId)
+            .FirstOrDefaultAsync(p => p.Status == "pending");
+        if (existingPayment?.OrderCode != null)
+        {
+            var link = await _payOs.GetPaymentLinkAsync(existingPayment.OrderCode.Value);
+            if (link?.Status == PaymentLinkStatus.Paid)
+            {
+                // Người dùng đã trả nhưng webhook chưa tới — hoàn tất luôn.
+                await FulfillPaidBespokeAsync(request, existingPayment);
+                return await BuildCheckoutDtoAsync(projectId, requestId, userId, existingPayment, existingPayment.CheckoutUrl ?? "", "");
+            }
+            if (link?.Status == PaymentLinkStatus.Pending && !string.IsNullOrEmpty(existingPayment.CheckoutUrl))
+                return await BuildCheckoutDtoAsync(projectId, requestId, userId, existingPayment, existingPayment.CheckoutUrl, "");
+            // Không tra cứu được PayOS (null) → giữ link cũ nếu còn checkoutUrl, tránh tạo link trùng.
+            if (link == null && !string.IsNullOrEmpty(existingPayment.CheckoutUrl))
+            {
+                _logger?.LogWarning(
+                    "Không tra cứu được PayOS orderCode {OrderCode} — tái sử dụng checkoutUrl hiện có (bespoke #{RequestId}).",
+                    existingPayment.OrderCode, requestId);
+                return await BuildCheckoutDtoAsync(projectId, requestId, userId, existingPayment, existingPayment.CheckoutUrl, "");
+            }
+            // Link cũ hết hạn / bị hủy → đánh dấu failed rồi tạo link mới bên dưới.
+            if (link?.Status is PaymentLinkStatus.Cancelled or PaymentLinkStatus.Expired or PaymentLinkStatus.Failed)
+            {
+                existingPayment.Status = "failed";
+                await _context.SaveChangesAsync();
+            }
+            else if (!string.IsNullOrEmpty(existingPayment.CheckoutUrl))
+            {
+                return await BuildCheckoutDtoAsync(projectId, requestId, userId, existingPayment, existingPayment.CheckoutUrl, "");
+            }
+        }
+
+        var now = DateTime.Now;
+        // orderCode PayOS phải là số duy nhất — unix ms + 2 số ngẫu nhiên, vẫn dưới ngưỡng MAX_SAFE_INTEGER.
+        var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 100 + Random.Shared.Next(100);
+        var description = $"BESPOKE#{requestId}"; // PayOS giới hạn mô tả 25 ký tự
+
+        var link2 = await _payOs.CreatePaymentLinkAsync(
+            orderCode,
+            (long)amount,
+            description,
+            _payOs.BuildBespokeReturnUrl(requestId, workspaceId, projectId),
+            _payOs.BuildBespokeCancelUrl(requestId, workspaceId, projectId));
+
+        var payment = new Payment
+        {
+            TransactionRef = $"PAYOS-{orderCode}",
+            Amount = amount,
+            Status = "pending",
+            Type = "bespoke",
+            RequestId = requestId,
+            CreatedBy = userId,
+            CreatedAt = now,
+            OrderCode = orderCode,
+            PaymentLinkId = link2.PaymentLinkId,
+            CheckoutUrl = link2.CheckoutUrl
+        };
+        _context.Payments.Add(payment);
+        await _context.SaveChangesAsync();
+
+        return await BuildCheckoutDtoAsync(projectId, requestId, userId, payment, link2.CheckoutUrl, link2.QrCode);
+    }
+
+    /// <summary>Local bypass: tạo payment success + fulfill (bắt đầu cào) — không gọi PayOS.</summary>
+    private async Task<BespokeCheckoutDto?> PayRequestBypassAsync(
+        int userId, BespokeRequest request, BespokeMeta meta, decimal amount)
+    {
+        var now = DateTime.Now;
+        var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 100 + Random.Shared.Next(100);
+
+        var payment = new Payment
+        {
+            TransactionRef = $"BYPASS-{orderCode}",
+            Amount = amount,
+            Status = "pending",
+            Type = "bespoke",
+            RequestId = request.RequestId,
+            CreatedBy = userId,
+            CreatedAt = now,
+            OrderCode = orderCode,
+            PaymentLinkId = "local-bypass",
+            CheckoutUrl = null
+        };
+        _context.Payments.Add(payment);
+        await _context.SaveChangesAsync();
+
+        _logger?.LogWarning(
+            "PayOS Bypass bật: bespoke request {RequestId} được đánh dấu đã thanh toán (local only).",
+            request.RequestId);
+
+        await FulfillPaidBespokeAsync(request, payment);
+        return await BuildCheckoutDtoAsync(meta.ProjectId, request.RequestId, userId, payment, "", "");
+    }
+
+    private async Task<BespokeCheckoutDto?> BuildCheckoutDtoAsync(
+        int projectId, int requestId, int userId, Payment payment, string checkoutUrl, string qrCode)
+    {
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null) return null;
+        await LoadRequestNavigationsAsync(request);
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return null;
+
+        return new BespokeCheckoutDto
+        {
+            Request = MapRequest(request, user),
+            OrderCode = payment.OrderCode ?? 0,
+            PaymentLinkId = payment.PaymentLinkId ?? "",
+            CheckoutUrl = checkoutUrl,
+            QrCode = qrCode,
+            Amount = payment.Amount
+        };
+    }
+
+    /// <summary>
+    /// Xử lý webhook PayOS ĐÃ verify chữ ký: đối soát payment theo orderCode, kiểm tra số tiền,
+    /// hoàn tất yêu cầu idempotent (đã xử lý rồi thì no-op). No-op nếu payment không phải type "bespoke".
+    /// </summary>
+    public async Task HandlePayOsWebhookAsync(WebhookData data)
+    {
+        if (data.Code != "00")
+        {
+            _logger?.LogInformation("Webhook PayOS orderCode {OrderCode} không thành công (code {Code}) — bỏ qua (bespoke).", data.OrderCode, data.Code);
+            return;
+        }
+
+        var payment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.OrderCode == data.OrderCode && p.Type == "bespoke");
+        if (payment == null)
+        {
+            // Webhook test khi đăng ký URL (orderCode 123) hoặc payment của luồng khác (scrape_order) — no-op.
+            return;
+        }
+
+        if (data.Amount != (long)payment.Amount)
+        {
+            _logger?.LogError(
+                "Webhook PayOS orderCode {OrderCode}: số tiền không khớp (webhook {WebhookAmount} ≠ payment {PaymentAmount}) — KHÔNG kích hoạt bespoke.",
+                data.OrderCode, data.Amount, payment.Amount);
+            return;
+        }
+
+        if (payment.RequestId == null)
+        {
+            _logger?.LogWarning("Webhook PayOS orderCode {OrderCode}: payment {PaymentId} không có RequestId gắn kèm.", data.OrderCode, payment.PaymentId);
+            return;
+        }
+
+        var request = await _context.BespokeRequests.FirstOrDefaultAsync(r => r.RequestId == payment.RequestId);
+        if (request == null)
+        {
+            _logger?.LogWarning("Webhook PayOS orderCode {OrderCode}: không tìm thấy bespoke request {RequestId}.", data.OrderCode, payment.RequestId);
+            return;
+        }
+
+        if (payment.Amount != (request.AgreedPrice ?? 0))
+        {
+            _logger?.LogError(
+                "Webhook PayOS orderCode {OrderCode}: payment.Amount {PaymentAmount} ≠ request.AgreedPrice {AgreedPrice} — KHÔNG kích hoạt bespoke.",
+                data.OrderCode, payment.Amount, request.AgreedPrice);
+            return;
+        }
+
+        await FulfillPaidBespokeAsync(request, payment);
+    }
+
+    /// <summary>
+    /// Confirm cho trang return: KHÔNG tin query param — tra cứu lại PayOS / DB.
+    /// Nếu PayOS báo đã trả → hoàn tất yêu cầu (idempotent với webhook). Nếu hủy/hết hạn → giữ pending_payment để thanh toán lại.
+    /// </summary>
+    public async Task<BespokeRequestItemDto?> ConfirmPaymentAsync(int workspaceId, int projectId, int userId, int requestId)
+    {
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.ClientId != userId) return null;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        if (meta.WorkspaceId != workspaceId) return null;
+
+        if (request.Status == "pending_payment")
+        {
+            // Đã thu tiền trước đó nhưng khởi động cào thất bại (VD: backend bận) — thử lại khi user poll.
+            var successPayment = await _context.Payments
+                .Where(p => p.RequestId == requestId && p.Type == "bespoke" && p.Status == "success")
+                .OrderByDescending(p => p.PaymentId)
+                .FirstOrDefaultAsync();
+            if (successPayment != null)
+            {
+                await FulfillPaidBespokeAsync(request, successPayment);
+            }
+            else
+            {
+                var payment = await _context.Payments
+                    .Where(p => p.RequestId == requestId && p.Type == "bespoke")
+                    .OrderByDescending(p => p.PaymentId)
+                    .FirstOrDefaultAsync(p => p.Status == "pending");
+                if (payment?.OrderCode != null && _payOs != null)
+                {
+                    var link = await _payOs.GetPaymentLinkAsync(payment.OrderCode.Value);
+                    if (link?.Status == PaymentLinkStatus.Paid)
+                    {
+                        if (link.AmountPaid == (long)payment.Amount && payment.Amount == (request.AgreedPrice ?? 0))
+                            await FulfillPaidBespokeAsync(request, payment);
+                        else
+                            _logger?.LogError(
+                                "PayOS orderCode {OrderCode}: số tiền không khớp (AmountPaid {AmountPaid}, payment {PaymentAmount}, agreed {AgreedPrice}) — không kích hoạt bespoke.",
+                                payment.OrderCode, link.AmountPaid, payment.Amount, request.AgreedPrice);
+                    }
+                    else if (link?.Status is PaymentLinkStatus.Cancelled or PaymentLinkStatus.Expired or PaymentLinkStatus.Failed)
+                    {
+                        payment.Status = "failed";
+                        await _context.SaveChangesAsync();
+                        // Giữ nguyên "pending_payment" để khách bấm thanh toán lại.
+                    }
+                }
+            }
+        }
+
+        var reloaded = await GetProjectRequestAsync(projectId, requestId);
+        if (reloaded == null) return null;
+        await LoadRequestNavigationsAsync(reloaded);
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return null;
+        return MapRequest(reloaded, user);
+    }
+
+    /// <summary>Trạng thái từ "gathering_data" trở đi — nghĩa là cào đã được khởi động cho yêu cầu này.</summary>
+    private static readonly HashSet<string> ScrapeStartedStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "gathering_data", "report_ready", "awaiting_reporter", "assigned",
+        "in_progress", "completed", "revision_requested"
+    };
+
+    /// <summary>
+    /// Idempotent: nếu đã success + đã khởi động cào rồi → no-op. Ngược lại đánh dấu payment success
+    /// rồi khởi động job cào. Gọi lặp lại an toàn (webhook retry / confirm poll / pay retry).
+    /// </summary>
+    private async Task FulfillPaidBespokeAsync(BespokeRequest request, Payment payment)
+    {
+        if (!FulfillRunning.TryAdd(request.RequestId, 0))
+            return;
+
+        try
+        {
+            var reloaded = await _context.BespokeRequests.FirstOrDefaultAsync(r => r.RequestId == request.RequestId);
+            if (reloaded == null) return;
+
+            var alreadyStarted = reloaded.Status != null && ScrapeStartedStatuses.Contains(reloaded.Status);
+            if (payment.Status == "success" && alreadyStarted)
+                return; // đã xử lý xong (webhook + confirm chạy trùng) — no-op
+
+            if (payment.Status != "success")
+            {
+                payment.Status = "success";
+                payment.PaidAt = DateTime.Now;
+                await _context.SaveChangesAsync();
+            }
+
+            if (!alreadyStarted && _jobRunner != null && _scopeFactory != null)
+            {
+                var meta = ParseMeta(reloaded.CustomMetrics);
+                await StartScrapeForRequestAsync(reloaded.RequestId, meta, reloaded.ClientId);
+            }
+        }
+        finally
+        {
+            FulfillRunning.TryRemove(request.RequestId, out _);
+        }
+    }
+
+    /// <summary>
+    /// Khởi động job cào theo keyword của đơn bespoke. An toàn cho đồng đội:
+    /// KHÔNG xoá mềm ScrapedFeedbacks hiện có (chỉ đổi SearchQuery tạm thời rồi khôi phục sau).
+    /// </summary>
+    private async Task StartScrapeForRequestAsync(int requestId, BespokeMeta meta, int userId)
+    {
+        if (_jobRunner == null || _scopeFactory == null) return;
+
+        var project = await _context.Projects.FindAsync(meta.ProjectId);
+        if (project == null) return;
+
+        // Đánh dấu mốc thời gian bắt đầu cào (cùng đồng hồ với ScrapedAt của feedbacks) —
+        // dùng để lọc report chỉ lấy dữ liệu của lượt cào NÀY, tránh trộn mentions cũ (VD "iphone 13" khi khách tìm "iphone 8").
+        meta.ScrapeStartedAt = DateTime.Now;
+
+        meta.PreviousSearchQuery = project.SearchQuery;
+        if (!string.IsNullOrWhiteSpace(meta.Keyword))
+            project.SearchQuery = meta.Keyword.Trim();
+
+        var request = await _context.BespokeRequests.FindAsync(requestId);
+        if (request == null) return;
+        request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
+
+        // Lưu SearchQuery tạm thời + PreviousSearchQuery TRƯỚC khi gọi StartAsync,
+        // để không mất dấu vết nếu backend crash giữa chừng.
+        await _context.SaveChangesAsync();
+
+        var jobId = await _jobRunner.StartAsync(meta.ProjectId, userId, ComputePostedSinceDays(meta));
+        if (jobId == null)
+        {
+            await RestoreProjectSearchQueryAsync(meta);
+            return;
+        }
+
+        meta.ScrapeJobId = jobId;
+        request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
+        request.Status = "gathering_data";
+        await _context.SaveChangesAsync();
+
+        _ = WatchScrapeThenExportAsync(requestId, jobId, userId);
+    }
+
+    /// <summary>Khôi phục SearchQuery cũ của project — CHỈ khi chưa bị đồng đội đổi tay trong lúc chờ cào.</summary>
+    private async Task RestoreProjectSearchQueryAsync(BespokeMeta meta)
+    {
+        var project = await _context.Projects.FindAsync(meta.ProjectId);
+        if (project == null) return;
+
+        var bespokeKeyword = meta.Keyword?.Trim();
+        if (!string.IsNullOrEmpty(bespokeKeyword) &&
+            string.Equals(project.SearchQuery, bespokeKeyword, StringComparison.Ordinal))
+        {
+            project.SearchQuery = meta.PreviousSearchQuery;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public async Task RestoreSearchQueryAfterBespokeAsync(int requestId)
+    {
+        var request = await _context.BespokeRequests.FindAsync(requestId);
+        if (request == null) return;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        if (meta.ProjectId <= 0) return;
+
+        await RestoreProjectSearchQueryAsync(meta);
+    }
+
+    /// <summary>Theo dõi job cào nền, khi xong (hoặc timeout) sẽ tự xuất báo cáo hệ thống.</summary>
+    private async Task WatchScrapeThenExportAsync(int requestId, string jobId, int userId)
+    {
+        if (_scopeFactory == null || _jobRunner == null) return;
+        if (!PostScrapeRunning.TryAdd(requestId, 0)) return;
+
+        try
+        {
+            const int maxIterations = 180; // ~30 phút (poll mỗi 10s)
+            for (var i = 0; i < maxIterations; i++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10));
+
+                var job = _jobRunner.GetJob(jobId, userId);
+                if (job == null || job.Status is "completed" or "failed" or "cancelled")
+                {
+                    await FinalizeBespokeReportAsync(_scopeFactory, requestId);
+                    return;
+                }
+            }
+
+            // Hết thời gian chờ — vẫn cố xuất báo cáo với dữ liệu đã cào được đến hiện tại.
+            await FinalizeBespokeReportAsync(_scopeFactory, requestId);
+        }
+        catch
+        {
+            // Không để lỗi tác vụ nền làm crash tiến trình — trạng thái vẫn được dọn ở finally.
+        }
+        finally
+        {
+            PostScrapeRunning.TryRemove(requestId, out _);
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<BespokeReportService>();
+                await svc.RestoreSearchQueryAfterBespokeAsync(requestId);
+            }
+            catch
+            {
+                // best-effort — không chặn luồng nếu khôi phục SearchQuery lỗi
+            }
+        }
+    }
+
+    /// <summary>Chạy trong scope riêng (tác vụ nền) — hoàn tất phân tích AI + xuất báo cáo hệ thống.</summary>
+    private static async Task FinalizeBespokeReportAsync(IServiceScopeFactory scopeFactory, int requestId)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
+
+        var request = await db.BespokeRequests
+            .Include(r => r.BespokeReports)
+            .FirstOrDefaultAsync(r => r.RequestId == requestId);
+        if (request == null) return;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        if (meta.ProjectId <= 0 || meta.WorkspaceId <= 0) return;
+
+        try
+        {
+            var hasPending = await db.ScrapedFeedbacks
+                .AnyAsync(f => f.ProjectId == meta.ProjectId && f.IsDeleted != true && f.AiAnalysis == null);
+            if (hasPending)
+            {
+                var analyze = scope.ServiceProvider.GetRequiredService<AiAnalysisService>();
+                await analyze.AnalyzePendingFeedbacksAsync(meta.ProjectId, false);
+            }
+        }
+        catch
+        {
+            // AI lỗi vẫn tiếp tục xuất báo cáo với sentiment hiện có.
+        }
+
+        try
+        {
+            var bespoke = scope.ServiceProvider.GetRequiredService<BespokeReportService>();
+            await bespoke.EnsureSystemDraftPublicAsync(meta.WorkspaceId, meta.ProjectId, request.ClientId, requestId);
+            await bespoke.RestoreSearchQueryAfterBespokeAsync(requestId);
+        }
+        catch
+        {
+            // Không chặn việc chuyển trạng thái report_ready nếu build PDF lỗi.
+        }
+
+        request.Status = "report_ready";
+        request.ReporterId = null;
+        await db.SaveChangesAsync();
+
+        try
+        {
+            var notify = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            await notify.NotifyAsync(
+                request.ClientId,
+                "Báo cáo chuyên sâu đã sẵn sàng",
+                $"Báo cáo «{request.Title}» đã được tổng hợp xong từ dữ liệu vừa cào. Vào trang Bespoke để xem.",
+                "bespoke_ready",
+                "bespoke_request",
+                requestId,
+                meta.ProjectId);
+        }
+        catch
+        {
+            // không chặn luồng nếu notify lỗi
+        }
+    }
+
+    /// <summary>Khách gửi báo cáo hệ thống (report_ready) cho Reporter chỉnh tay, kèm ghi chú cần sửa.</summary>
+    public async Task<BespokeRequestItemDto?> SendToReporterAsync(
+        int workspaceId, int projectId, int userId, int requestId, SendBespokeToReporterDto dto)
+    {
+        var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+        if (user == null || IsAdmin(user) || IsReporter(user)) return null;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null || request.ClientId != userId) return null;
+        if (!string.Equals(request.Status, "report_ready", StringComparison.OrdinalIgnoreCase)) return null;
+        if (request.BespokeReports.Count == 0) return null;
+        if (string.IsNullOrWhiteSpace(dto.Note)) return null;
+
+        var meta = ParseMeta(request.CustomMetrics);
+        meta.RevisionFeedback = dto.Note.Trim();
+        request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
+        request.Status = "awaiting_reporter";
+        request.ReporterId = null;
+        await _context.SaveChangesAsync();
+
+        await NotifyReportersAwaitingAsync(request, meta.ProjectId, dto.Note.Trim());
+
+        await LoadRequestNavigationsAsync(request);
         return MapRequest(request, user);
     }
 
@@ -112,7 +653,8 @@ public class BespokeReportService
         if (admin == null || !IsAdmin(admin)) return null;
 
         var request = await GetProjectRequestAsync(projectId, requestId);
-        if (request == null || request.Status != "pending") return null;
+        if (request == null || !string.Equals(request.Status, "awaiting_reporter", StringComparison.OrdinalIgnoreCase))
+            return null;
 
         var reporter = await _context.Users
             .FirstOrDefaultAsync(u => u.UserId == reporterId && u.SystemRole == "Reporter");
@@ -124,8 +666,10 @@ public class BespokeReportService
         request.Status = "assigned";
         await _context.SaveChangesAsync();
 
-        // Tạo bản nháp hệ thống để Reporter tải về chỉnh — chưa gửi khách
+        // Đảm bảo Reporter có sẵn bản nháp hệ thống mới nhất để tải về chỉnh.
         await EnsureSystemDraftAsync(workspaceId, projectId, adminUserId, requestId);
+
+        await NotifyReporterAssignedAsync(request, projectId, reporterId);
 
         await _context.Entry(request).Reference(r => r.Reporter).LoadAsync();
         await _context.Entry(request).Reference(r => r.Client).LoadAsync();
@@ -158,29 +702,13 @@ public class BespokeReportService
 
         var request = await GetProjectRequestAsync(projectId, requestId);
         if (request == null || !CanWorkOnRequest(user, request)) return null;
-        // Cho phép nộp lần đầu (assigned/in_progress) hoặc hệ thống auto-deliver sau assign
         var status = request.Status?.ToLowerInvariant();
         if (status is not ("assigned" or "in_progress")) return null;
+        if (_reportService == null) return null;
 
-        var meta = ParseMeta(request.CustomMetrics);
-        var html = await BuildDeepReportHtmlAsync(workspaceId, projectId, userId, request, meta);
-
-        var folder = GetBespokeFolder(requestId);
-        Directory.CreateDirectory(folder);
-        var fileName = $"bespoke-{requestId}.html";
-        var filePath = Path.Combine(folder, fileName);
-        await File.WriteAllTextAsync(filePath, html, Encoding.UTF8);
-
-        var relativePath = Path.Combine("StorageData", "bespoke", requestId.ToString(), fileName);
         var version = $"v{(request.BespokeReports.Count + 1):D2}";
-
-        _context.BespokeReports.Add(new BespokeReport
-        {
-            RequestId = requestId,
-            FileUrl = relativePath,
-            Version = version,
-            UploadedAt = DateTime.Now
-        });
+        var ok = await SaveAnalyticsPdfDraftAsync(workspaceId, projectId, userId, requestId, request, version, "bespoke");
+        if (!ok) return null;
 
         request.Status = "completed";
         request.SubmittedAt = DateTime.Now;
@@ -205,10 +733,19 @@ public class BespokeReportService
             if (member == null) return null;
         }
 
-        var report = await _context.BespokeReports
-            .Where(r => r.RequestId == requestId)
-            .OrderByDescending(r => r.UploadedAt)
-            .FirstOrDefaultAsync();
+        var report = request.BespokeReports.OrderByDescending(r => r.UploadedAt).FirstOrDefault();
+        var isSystemDraft = report?.Version != null && report.Version.Contains("draft", StringComparison.OrdinalIgnoreCase);
+        var needsRegenerate = report == null
+            || isSystemDraft // luôn rebuild bản nháp hệ thống khi tải — áp dụng filter keyword/scrape mới nhất, không cần cào lại
+            || !string.Equals(Path.GetExtension(report.FileUrl), ".pdf", StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(ResolveFilePath(report.FileUrl));
+
+        if (needsRegenerate && _reportService != null)
+        {
+            await EnsureSystemDraftAsync(workspaceId, projectId, userId, requestId);
+            request = await GetProjectRequestAsync(projectId, requestId);
+            report = request?.BespokeReports.OrderByDescending(r => r.UploadedAt).FirstOrDefault();
+        }
 
         if (report == null) return null;
 
@@ -247,13 +784,14 @@ public class BespokeReportService
         if (user == null) return null;
 
         var request = await GetProjectRequestAsync(projectId, requestId);
-        if (request == null || request.Status is not ("revision_requested" or "assigned" or "in_progress" or "pending")) return null;
+        if (request == null || request.Status is not ("revision_requested" or "assigned" or "in_progress" or "awaiting_reporter"))
+            return null;
         if (!CanWorkOnRequest(user, request))
         {
-            // Cho phép Reporter nhận đơn pending chưa giao rồi upload
+            // Cho phép Reporter nhận đơn awaiting_reporter chưa giao rồi upload luôn.
             if (!(IsReporter(user)
                 && request.ReporterId == null
-                && string.Equals(request.Status, "pending", StringComparison.OrdinalIgnoreCase)))
+                && string.Equals(request.Status, "awaiting_reporter", StringComparison.OrdinalIgnoreCase)))
                 return null;
 
             request.ReporterId = userId;
@@ -291,30 +829,78 @@ public class BespokeReportService
         return MapRequest(request, user);
     }
 
-    /// <summary>Tạo file báo cáo hệ thống (từ data đã cào) nhưng giữ status — chưa gửi khách.</summary>
+    /// <summary>Đảm bảo có bản nháp hệ thống mới nhất — xoá bản nháp cũ, giữ nguyên file Reporter đã upload.</summary>
     private async Task EnsureSystemDraftAsync(int workspaceId, int projectId, int userId, int requestId)
     {
-        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (_reportService == null) return;
+
+        var request = await _context.BespokeRequests
+            .Include(r => r.BespokeReports)
+            .FirstOrDefaultAsync(r => r.RequestId == requestId);
         if (request == null) return;
-        if (request.BespokeReports.Count > 0) return;
+
+        var totalBefore = request.BespokeReports.Count;
+        var draftReports = request.BespokeReports
+            .Where(r => r.Version != null && r.Version.Contains("draft", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var draft in draftReports)
+        {
+            DeleteDeliverableFile(draft.FileUrl);
+            _context.BespokeReports.Remove(draft);
+        }
+        if (draftReports.Count > 0)
+            await _context.SaveChangesAsync();
+
+        var remaining = totalBefore - draftReports.Count;
+        if (remaining > 0) return; // Reporter đã upload bản riêng — không ghi đè bằng bản nháp hệ thống.
+
+        await SaveAnalyticsPdfDraftAsync(workspaceId, projectId, userId, requestId, request, "v01-draft", "system-draft");
+    }
+
+    public Task EnsureSystemDraftPublicAsync(int workspaceId, int projectId, int userId, int requestId) =>
+        EnsureSystemDraftAsync(workspaceId, projectId, userId, requestId);
+
+    /// <summary>
+    /// Render PDF analytics (không đụng Reports index của project) rồi lưu làm 1 bản BESPOKE_REPORTS.
+    /// </summary>
+    private async Task<bool> SaveAnalyticsPdfDraftAsync(
+        int workspaceId, int projectId, int userId, int requestId,
+        BespokeRequest request, string version, string fileNamePrefix)
+    {
+        if (_reportService == null) return false;
 
         var meta = ParseMeta(request.CustomMetrics);
-        var html = await BuildDeepReportHtmlAsync(workspaceId, projectId, userId, request, meta);
+        var displayName = $"{request.Title} ({meta.Keyword})";
+
+        // Lọc report theo từ khoá + mốc bắt đầu cào của đơn bespoke NÀY — tránh trộn mentions cũ
+        // của các lượt cào/scrape trước đó vào cùng project (đồng đội không cho soft-delete feedback cũ).
+        var filter = new MentionQueryDto
+        {
+            Search = meta.Keyword,
+            DateFrom = meta.ScrapeStartedAt,
+            ExcludeMuted = true
+        };
+        var rendered = await _reportService.RenderAnalyticsPdfAsync(workspaceId, projectId, userId, displayName, filter);
+        if (rendered == null) return false;
 
         var folder = GetBespokeFolder(requestId);
         Directory.CreateDirectory(folder);
-        var fileName = $"system-draft-{requestId}.html";
+        var fileName = $"{fileNamePrefix}-{requestId}.pdf";
         var filePath = Path.Combine(folder, fileName);
-        await File.WriteAllTextAsync(filePath, html, Encoding.UTF8);
+        await File.WriteAllBytesAsync(filePath, rendered.Value.Content);
+
+        var relativePath = Path.Combine("StorageData", "bespoke", requestId.ToString(), fileName);
 
         _context.BespokeReports.Add(new BespokeReport
         {
             RequestId = requestId,
-            FileUrl = Path.Combine("StorageData", "bespoke", requestId.ToString(), fileName),
-            Version = "v01-draft",
+            FileUrl = relativePath,
+            Version = version,
             UploadedAt = DateTime.Now
         });
         await _context.SaveChangesAsync();
+        return true;
     }
 
     private async Task NotifyClientReportReadyAsync(BespokeRequest request, int projectId)
@@ -359,175 +945,60 @@ public class BespokeReportService
         }
     }
 
-    private async Task<string> BuildDeepReportHtmlAsync(
-        int workspaceId, int projectId, int userId, BespokeRequest request, BespokeMeta meta)
+    /// <summary>Khách gửi yêu cầu chỉnh sửa → báo tất cả Reporter.</summary>
+    private async Task NotifyReportersAwaitingAsync(BespokeRequest request, int projectId, string note)
     {
-        var project = await _context.Projects.FindAsync(projectId);
-        var modules = meta.Modules.Count > 0 ? meta.Modules : DefaultModules();
-
-        var overview = modules.Contains("overview")
-            ? await _analytics.GetOverviewAsync(workspaceId, projectId, userId) : null;
-        var sentiment = modules.Contains("sentiment")
-            ? await _analytics.GetSentimentSummaryAsync(workspaceId, projectId, userId) : null;
-        var channels = modules.Contains("channel")
-            ? await _analytics.GetChannelComparisonAsync(workspaceId, projectId, userId) : null;
-        var influencers = modules.Contains("influencers")
-            ? await _analytics.GetInfluencersAsync(workspaceId, projectId, userId) : null;
-        var aspects = modules.Contains("aspects")
-            ? await _analytics.GetAspectAnalysisAsync(workspaceId, projectId, userId) : null;
-
-        var mentions = modules.Contains("top_mentions")
-            ? await _analytics.GetMentionsAsync(workspaceId, projectId, userId) : null;
-
-        if (meta.DateFrom != null || meta.DateTo != null)
-            mentions = FilterMentionsByDate(mentions, meta.DateFrom, meta.DateTo);
-
-        var generated = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("vi-VN"));
-        var sb = new StringBuilder();
-
-        sb.AppendLine("<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\"/>");
-        sb.AppendLine($"<title>Báo cáo chuyên sâu — {Esc(project?.Name)}</title>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body{font-family:Georgia,'Segoe UI',serif;background:#fff;color:#111;margin:0;padding:0;line-height:1.6;}");
-        sb.AppendLine(".cover{min-height:100vh;background:linear-gradient(135deg,#0A101D,#151B2B);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:60px;page-break-after:always;}");
-        sb.AppendLine(".cover h1{font-size:2.5rem;color:#FF7575;margin:0 0 12px;} .cover .sub{color:#94a3b8;font-size:1.1rem;}");
-        sb.AppendLine(".section{padding:48px 60px;page-break-inside:avoid;} h2{color:#0A101D;border-bottom:3px solid #FF7575;padding-bottom:8px;}");
-        sb.AppendLine(".exec{background:#f8fafc;border-left:4px solid #00B4D8;padding:20px 24px;margin:24px 0;border-radius:0 8px 8px 0;}");
-        sb.AppendLine(".req{background:#fef3c7;border-left:4px solid #EAB308;padding:16px 20px;margin:16px 0;}");
-        sb.AppendLine("table{width:100%;border-collapse:collapse;margin:16px 0;} th,td{border:1px solid #e5e7eb;padding:10px;text-align:left;font-size:14px;}");
-        sb.AppendLine("th{background:#f3f4f6;} .meta{color:#6b7280;font-size:13px;}");
-        sb.AppendLine("@media print{.cover{min-height:auto;padding:40px;}}</style></head><body>");
-
-        sb.AppendLine("<div class=\"cover\">");
-        sb.AppendLine("<p class=\"sub\">MCFH — Báo cáo chuyên sâu (Bespoke)</p>");
-        sb.AppendLine($"<h1>{Esc(request.Title)}</h1>");
-        sb.AppendLine($"<p class=\"sub\">Dự án: {Esc(project?.Name)}</p>");
-        if (!string.IsNullOrWhiteSpace(meta.DateFrom) || !string.IsNullOrWhiteSpace(meta.DateTo))
-            sb.AppendLine($"<p class=\"sub\">Giai đoạn: {Esc(meta.DateFrom ?? "—")} → {Esc(meta.DateTo ?? "—")}</p>");
-        sb.AppendLine($"<p class=\"sub\">Hoàn thành: {generated}</p>");
-        sb.AppendLine("</div>");
-
-        sb.AppendLine("<div class=\"section\">");
-        sb.AppendLine("<h2>Tóm tắt điều hành</h2>");
-        sb.AppendLine("<div class=\"exec\">");
-        sb.AppendLine(BuildExecutiveSummary(overview, sentiment, channels));
-        sb.AppendLine("</div>");
-
-        if (!string.IsNullOrWhiteSpace(request.Requirements))
+        try
         {
-            sb.AppendLine("<h2>Yêu cầu khách hàng</h2>");
-            sb.AppendLine($"<div class=\"req\">{Esc(request.Requirements).Replace("\n", "<br/>")}</div>");
-        }
-        sb.AppendLine("</div>");
+            var recipientIds = await _context.Users
+                .Where(u => u.SystemRole == "Reporter")
+                .Select(u => u.UserId)
+                .ToListAsync();
 
-        if (overview != null)
-        {
-            sb.AppendLine("<div class=\"section\"><h2>Tổng quan dữ liệu</h2><table>");
-            sb.AppendLine($"<tr><td>Tổng mentions</td><td><strong>{overview.TotalMentions}</strong></td></tr>");
-            sb.AppendLine($"<tr><td>Tổng bình luận</td><td><strong>{overview.TotalComments}</strong></td></tr>");
-            sb.AppendLine($"<tr><td>NSR Score</td><td><strong>{overview.NsrScore:+#.#;-#.#;0}%</strong></td></tr>");
-            sb.AppendLine($"<tr><td>Đã phân tích AI</td><td>{overview.AnalyzedCount} / {overview.TotalMentions}</td></tr>");
-            sb.AppendLine("</table></div>");
-        }
+            if (recipientIds.Count == 0) return;
 
-        if (sentiment != null)
-        {
-            sb.AppendLine("<div class=\"section\"><h2>Phân tích cảm xúc</h2><table>");
-            sb.AppendLine($"<tr><th>Loại</th><th>Số lượng</th><th>Tỷ lệ</th></tr>");
-            sb.AppendLine($"<tr><td>Tích cực</td><td>{sentiment.Positive}</td><td>{sentiment.PositivePercent}%</td></tr>");
-            sb.AppendLine($"<tr><td>Tiêu cực</td><td>{sentiment.Negative}</td><td>{sentiment.NegativePercent}%</td></tr>");
-            sb.AppendLine($"<tr><td>Trung lập</td><td>{sentiment.Neutral}</td><td>{sentiment.NeutralPercent}%</td></tr>");
-            sb.AppendLine("</table>");
-            sb.AppendLine($"<p class=\"meta\">Đánh giá: Cộng đồng chủ yếu {(sentiment.NsrScore >= 0 ? "thái độ tích cực" : "có dấu hiệu tiêu cực")} (NSR {sentiment.NsrScore:+#.#;-#.#;0}%).</p></div>");
-        }
+            var notePreview = note.Length > 120 ? note[..120] + "…" : note;
+            var title = "Khách gửi báo cáo cần chỉnh sửa";
+            var body = $"«{request.Title}»: {notePreview}";
+            var notify = new NotificationService(_context);
 
-        if (channels?.Channels.Count > 0)
-        {
-            sb.AppendLine("<div class=\"section\"><h2>So sánh kênh</h2><table><tr><th>Kênh</th><th>Mentions</th><th>SOV</th><th>NSR</th></tr>");
-            foreach (var ch in channels.Channels)
-                sb.AppendLine($"<tr><td>{Esc(ch.Label)}</td><td>{ch.Mentions}</td><td>{ch.MentionShare}%</td><td>{ch.NsrScore}%</td></tr>");
-            sb.AppendLine("</table></div>");
-        }
-
-        if (influencers?.Influencers.Count > 0)
-        {
-            sb.AppendLine("<div class=\"section\"><h2>KOLs & Influencers</h2><table><tr><th>Tên</th><th>Nền tảng</th><th>SOV</th><th>Sentiment</th></tr>");
-            foreach (var k in influencers.Influencers.Take(15))
-                sb.AppendLine($"<tr><td>{Esc(k.Name)}</td><td>{Esc(k.Platform)}</td><td>{k.ShareOfVoice}%</td><td>{Esc(k.DominantSentiment)}</td></tr>");
-            sb.AppendLine("</table></div>");
-        }
-
-        if (aspects?.Aspects.Count > 0)
-        {
-            sb.AppendLine("<div class=\"section\"><h2>Phân tích khía cạnh</h2><table><tr><th>Khía cạnh</th><th>Tích cực</th><th>Tiêu cực</th></tr>");
-            foreach (var a in aspects.Aspects)
-                sb.AppendLine($"<tr><td>{Esc(a.Label)}</td><td>{a.PositivePercent}%</td><td>{a.NegativePercent}%</td></tr>");
-            sb.AppendLine("</table></div>");
-        }
-
-        if (mentions?.Count > 0)
-        {
-            sb.AppendLine("<div class=\"section\"><h2>Mentions tiêu biểu</h2><table><tr><th>Nền tảng</th><th>Nội dung</th><th>Sentiment</th></tr>");
-            foreach (var m in mentions.Take(20))
+            foreach (var userId in recipientIds)
             {
-                var preview = m.Content.Length > 120 ? m.Content[..120] + "…" : m.Content;
-                sb.AppendLine($"<tr><td>{Esc(m.Platform)}</td><td>{Esc(preview)}</td><td>{Esc(m.Sentiment)}</td></tr>");
+                await notify.NotifyAsync(
+                    userId,
+                    title,
+                    body,
+                    "bespoke_revision_request",
+                    "bespoke_request",
+                    request.RequestId,
+                    projectId);
             }
-            sb.AppendLine("</table></div>");
         }
-
-        sb.AppendLine("<div class=\"section\"><h2>Khuyến nghị</h2><ul>");
-        sb.AppendLine(BuildRecommendations(sentiment, channels, aspects));
-        sb.AppendLine("</ul><p class=\"meta\">Báo cáo do Reporter MCFH biên soạn dựa trên dữ liệu scraping + AI sentiment.</p></div>");
-        sb.AppendLine("</body></html>");
-        return sb.ToString();
-    }
-
-    private static string BuildExecutiveSummary(
-        ProjectOverviewDto? overview, SentimentSummaryDto? sentiment, ChannelComparisonDto? channels)
-    {
-        if (overview == null) return "Chưa có đủ dữ liệu tổng quan cho giai đoạn yêu cầu.";
-        var topChannel = channels?.Channels.OrderByDescending(c => c.Mentions).FirstOrDefault();
-        var parts = new List<string>
+        catch
         {
-            $"Trong phạm vi phân tích, hệ thống ghi nhận {overview.TotalMentions} mentions và {overview.TotalComments} bình luận."
-        };
-        if (sentiment != null)
-            parts.Add($"Thái độ cộng đồng có NSR {sentiment.NsrScore:+#.#;-#.#;0}% — {sentiment.PositivePercent}% tích cực, {sentiment.NegativePercent}% tiêu cực.");
-        if (topChannel != null)
-            parts.Add($"Kênh dẫn đầu là {topChannel.Label} ({topChannel.MentionShare}% SOV).");
-        return string.Join(" ", parts);
+            // không chặn luồng gửi Reporter nếu notify lỗi
+        }
     }
 
-    private static string BuildRecommendations(
-        SentimentSummaryDto? sentiment, ChannelComparisonDto? channels, AspectAnalysisDto? aspects)
+    /// <summary>Admin giao đơn → báo Reporter được chọn.</summary>
+    private async Task NotifyReporterAssignedAsync(BespokeRequest request, int projectId, int reporterId)
     {
-        var items = new List<string>();
-        if (sentiment?.NegativePercent > 30)
-            items.Add("<li>Theo dõi sát mentions tiêu cực và chuẩn bị kịch bản phản hồi truyền thông.</li>");
-        if (channels?.Channels.Any(c => c.NsrScore < -10) == true)
-            items.Add("<li>Ưu tiên cải thiện nội dung trên kênh có NSR thấp.</li>");
-        var topNegAspect = aspects?.Aspects.OrderByDescending(a => a.NegativePercent).FirstOrDefault();
-        if (topNegAspect?.NegativePercent > 20)
-            items.Add($"<li>Chủ đề «{Esc(topNegAspect.Label)}» đang bị phàn nàn — cần hành động khắc phục.</li>");
-        if (items.Count == 0)
-            items.Add("<li>Duy trì theo dõi định kỳ và cập nhật báo cáo khi có biến động sentiment.</li>");
-        return string.Join("", items);
-    }
-
-    private static List<MentionDto>? FilterMentionsByDate(List<MentionDto>? mentions, string? from, string? to)
-    {
-        if (mentions == null) return null;
-        var fromDt = ParseDate(from);
-        var toDt = ParseDate(to)?.AddDays(1);
-
-        return mentions.Where(m =>
+        try
         {
-            if (m.ScrapedAt == null) return true;
-            if (fromDt.HasValue && m.ScrapedAt < fromDt) return false;
-            if (toDt.HasValue && m.ScrapedAt >= toDt) return false;
-            return true;
-        }).ToList();
+            var notify = new NotificationService(_context);
+            await notify.NotifyAsync(
+                reporterId,
+                "Bạn được giao báo cáo chuyên sâu",
+                $"Đơn «{request.Title}» đã được giao cho bạn. Vào Tasks để tải và chỉnh sửa.",
+                "bespoke_assigned",
+                "bespoke_request",
+                request.RequestId,
+                projectId);
+        }
+        catch
+        {
+            // không chặn luồng giao Reporter nếu notify lỗi
+        }
     }
 
     private async Task<List<BespokeRequest>> LoadProjectRequestsAsync(int projectId)
@@ -626,13 +1097,16 @@ public class BespokeReportService
 
     private static string StatusLabel(string? status) => status?.ToLowerInvariant() switch
     {
-        "gathering_data" => "Đang thu thập DL & AI xử lý",
-        "pending" => "Cần chỉnh sửa",
+        "pending_payment" => "Chờ thanh toán",
+        "gathering_data" => "Đang cào & xuất báo cáo",
+        "report_ready" => "Báo cáo sẵn sàng",
+        "awaiting_reporter" => "Chờ Reporter nhận",
+        "pending" => "Chờ Reporter nhận",
         "assigned" => "Cần chỉnh sửa",
         "quoted" => "Chờ khách chấp nhận báo giá",
         "quote_rejected" => "Khách từ chối báo giá",
         "in_progress" => "Đang xử lý",
-        "completed" => "Đã gửi khách",
+        "completed" => "Đã nhận báo cáo từ Reporter",
         "revision_requested" => "Cần chỉnh sửa",
         "cancelled" => "Đã hủy",
         _ => "Chờ xử lý"
@@ -644,6 +1118,15 @@ public class BespokeReportService
     private static DateTime? ParseDate(string? s) =>
         DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
 
+    private static int? ComputePostedSinceDays(BespokeMeta meta)
+    {
+        var from = ParseDate(meta.DateFrom);
+        if (from == null) return null;
+
+        var days = (int)Math.Ceiling((DateTime.Now.Date - from.Value.Date).TotalDays);
+        return days > 0 ? days : 1;
+    }
+
     private static string GetBespokeFolder(int requestId) =>
         Path.Combine(AppContext.BaseDirectory, "StorageData", "bespoke", requestId.ToString());
 
@@ -654,8 +1137,19 @@ public class BespokeReportService
         return File.Exists(relative) ? relative : stored;
     }
 
-    private static string Esc(string? t) =>
-        string.IsNullOrEmpty(t) ? "" : t.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    private static void DeleteDeliverableFile(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return;
+        try
+        {
+            var path = ResolveFilePath(relativePath);
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch
+        {
+            // best-effort cleanup — không chặn luồng chính nếu xoá file lỗi
+        }
+    }
 
     public static string GetDeliverableContentType(string fileName) =>
         Path.GetExtension(fileName).ToLowerInvariant() switch
@@ -680,10 +1174,10 @@ public class BespokeReportService
 
         if (!IsReporter(user)) return new();
 
-        // Reporter thấy: đơn đã giao cho mình + đơn khách mới gửi chưa ai nhận
+        // Reporter thấy: đơn đã giao cho mình + đơn khách vừa gửi Reporter, chưa ai nhận.
         var mine = requests.Where(r =>
             r.ReporterId == userId ||
-            (r.ReporterId == null && string.Equals(r.Status, "pending", StringComparison.OrdinalIgnoreCase))
+            (r.ReporterId == null && string.Equals(r.Status, "awaiting_reporter", StringComparison.OrdinalIgnoreCase))
         ).ToList();
         return await MapPortalListAsync(mine);
     }
@@ -844,8 +1338,8 @@ public class BespokeReportService
         {
             var st = request.Status?.ToLowerInvariant();
 
-            // Đơn pending chưa giao → Reporter nhận việc + tạo bản nháp hệ thống
-            if (st == "pending" && request.ReporterId == null)
+            // Đơn awaiting_reporter chưa giao → Reporter nhận việc + tạo bản nháp hệ thống.
+            if (st == "awaiting_reporter" && request.ReporterId == null)
             {
                 request.ReporterId = userId;
                 request.AssignedAt = DateTime.Now;
@@ -904,7 +1398,7 @@ public class BespokeReportService
         (IsReporter(user) && (
             request.ReporterId == user.UserId ||
             (request.ReporterId == null &&
-             string.Equals(request.Status, "pending", StringComparison.OrdinalIgnoreCase))
+             string.Equals(request.Status, "awaiting_reporter", StringComparison.OrdinalIgnoreCase))
         ));
 
     private async Task<List<PortalBespokeRequestDto>> MapPortalListAsync(List<BespokeRequest> requests)
@@ -972,8 +1466,11 @@ public class BespokeReportService
         public string? DateFrom { get; set; }
         public string? DateTo { get; set; }
         public List<string> Modules { get; set; } = new();
-        public string Format { get; set; } = "html";
+        public string Format { get; set; } = "pdf";
         public string? RevisionFeedback { get; set; }
+        public string? ScrapeJobId { get; set; }
+        public string? PreviousSearchQuery { get; set; }
+        public DateTime? ScrapeStartedAt { get; set; }
     }
 
     private static string NormalizePackageType(string? packageType) =>
