@@ -54,7 +54,7 @@ public class ScrapeOrderService
         {
             MentionsPackage = pkg.Code,
             PackageLabel = pkg.Name,
-            MentionsIncluded = pkg.MaxItems,
+            MentionsIncluded = pkg.MaxItems ?? 0,
             Price = pkg.Price,
             PriceLabel = FormatVnd(pkg.Price),
             EstimatedMinutes = EstimateMinutesByPackage(pkg),
@@ -124,7 +124,7 @@ public class ScrapeOrderService
             Keyword = dto.Keyword.Trim(),
             PostedSinceDays = 30, // Hardcode theo contract đã confirm
             MentionsPackage = pkg.Code,
-            MentionsIncluded = isFull ? -1 : pkg.MaxItems,
+            MentionsIncluded = isFull ? -1 : (pkg.MaxItems ?? 0),
             QuotedPrice = pkg.Price,
             Status = "quoted",
             ProgressPercent = 0,

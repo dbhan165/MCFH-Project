@@ -64,7 +64,7 @@ public class ScrapePackageDto
     public decimal Price { get; set; }
     public string Currency { get; set; } = "VND";
     public int DurationDays { get; set; }
-    public int MaxItems { get; set; }
+    public int? MaxItems { get; set; }
     public int? MaxSources { get; set; }
     public bool IsActive { get; set; }
     public int SortOrder { get; set; }
@@ -83,7 +83,7 @@ public class UpsertScrapePackageDto
     public decimal Price { get; set; }
     public string Currency { get; set; } = "VND";
     public int DurationDays { get; set; }
-    public int MaxItems { get; set; }
+    public int? MaxItems { get; set; }
     public int? MaxSources { get; set; }
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; } = 0;
@@ -98,7 +98,7 @@ public class PublicScrapePackageDto
     public decimal Price { get; set; }
     public string Currency { get; set; } = "VND";
     public int DurationDays { get; set; }
-    public int MaxItems { get; set; }
+    public int? MaxItems { get; set; }
     public int? MaxSources { get; set; }
     public int SortOrder { get; set; }
 }
