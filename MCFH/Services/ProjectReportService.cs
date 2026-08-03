@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using ClosedXML.Excel;
+using MCFH.DTOs;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
@@ -79,13 +80,16 @@ public class ProjectReportService
     }
 
     public async Task<ReportFileDto?> GenerateReportAsync(
-        int workspaceId, int projectId, int userId, string type, string authorName)
+        int workspaceId, int projectId, int userId, string type, string authorName,
+        string? displayName = null)
     {
         var project = await GetProjectAsync(workspaceId, projectId, userId);
         if (project == null) return null;
 
         var template = Templates.FirstOrDefault(t => t.Key == type);
         if (template == null) return null;
+
+        var titleName = string.IsNullOrWhiteSpace(displayName) ? project.Name : displayName.Trim();
 
         var reportId = $"REP-{DateTime.Now:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6]}";
         var folder = GetReportFolder(projectId);
@@ -97,7 +101,7 @@ public class ProjectReportService
 
         if (type == "analytics-pdf")
         {
-            var (pdfBytes, ext, count) = await BuildAnalyticsPdfAsync(workspaceId, projectId, userId, project.Name);
+            var (pdfBytes, ext, count) = await BuildAnalyticsPdfAsync(workspaceId, projectId, userId, titleName);
             extension = ext;
             rowCount = count;
             var filePath = Path.Combine(folder, $"{fileName}.{extension}");
@@ -110,11 +114,11 @@ public class ProjectReportService
             int count;
             if (type == "analytics-pptx")
             {
-                (bytes, extension, count) = await BuildAnalyticsPptxAsync(workspaceId, projectId, userId, project.Name);
+                (bytes, extension, count) = await BuildAnalyticsPptxAsync(workspaceId, projectId, userId, titleName);
             }
             else
             {
-                (bytes, extension, count) = await BuildMentionsXlsxAsync(workspaceId, projectId, userId, project.Name);
+                (bytes, extension, count) = await BuildMentionsXlsxAsync(workspaceId, projectId, userId, titleName);
             }
             rowCount = count;
             var filePath = Path.Combine(folder, $"{fileName}.{extension}");
@@ -125,8 +129,8 @@ public class ProjectReportService
         {
             (string content, extension, rowCount) = type switch
             {
-                "analytics-html" => await BuildAnalyticsHtmlAsync(workspaceId, projectId, userId, project.Name),
-                "analytics-json" => await BuildAnalyticsJsonAsync(workspaceId, projectId, userId, project.Name),
+                "analytics-html" => await BuildAnalyticsHtmlAsync(workspaceId, projectId, userId, titleName),
+                "analytics-json" => await BuildAnalyticsJsonAsync(workspaceId, projectId, userId, titleName),
                 _ => throw new ArgumentException("Loại báo cáo không hợp lệ.")
             };
             var filePath = Path.Combine(folder, $"{fileName}.{extension}");
@@ -139,7 +143,7 @@ public class ProjectReportService
         var entry = new ReportFileDto
         {
             ReportId = reportId,
-            Name = $"{template.Name} — {project.Name}",
+            Name = $"{template.Name} — {titleName}",
             Type = type,
             TypeLabel = template.TypeLabel,
             CreatedAt = DateTime.Now,
@@ -154,6 +158,25 @@ public class ProjectReportService
         await SaveIndexAsync(projectId, index, fileName);
 
         return entry;
+    }
+
+    /// <summary>
+    /// Render PDF analytics in-memory — không ghi vào thư mục/index Reports của project
+    /// (dùng cho bespoke để không làm bẩn danh sách báo cáo chung).
+    /// Khi <paramref name="filter"/> được truyền vào, toàn bộ số liệu (overview, sentiment, kênh, influencer)
+    /// được tính lại CHỈ từ tập mentions khớp filter — tránh trộn dữ liệu cũ của project vào báo cáo bespoke.
+    /// </summary>
+    public async Task<(byte[] Content, string FileName)?> RenderAnalyticsPdfAsync(
+        int workspaceId, int projectId, int userId, string? displayName = null,
+        MentionQueryDto? filter = null)
+    {
+        var project = await GetProjectAsync(workspaceId, projectId, userId);
+        if (project == null) return null;
+
+        var titleName = string.IsNullOrWhiteSpace(displayName) ? project.Name : displayName.Trim();
+        var (pdfBytes, _, _) = await BuildAnalyticsPdfAsync(workspaceId, projectId, userId, titleName, filter);
+        var fileName = $"{SanitizeFileName($"Bao-cao-{titleName}")}.pdf";
+        return (pdfBytes, fileName);
     }
 
     public async Task<(byte[] Content, string ContentType, string FileName)?> DownloadReportAsync(
@@ -262,14 +285,35 @@ public class ProjectReportService
     }
 
     private async Task<(string Content, string Extension, int RowCount)> BuildAnalyticsHtmlAsync(
-        int workspaceId, int projectId, int userId, string projectName)
+        int workspaceId, int projectId, int userId, string projectName, MentionQueryDto? filter = null)
     {
-        var overview = await _analytics.GetOverviewAsync(workspaceId, projectId, userId);
-        var sentiment = await _analytics.GetSentimentSummaryAsync(workspaceId, projectId, userId);
-        var channels = await _analytics.GetChannelComparisonAsync(workspaceId, projectId, userId);
-        var influencers = await _analytics.GetInfluencersAsync(workspaceId, projectId, userId);
-        var aspects = await _analytics.GetAspectAnalysisAsync(workspaceId, projectId, userId);
-        var mentions = await _analytics.GetMentionsAsync(workspaceId, projectId, userId);
+        ProjectOverviewDto? overview;
+        SentimentSummaryDto? sentiment;
+        ChannelComparisonDto? channels;
+        InfluencerAnalyticsDto? influencers;
+        AspectAnalysisDto? aspects;
+        List<MentionDto> mentions;
+
+        if (filter != null)
+        {
+            // Chỉ tính toán từ tập mentions khớp filter (VD: theo keyword + mốc bắt đầu cào của đơn bespoke) —
+            // KHÔNG gọi các API tổng hợp không filter, tránh trộn mentions cũ của project vào báo cáo.
+            mentions = await _analytics.GetMentionsAsync(workspaceId, projectId, userId, filter);
+            overview = BuildOverviewFromMentions(projectId, projectName, mentions);
+            sentiment = BuildSentimentFromMentions(mentions);
+            channels = BuildChannelsFromMentions(mentions);
+            influencers = BuildInfluencersFromMentions(mentions);
+            aspects = null; // bỏ qua khía cạnh khi lọc — tránh kéo dữ liệu aspect không lọc của cả project
+        }
+        else
+        {
+            overview = await _analytics.GetOverviewAsync(workspaceId, projectId, userId);
+            sentiment = await _analytics.GetSentimentSummaryAsync(workspaceId, projectId, userId);
+            channels = await _analytics.GetChannelComparisonAsync(workspaceId, projectId, userId);
+            influencers = await _analytics.GetInfluencersAsync(workspaceId, projectId, userId);
+            aspects = await _analytics.GetAspectAnalysisAsync(workspaceId, projectId, userId);
+            mentions = await _analytics.GetMentionsAsync(workspaceId, projectId, userId);
+        }
 
         var generated = DateTime.Now.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("vi-VN"));
         var totalMentions = overview?.TotalMentions ?? mentions.Count;
@@ -606,9 +650,9 @@ public class ProjectReportService
     }
 
     private async Task<(byte[] Content, string Extension, int RowCount)> BuildAnalyticsPdfAsync(
-        int workspaceId, int projectId, int userId, string projectName)
+        int workspaceId, int projectId, int userId, string projectName, MentionQueryDto? filter = null)
     {
-        var (html, _, rowCount) = await BuildAnalyticsHtmlAsync(workspaceId, projectId, userId, projectName);
+        var (html, _, rowCount) = await BuildAnalyticsHtmlAsync(workspaceId, projectId, userId, projectName, filter);
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
@@ -639,6 +683,201 @@ public class ProjectReportService
 
         var json = JsonSerializer.Serialize(payload, JsonOptions);
         return (json, "json", 1);
+    }
+
+    /// <summary>Tính lại overview KPI từ tập mentions đã lọc (bespoke) — không đụng tới feedbacks chưa lọc của project.</summary>
+    private static ProjectOverviewDto BuildOverviewFromMentions(int projectId, string projectName, List<MentionDto> mentions)
+    {
+        var counts = CountSentiments(mentions);
+        var analyzed = mentions.Count(m => m.IsAnalyzed);
+
+        return new ProjectOverviewDto
+        {
+            ProjectId = projectId,
+            ProjectName = projectName,
+            TotalMentions = mentions.Count,
+            TotalComments = mentions.Sum(m => m.CommentsCount),
+            AnalyzedCount = analyzed,
+            PendingAnalysisCount = mentions.Count - analyzed,
+            NsrScore = counts.NsrScore,
+            PositiveCount = counts.Positive,
+            NegativeCount = counts.Negative,
+            NeutralCount = counts.Neutral,
+            PlatformBreakdown = mentions
+                .GroupBy(m => m.Platform ?? "unknown")
+                .ToDictionary(g => g.Key, g => g.Count())
+        };
+    }
+
+    private static SentimentSummaryDto BuildSentimentFromMentions(List<MentionDto> mentions)
+    {
+        var total = mentions.Count;
+        var counts = CountSentiments(mentions);
+        var unanalyzed = total - counts.Positive - counts.Negative - counts.Neutral;
+
+        return new SentimentSummaryDto
+        {
+            Total = total,
+            Positive = counts.Positive,
+            Negative = counts.Negative,
+            Neutral = counts.Neutral,
+            Unanalyzed = unanalyzed,
+            PositivePercent = total > 0 ? Math.Round(counts.Positive * 100.0 / total, 1) : 0,
+            NegativePercent = total > 0 ? Math.Round(counts.Negative * 100.0 / total, 1) : 0,
+            NeutralPercent = total > 0 ? Math.Round(counts.Neutral * 100.0 / total, 1) : 0,
+            NsrScore = counts.NsrScore
+        };
+    }
+
+    private static ChannelComparisonDto BuildChannelsFromMentions(List<MentionDto> mentions)
+    {
+        var totalMentions = mentions.Count;
+        var totalComments = mentions.Sum(m => m.CommentsCount);
+        var platformOrder = new[] { "facebook", "youtube", "tiktok", "news" };
+
+        var channels = mentions
+            .GroupBy(m => (m.Platform ?? "unknown").ToLowerInvariant())
+            .Select(g =>
+            {
+                var counts = CountSentiments(g);
+                var mentionsCount = g.Count();
+                var comments = g.Sum(m => m.CommentsCount);
+                var analyzed = counts.Positive + counts.Negative + counts.Neutral;
+
+                return new ChannelStatsDto
+                {
+                    Platform = g.Key,
+                    Label = FormatPlatformLabel(g.Key),
+                    Mentions = mentionsCount,
+                    MentionShare = totalMentions > 0 ? Math.Round(mentionsCount * 100.0 / totalMentions, 1) : 0,
+                    TotalComments = comments,
+                    CommentShare = totalComments > 0 ? Math.Round(comments * 100.0 / totalComments, 1) : 0,
+                    Positive = counts.Positive,
+                    Negative = counts.Negative,
+                    Neutral = counts.Neutral,
+                    Unanalyzed = mentionsCount - analyzed,
+                    NsrScore = counts.NsrScore,
+                    PositivePercent = analyzed > 0 ? Math.Round(counts.Positive * 100.0 / analyzed, 1) : 0,
+                    NegativePercent = analyzed > 0 ? Math.Round(counts.Negative * 100.0 / analyzed, 1) : 0,
+                    NeutralPercent = analyzed > 0 ? Math.Round(counts.Neutral * 100.0 / analyzed, 1) : 0
+                };
+            })
+            .OrderBy(c =>
+            {
+                var idx = Array.IndexOf(platformOrder, c.Platform);
+                return idx >= 0 ? idx : 99;
+            })
+            .ThenByDescending(c => c.Mentions)
+            .ToList();
+
+        return new ChannelComparisonDto
+        {
+            TotalMentions = totalMentions,
+            TotalComments = totalComments,
+            Channels = channels
+        };
+    }
+
+    /// <summary>Bảng influencer đơn giản hoá từ mentions đã lọc: Name, Platform, Mentions — đủ dùng cho báo cáo bespoke.</summary>
+    private static InfluencerAnalyticsDto BuildInfluencersFromMentions(List<MentionDto> mentions)
+    {
+        var totalMentions = mentions.Count;
+        var groups = new Dictionary<string, FilteredInfluencerAccumulator>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var m in mentions)
+        {
+            var platform = (m.Platform ?? "unknown").ToLowerInvariant();
+            var name = string.IsNullOrWhiteSpace(m.AuthorName) ? "Không rõ" : m.AuthorName.Trim();
+            var key = $"{platform}|{name}";
+
+            if (!groups.TryGetValue(key, out var acc))
+            {
+                acc = new FilteredInfluencerAccumulator { Name = name, Platform = platform };
+                groups[key] = acc;
+            }
+
+            acc.Mentions++;
+            acc.TotalComments += m.CommentsCount;
+            switch (m.Sentiment?.ToLowerInvariant())
+            {
+                case "positive": acc.Positive++; break;
+                case "negative": acc.Negative++; break;
+                case "neutral": acc.Neutral++; break;
+            }
+        }
+
+        var influencers = groups.Values
+            .Select(acc =>
+            {
+                var score = acc.Mentions * 10.0 + acc.TotalComments;
+                if (acc.Positive > acc.Negative) score += acc.Positive * 2;
+                if (acc.Negative > acc.Positive) score -= acc.Negative;
+
+                return new InfluencerDto
+                {
+                    Id = $"{acc.Platform}|{acc.Name}",
+                    Name = acc.Name,
+                    Platform = acc.Platform,
+                    Mentions = acc.Mentions,
+                    TotalComments = acc.TotalComments,
+                    ShareOfVoice = totalMentions > 0 ? Math.Round(acc.Mentions * 100.0 / totalMentions, 1) : 0,
+                    InfluenceScore = Math.Round(Math.Max(0, score), 1),
+                    DominantSentiment = ResolveDominantSentiment(acc.Positive, acc.Negative, acc.Neutral),
+                    PositiveCount = acc.Positive,
+                    NegativeCount = acc.Negative,
+                    NeutralCount = acc.Neutral
+                };
+            })
+            .OrderByDescending(i => i.InfluenceScore)
+            .ThenByDescending(i => i.Mentions)
+            .ToList();
+
+        return new InfluencerAnalyticsDto
+        {
+            TotalMentions = totalMentions,
+            UniqueInfluencers = influencers.Count,
+            Influencers = influencers
+        };
+    }
+
+    private sealed class FilteredInfluencerAccumulator
+    {
+        public string Name { get; set; } = "";
+        public string Platform { get; set; } = "";
+        public int Mentions { get; set; }
+        public int TotalComments { get; set; }
+        public int Positive { get; set; }
+        public int Negative { get; set; }
+        public int Neutral { get; set; }
+    }
+
+    private static string? ResolveDominantSentiment(int positive, int negative, int neutral)
+    {
+        if (positive == 0 && negative == 0 && neutral == 0) return null;
+        if (positive >= negative && positive >= neutral) return "positive";
+        if (negative >= positive && negative >= neutral) return "negative";
+        return "neutral";
+    }
+
+    private static (int Positive, int Negative, int Neutral, double NsrScore) CountSentiments(IEnumerable<MentionDto> mentions)
+    {
+        var positive = 0;
+        var negative = 0;
+        var neutral = 0;
+
+        foreach (var m in mentions)
+        {
+            switch (m.Sentiment?.ToLowerInvariant())
+            {
+                case "positive": positive++; break;
+                case "negative": negative++; break;
+                case "neutral": neutral++; break;
+            }
+        }
+
+        var analyzed = positive + negative + neutral;
+        var nsr = analyzed > 0 ? Math.Round((positive - negative) * 100.0 / analyzed, 1) : 0;
+        return (positive, negative, neutral, nsr);
     }
 
     private static List<string> BuildExecutiveInsights(
