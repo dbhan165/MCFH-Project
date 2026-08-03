@@ -186,6 +186,15 @@ namespace MCFH
                 "*/5 * * * *"
             );
 
+            // Recovery: bespoke kẹt gathering_data (watcher mất khi restart / job treo).
+            RecurringJob.AddOrUpdate<BespokeReportService>(
+                "recover-stuck-bespoke-requests",
+                service => service.RecoverStuckBespokeRequestsAsync(),
+                "*/2 * * * *"
+            );
+            // Chạy ngay 1 lần khi boot để mở khóa đơn đang treo.
+            BackgroundJob.Enqueue<BespokeReportService>(service => service.RecoverStuckBespokeRequestsAsync());
+
             app.Run();
         }
     }

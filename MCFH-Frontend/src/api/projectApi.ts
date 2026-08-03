@@ -421,6 +421,18 @@ export const projectApi = {
     return mapBespokeRequest(response.data);
   },
 
+  /** Tạo bespoke standalone: BE tự tạo Project mới — không gắn project có sẵn. */
+  createBespokeRequestStandalone: async (
+    workspaceId: number,
+    payload: CreateBespokePayload
+  ): Promise<BespokeRequestItem> => {
+    const response = await axiosClient.post<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/bespoke`,
+      payload
+    );
+    return mapBespokeRequest(response.data);
+  },
+
   /** Tạo checkout PayOS cho yêu cầu bespoke — redirect người dùng sang checkoutUrl để thanh toán. */
   payBespokeRequest: async (
     workspaceId: number,
@@ -678,6 +690,7 @@ export const projectApi = {
 function mapBespokeRequest(r: Record<string, unknown>): BespokeRequestItem {
   return {
     requestId: pickNumber(r, 'requestId', 'RequestId'),
+    projectId: pickNumber(r, 'projectId', 'ProjectId'),
     title: pickString(r, 'title', 'Title'),
     requirements: pickNullableString(r, 'requirements', 'Requirements'),
     status: pickString(r, 'status', 'Status'),
@@ -692,6 +705,9 @@ function mapBespokeRequest(r: Record<string, unknown>): BespokeRequestItem {
     dateFrom: pickNullableString(r, 'dateFrom', 'DateFrom'),
     dateTo: pickNullableString(r, 'dateTo', 'DateTo'),
     format: pickString(r, 'format', 'Format') || 'html',
+    keyword: pickNullableString(r, 'keyword', 'Keyword'),
+    packageType: pickNullableString(r, 'packageType', 'PackageType'),
+    packagePrice: pickField<number>(r, 'packagePrice', 'PackagePrice') ?? null,
     agreedPrice: pickField<number>(r, 'agreedPrice', 'AgreedPrice') ?? null,
     hasDeliverable: pickField(r, 'hasDeliverable', 'HasDeliverable') === true,
     deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,

@@ -184,6 +184,8 @@ export interface ReportCenter {
 
 export interface BespokeRequestItem {
   requestId: number;
+  /** Project riêng tạo kèm đơn bespoke — dùng cho pay/download/assign. */
+  projectId: number;
   title: string;
   requirements: string | null;
   status: string;
@@ -198,6 +200,9 @@ export interface BespokeRequestItem {
   dateFrom: string | null;
   dateTo: string | null;
   format: string;
+  keyword?: string | null;
+  packageType?: string | null;
+  packagePrice?: number | null;
   agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
