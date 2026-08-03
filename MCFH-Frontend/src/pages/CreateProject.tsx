@@ -82,13 +82,6 @@ const CreateProject = () => {
   );
   const maxSources = selectedPackage?.maxSources ?? null;
 
-  const toggleSource = (sourceId: string) => {
-    setSelectedSources((prev) => {
-      if (prev.includes(sourceId)) return prev.filter((id) => id !== sourceId);
-      if (maxSources != null && prev.length >= maxSources) return prev;
-      return [...prev, sourceId];
-    });
-  };
 
   const hasScrapableSource = selectedSources.some((source) =>
     SCRAPABLE_PLATFORMS.includes(source as (typeof SCRAPABLE_PLATFORMS)[number])
