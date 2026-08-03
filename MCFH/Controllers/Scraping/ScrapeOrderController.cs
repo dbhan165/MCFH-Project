@@ -29,15 +29,27 @@ public class ScrapeOrderController : ControllerBase
     }
 
     [HttpPost("quote")]
-    public IActionResult GetQuote([FromBody] ScrapeQuoteRequestDto dto)
+    public async Task<IActionResult> GetQuote([FromBody] ScrapeQuoteRequestDto dto)
     {
-        return Ok(_service.GetQuote(dto.PostedSinceDays));
+        var package = MentionPackageTypes.Normalize(dto.MentionsPackage);
+        if (package == null) return BadRequest(new { message = "Mentions package không hợp lệ." });
+
+        Project? project = null;
+        // Optional: frontend có thể gửi kèm projectId trong body để tính remaining quota
+        // (hiện tại controller chưa nhận — frontend sẽ tự gọi /api/projects/{id}/mentions-quota)
+        var quote = await _service.GetQuoteAsync(package, project);
+        if (quote == null) return NotFound(new { message = "Gói không tồn tại hoặc đã ngừng bán." });
+        return Ok(quote);
     }
 
     [HttpGet("quote")]
-    public IActionResult GetQuoteByQuery([FromQuery] int postedSinceDays = 30)
+    public async Task<IActionResult> GetQuoteByQuery([FromQuery] string mentionsPackage = "PACK_100")
     {
-        return Ok(_service.GetQuote(postedSinceDays));
+        var package = MentionPackageTypes.Normalize(mentionsPackage);
+        if (package == null) return BadRequest(new { message = "Mentions package không hợp lệ." });
+        var quote = await _service.GetQuoteAsync(package);
+        if (quote == null) return NotFound(new { message = "Gói không tồn tại hoặc đã ngừng bán." });
+        return Ok(quote);
     }
 
     [HttpPost]
@@ -93,5 +105,19 @@ public class ScrapeOrderController : ControllerBase
         var userId = GetUserId();
         if (userId == null) return Unauthorized();
         return Ok(await _service.ListOrdersAsync(userId.Value, workspaceId, projectId));
+    }
+
+    /// <summary>
+    /// Trả về quota mentions của Project (tổng/đã dùng/còn lại/full unlimited) + các package đang active.
+    /// Mọi member workspace đều có thể xem.
+    /// </summary>
+    [HttpGet("project/{projectId:int}/mentions-quota")]
+    public async Task<IActionResult> GetProjectMentionsQuota(int projectId)
+    {
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+        var result = await _service.GetProjectMentionsQuotaAsync(userId.Value, projectId);
+        if (result == null) return NotFound(new { message = "Project không tồn tại hoặc bạn không có quyền truy cập." });
+        return Ok(result);
     }
 }

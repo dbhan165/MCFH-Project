@@ -13,6 +13,7 @@ import {
   LogOut,
   ChevronDown,
   ShieldCheck,
+  Package,
 } from 'lucide-react';
 import NotificationBell from '../notifications/NotificationBell';
 import { loadProfileFromStorage, clearAuthSession, getAvatarFallback } from '../../utils/authStorage';
@@ -23,6 +24,7 @@ const navItems = [
   { label: 'Subscription Plans', icon: CreditCard, href: '/admin/subscriptions' },
   { label: 'Proxy Management', icon: Server, href: '/admin/proxies' },
   { label: 'Facebook Sources', icon: Globe, href: '/admin/fb-sources' },
+  { label: 'Scrape Packages', icon: Package, href: '/admin/scrape-packages' },
   { label: 'Platform Cookies', icon: Cookie, href: '/admin/cookies' },
   { label: 'Audit Logs', icon: Clock, href: '/admin/audit-logs' },
   { label: 'System Settings', icon: Settings, href: '/admin/settings' },

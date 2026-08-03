@@ -27,6 +27,7 @@ import { workspaceApi } from '../api/workspaceApi';
 import type { Project, AiAnalysisProgress } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDate } from '../utils/workspaceHelpers';
+import { countUniqueKeywords, parseKeywordList } from '../utils/onboardingHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
 import { useScrapeJob } from '../contexts/ScrapeJobContext';
 
@@ -63,8 +64,15 @@ function getPlatformTags(project: Project) {
 
 const ACTIVE_ORDER_STATUSES = new Set(['paid', 'scraping', 'analyzing']);
 
+// Order chưa thanh toán — project tồn tại nhưng chưa active (user đang ở bước PayOS hoặc đã huỷ).
+const PENDING_PAYMENT_STATUSES = new Set(['quoted', 'pending_payment']);
+
 function isActiveOrder(order: ScrapeOrder) {
   return ACTIVE_ORDER_STATUSES.has(order.status);
+}
+
+function isPendingPayment(order: ScrapeOrder | undefined) {
+  return !!order && PENDING_PAYMENT_STATUSES.has(order.status);
 }
 
 function isRecentlyCompleted(order: ScrapeOrder) {
@@ -92,6 +100,7 @@ function ProjectCard({
   onAnalyze,
   onEdit,
   onDelete,
+  onRetryPayment,
 }: {
   project: Project;
   activeOrder?: ScrapeOrder | null;
@@ -109,9 +118,11 @@ function ProjectCard({
   onAnalyze: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onRetryPayment?: (order: ScrapeOrder) => void;
 }) {
   const gradient = CARD_GRADIENTS[pickGradientIndex(project.name)];
   const platforms = getPlatformTags(project);
+  const pendingPayment = isPendingPayment(activeOrder);
 
   return (
     <article
@@ -121,9 +132,13 @@ function ProjectCard({
           onToggleCompare?.();
           return;
         }
+        // Project đang chờ thanh toán → click mở nút retry (không navigate vào dashboard).
+        if (pendingPayment) return;
         onEnter();
       }}
       className={`group relative overflow-hidden rounded-3xl border bg-[#151B2B] cursor-pointer transition-all duration-300 hover:-translate-y-0.5 ${
+        pendingPayment ? 'opacity-70 grayscale-[0.4]' : ''
+      } ${
         isBusy
           ? 'opacity-90 pointer-events-none border-[#FF7575]/30'
           : compareMode && isCompareSelected
@@ -262,9 +277,19 @@ function ProjectCard({
         </div>
 
         {project.searchQuery && (
-          <div className="flex items-center gap-2 text-xs text-gray-400 bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2 mb-4">
-            <Hash size={13} className="text-[#00B4D8] shrink-0" />
-            <span className="truncate font-medium text-gray-300">{project.searchQuery}</span>
+          <div className="flex items-start gap-2 text-xs text-gray-300 bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2 mb-4">
+            <Hash size={13} className="text-[#00B4D8] shrink-0 mt-0.5" />
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 min-w-0">
+              <span className="text-[10px] uppercase tracking-wide text-gray-500">Từ khoá:</span>
+              {parseKeywordList(project.searchQuery).map((kw) => (
+                <span
+                  key={kw}
+                  className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/10 font-medium text-white text-[11px]"
+                >
+                  {kw}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
@@ -324,7 +349,25 @@ function ProjectCard({
         )}
 
         <div className="mt-auto flex items-center justify-between gap-3 pt-4 border-t border-white/10">
-          {isBusy || aiProgress?.isAnalyzing ? (
+          {pendingPayment && activeOrder ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Chờ thanh toán
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRetryPayment?.(activeOrder);
+                }}
+                className="inline-flex items-center gap-1.5 text-sm font-bold text-[#FF7575] hover:text-white transition-colors"
+              >
+                Thanh toán lại
+                <ArrowRight size={15} />
+              </button>
+            </>
+          ) : isBusy || aiProgress?.isAnalyzing ? (
             <span className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#FF7575] tracking-wide uppercase">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF7575] opacity-75"></span>
@@ -348,10 +391,12 @@ function ProjectCard({
               Đang giám sát
             </span>
           )}
-          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF7575] group-hover:gap-2.5 transition-all">
-            Phân tích
-            <ArrowRight size={15} />
-          </span>
+          {!pendingPayment && (
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF7575] group-hover:gap-2.5 transition-all">
+              Phân tích
+              <ArrowRight size={15} />
+            </span>
+          )}
         </div>
       </div>
     </article>
@@ -468,20 +513,35 @@ const Projects = () => {
   }, []);
 
   const filteredProjects = useMemo(() => {
+    // Bước 1: ẩn project KHÔNG có scrape order (draft / huỷ hẳn). Pay-per-scrape: chỉ hiển thị project
+    // có đơn cào. Sau khi scrape xong hoặc huỷ thanh toán, project có thể ở trạng thái "chờ thanh toán".
+    const withOrder = projectList.filter((p) => !!orderByProject[p.projectId]);
+    // Bước 2: ưu tiên "chờ thanh toán" lên đầu để user dễ thấy và retry. Trong cùng nhóm sort theo createdAt desc.
+    const sorted = [...withOrder].sort((a, b) => {
+      const aPending = isPendingPayment(orderByProject[a.projectId]) ? 0 : 1;
+      const bPending = isPendingPayment(orderByProject[b.projectId]) ? 0 : 1;
+      if (aPending !== bPending) return aPending - bPending;
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return projectList;
-    return projectList.filter(
+    if (!q) return sorted;
+    return sorted.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         (p.searchQuery?.toLowerCase().includes(q) ?? false) ||
         (p.description?.toLowerCase().includes(q) ?? false)
     );
-  }, [projectList, searchQuery]);
+  }, [projectList, searchQuery, orderByProject]);
 
   const stats = useMemo(() => {
     const sources = projectList.reduce((sum, p) => sum + p.dataSourceCount, 0);
-    const withKeyword = projectList.filter((p) => p.searchQuery).length;
-    return { total: projectList.length, sources, withKeyword };
+    const keywords = projectList.reduce(
+      (sum, p) => sum + countUniqueKeywords(p.searchQuery),
+      0
+    );
+    return { total: projectList.length, sources, keywords };
   }, [projectList]);
 
   const handleDeleteProject = async (project: Project) => {
@@ -561,6 +621,25 @@ const Projects = () => {
     navigate(`/workspace/${workspaceId}/project/${projectId}`);
   };
 
+  const handleRetryPayment = async (order: ScrapeOrder) => {
+    setOpenMenuId(null);
+    try {
+      const checkout = await scrapeOrderApi.pay(order.orderId);
+      if (!checkout.checkoutUrl) {
+        // Order đã paid hoặc không cần thanh toán — vào tracking.
+        navigate(`/workspace/${checkout.order.workspaceId}/orders/${checkout.order.orderId}`);
+        return;
+      }
+      window.location.href = checkout.checkoutUrl;
+    } catch (error) {
+      await alert({
+        title: 'Không thể tạo thanh toán',
+        message: extractApiError(error, 'Vui lòng thử lại sau.'),
+        type: 'error',
+      });
+    }
+  };
+
   const toggleCompareSelection = (projectId: number) => {
     setSelectedCompareIds((prev) => {
       if (prev.includes(projectId)) return prev.filter((id) => id !== projectId);
@@ -598,8 +677,8 @@ const Projects = () => {
         <div className="absolute -top-20 -right-16 w-64 h-64 bg-[#FF7575]/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-[#00B4D8]/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-4">
+        <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+          <div className="space-y-5 min-w-0 flex-1">
             <Link
               to="/workspaces"
               className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors"
@@ -608,19 +687,24 @@ const Projects = () => {
               Quay lại workspace
             </Link>
 
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400">
-              <Building2 className="w-3.5 h-3.5 text-[#FF7575]" />
-              {workspaceName || `Workspace #${workspaceId}`}
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FF7575] via-[#ff6262] to-[#FF4D4D] flex items-center justify-center text-white shrink-0 shadow-[0_8px_24px_rgba(255,117,117,0.35)]">
+                <Building2 size={26} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-[#FF7575] font-bold">
+                  Workspace
+                </p>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight truncate">
+                  {workspaceName || `Workspace #${workspaceId}`}
+                </h1>
+              </div>
             </div>
 
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">
-                Dự án Giám sát
-              </h1>
-              <p className="text-gray-400 text-sm sm:text-base max-w-xl">
-                Quản lý chiến dịch cào dữ liệu, phân tích sentiment và báo cáo trên mạng xã hội.
-              </p>
-            </div>
+            <p className="text-gray-400 text-sm sm:text-base max-w-2xl leading-relaxed">
+              <span className="text-white font-semibold">Dự án giám sát</span> — quản lý chiến dịch cào dữ liệu,
+              phân tích sentiment và báo cáo trên mạng xã hội.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
@@ -669,9 +753,9 @@ const Projects = () => {
           <div className="relative grid grid-cols-3 gap-3 mt-8 pt-8 border-t border-white/5">
             {[
               { label: 'Dự án', value: stats.total, icon: FolderKanban, color: 'text-[#FF7575]' },
-              { label: 'Nguồn dữ liệu', value: stats.sources, icon: Radio, color: 'text-[#00B4D8]' },
-              { label: 'Có từ khóa', value: stats.withKeyword, icon: Hash, color: 'text-emerald-400' },
-            ].map(({ label, value, icon: Icon, color }) => (
+              { label: 'Nguồn dữ liệu', value: stats.sources, icon: Radio, color: 'text-[#00B4D8]', helper: 'nền tảng duy nhất' },
+              { label: 'Từ khoá', value: stats.keywords, icon: Hash, color: 'text-emerald-400', helper: 'không tính trùng' },
+            ].map(({ label, value, icon: Icon, color, helper }) => (
               <div
                 key={label}
                 className="rounded-2xl bg-white/[0.03] border border-white/5 px-4 py-3 flex items-center gap-3"
@@ -682,6 +766,7 @@ const Projects = () => {
                 <div>
                   <p className="text-lg font-bold text-white tabular-nums">{value}</p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+                  {helper && <p className="text-[10px] text-gray-600 mt-0.5">{helper}</p>}
                 </div>
               </div>
             ))}
@@ -816,6 +901,7 @@ const Projects = () => {
                   navigate(`/workspace/${workspaceId}/project/${project.projectId}/edit`);
                 }}
                 onDelete={() => handleDeleteProject(project)}
+                onRetryPayment={(order) => handleRetryPayment(order)}
               />
             );
           })}

@@ -3,12 +3,15 @@ import { pickField, pickNumber, pickNullableString, pickString } from '../utils/
 import type { ScrapeJobStatus } from '../types/project';
 
 export type ScrapeQuote = {
-  postedSinceDays: number;
-  timeRangeLabel: string;
+  mentionsPackage: string;
+  packageLabel: string;
+  mentionsIncluded: number;
   price: number;
   priceLabel: string;
   estimatedMinutes: number;
   estimatedDeliveryLabel: string;
+  projectRemainingMentions: number | null;
+  projectHasFullUnlimited: boolean;
 };
 
 export type ScrapeOrderCheckout = {
@@ -29,6 +32,9 @@ export type ScrapeOrder = {
   keyword: string;
   postedSinceDays: number;
   timeRangeLabel: string;
+  mentionsPackage?: string | null;
+  packageLabel?: string | null;
+  mentionsIncluded?: number | null;
   quotedPrice: number;
   priceLabel: string;
   status: string;
@@ -45,13 +51,17 @@ export type ScrapeOrder = {
 };
 
 function normalizeQuote(data: Record<string, unknown>): ScrapeQuote {
+  const remainingRaw = pickField(data, 'projectRemainingMentions', 'ProjectRemainingMentions');
   return {
-    postedSinceDays: pickNumber(data, 'postedSinceDays', 'PostedSinceDays'),
-    timeRangeLabel: pickString(data, 'timeRangeLabel', 'TimeRangeLabel'),
+    mentionsPackage: pickString(data, 'mentionsPackage', 'MentionsPackage'),
+    packageLabel: pickString(data, 'packageLabel', 'PackageLabel'),
+    mentionsIncluded: pickNumber(data, 'mentionsIncluded', 'MentionsIncluded'),
     price: pickNumber(data, 'price', 'Price'),
     priceLabel: pickString(data, 'priceLabel', 'PriceLabel'),
     estimatedMinutes: pickNumber(data, 'estimatedMinutes', 'EstimatedMinutes'),
     estimatedDeliveryLabel: pickString(data, 'estimatedDeliveryLabel', 'EstimatedDeliveryLabel'),
+    projectRemainingMentions: remainingRaw == null ? null : pickNumber(data, 'projectRemainingMentions', 'ProjectRemainingMentions'),
+    projectHasFullUnlimited: Boolean(pickField(data, 'projectHasFullUnlimited', 'ProjectHasFullUnlimited')),
   };
 }
 
@@ -88,6 +98,9 @@ function normalizeOrder(data: Record<string, unknown>): ScrapeOrder {
     keyword: pickString(data, 'keyword', 'Keyword'),
     postedSinceDays: pickNumber(data, 'postedSinceDays', 'PostedSinceDays'),
     timeRangeLabel: pickString(data, 'timeRangeLabel', 'TimeRangeLabel'),
+    mentionsPackage: pickNullableString(data, 'mentionsPackage', 'MentionsPackage'),
+    packageLabel: pickNullableString(data, 'packageLabel', 'PackageLabel'),
+    mentionsIncluded: pickField<number>(data, 'mentionsIncluded', 'MentionsIncluded') ?? null,
     quotedPrice: pickNumber(data, 'quotedPrice', 'QuotedPrice'),
     priceLabel: pickString(data, 'priceLabel', 'PriceLabel'),
     status: pickString(data, 'status', 'Status'),
@@ -117,10 +130,8 @@ function normalizeCheckout(data: Record<string, unknown>): ScrapeOrderCheckout {
 }
 
 export const scrapeOrderApi = {
-  async getQuote(postedSinceDays: number): Promise<ScrapeQuote> {
-    const { data } = await axiosClient.get('/api/scrape-orders/quote', {
-      params: { postedSinceDays },
-    });
+  async getQuote(mentionsPackage: string): Promise<ScrapeQuote> {
+    const { data } = await axiosClient.post('/api/scrape-orders/quote', { mentionsPackage });
     return normalizeQuote(data as Record<string, unknown>);
   },
 
@@ -128,7 +139,7 @@ export const scrapeOrderApi = {
     workspaceId: number;
     projectId: number;
     keyword: string;
-    postedSinceDays: number;
+    mentionsPackage: string;
   }): Promise<ScrapeOrder> {
     const { data } = await axiosClient.post('/api/scrape-orders', payload);
     return normalizeOrder(data as Record<string, unknown>);
