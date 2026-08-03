@@ -19,7 +19,7 @@ public partial class ScrapePackage
 
     public int DurationDays { get; set; }
 
-    public int MaxItems { get; set; }
+    public int? MaxItems { get; set; }
 
     public int? MaxSources { get; set; }
 
