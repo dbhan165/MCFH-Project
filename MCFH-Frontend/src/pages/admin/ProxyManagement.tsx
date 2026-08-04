@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Plus,
   Globe,
@@ -133,26 +133,26 @@ const ProxyManagement = () => {
   };
 
   return (
-    <AdminLayout searchPlaceholder="Search proxies or regions...">
+    <AdminLayout searchPlaceholder="Tìm kiếm proxy hoặc khu vực...">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
           <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">
-            Proxy Infrastructure Monitoring
+            Giám sát Hạ tầng Proxy
           </h2>
           <p className="text-[#6b7280] text-sm mt-1">
-            Real-time status and performance metrics for global proxy nodes.
+            Trạng thái & chỉ số hiệu năng thời gian thực của các nút Proxy toàn cầu.
           </p>
         </div>
         <button className="flex items-center gap-2 px-5 py-2.5 bg-[#ef4444] hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm shrink-0">
           <Plus className="w-4 h-4" />
-          Add New Proxy
+          Thêm Proxy mới
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
         <StatCard
           borderColor="border-l-blue-500"
-          label="Total Proxies"
+          label="Tổng Proxy"
           value="1,284"
           tag={
             <span className="flex items-center gap-1 text-xs font-semibold text-blue-600">
@@ -163,35 +163,35 @@ const ProxyManagement = () => {
         />
         <StatCard
           borderColor="border-l-green-500"
-          label="Active"
+          label="Đang hoạt động"
           value="1,242"
-          tag={<span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded">Healthy</span>}
+          tag={<span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded">Khỏe mạnh</span>}
         />
         <StatCard
           borderColor="border-l-amber-500"
-          label="Throttled"
+          label="Bị giới hạn"
           value="38"
-          tag={<span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">Degraded</span>}
+          tag={<span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">Bị suy giảm</span>}
         />
         <StatCard
           borderColor="border-l-red-500"
-          label="Failed"
+          label="Lỗi / Hỏng"
           value="4"
-          tag={<span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded">Urgent</span>}
+          tag={<span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded">Cần xử lý</span>}
         />
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-gray-100">
-          <h3 className="text-base font-semibold">Global Node Registry</h3>
+          <h3 className="text-base font-semibold">Danh sách Nút Proxy toàn cầu</h3>
           <div className="flex items-center gap-3">
             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors">
               <Download className="w-4 h-4 text-gray-500" />
-              Export CSV
+              Xuất CSV
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors">
               <Layers className="w-4 h-4 text-gray-500" />
-              Bulk Action
+              Thao tác hàng loạt
             </button>
           </div>
         </div>
@@ -201,25 +201,25 @@ const ProxyManagement = () => {
             <thead>
               <tr className="border-b border-gray-100 bg-blue-50/40">
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  IP Address
+                  Địa chỉ IP
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Region
+                  Khu vực / User
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Provider
+                  Trạng thái
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Success Rate
+                  Tỷ lệ thành công
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Latency
+                  Độ trễ (Latency)
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  History (24H)
+                  Lịch sử (24H)
                 </th>
                 <th className="text-right px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Status
+                  Thao tác
                 </th>
               </tr>
             </thead>

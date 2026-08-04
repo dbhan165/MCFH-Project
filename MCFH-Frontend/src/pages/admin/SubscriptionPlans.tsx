@@ -114,11 +114,11 @@ const SubscriptionPlans = () => {
   }, []);
 
   return (
-    <AdminLayout searchPlaceholder="Search systems or users...">
+    <AdminLayout searchPlaceholder="Tìm kiếm hệ thống hoặc người dùng...">
       <div className="mb-8">
-        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Subscription Management</h2>
+        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Quản lý gói dịch vụ</h2>
         <p className="text-[#6b7280] text-sm mt-1">
-          Oversee tier configurations, revenue metrics, and resource allocation for the engine.
+          Quản lý các gói đăng ký, doanh thu và phân bổ tài nguyên hệ thống.
         </p>
       </div>
 
@@ -127,41 +127,41 @@ const SubscriptionPlans = () => {
           icon={Play}
           iconBg="bg-blue-50"
           iconColor="text-blue-500"
-          label="Total Active Subscriptions"
+          label="Tổng gói đăng ký hoạt động"
           value="1,284"
-          badge="Monthly Growth: +12%"
+          badge="Tăng trưởng tháng: +12%"
         />
         <SummaryCard
           icon={Wallet}
           iconBg="bg-emerald-50"
           iconColor="text-emerald-600"
-          label="Monthly Revenue"
+          label="Doanh thu hàng tháng"
           value="$142,500"
-          badge="This Month"
+          badge="Tháng này"
         />
         <SummaryCard
           icon={Users}
           iconBg="bg-violet-50"
           iconColor="text-violet-600"
-          label="Active Workspaces"
+          label="Workspaces hoạt động"
           value="842"
-          badge="98% Retention"
+          badge="Tỷ lệ giữ chân 98%"
         />
         <SummaryCard
           icon={Box}
           iconBg="bg-amber-50"
           iconColor="text-amber-600"
-          label="Total AI Credits Allocated"
+          label="Tổng AI Credits đã phân bổ"
           value="12.5M"
-          badge="85% Utilization"
+          badge="Tỷ lệ sử dụng 85%"
         />
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-gray-100">
-          <h3 className="text-base font-semibold">Available Plans</h3>
+          <h3 className="text-base font-semibold">Danh sách gói hiện có</h3>
           <button className="px-5 py-2.5 bg-[#111827] hover:bg-slate-800 text-white rounded-lg text-sm font-semibold transition-colors">
-            Add New Plan
+            Thêm gói mới
           </button>
         </div>
 
@@ -170,25 +170,25 @@ const SubscriptionPlans = () => {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Plan Name
+                  Tên gói
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Monthly Price
+                  Giá hàng tháng
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  AI Credit Limit
+                  Hạn mức AI Credits
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Active Subscribers
+                  Số lượng đăng ký
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Status
+                  Trạng thái
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Last Updated
+                  Cập nhật lần cuối
                 </th>
                 <th className="text-right px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Actions
+                  Thao tác
                 </th>
               </tr>
             </thead>
@@ -212,13 +212,13 @@ const SubscriptionPlans = () => {
                     <span
                       className={`inline-block text-xs font-semibold px-2.5 py-1 rounded ${statusStyles[plan.status]}`}
                     >
-                      {plan.status}
+                      {plan.status === 'Popular' ? 'Nổi bật' : 'Hoạt động'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-[#6b7280]">{plan.lastUpdated}</td>
                   <td className="px-6 py-4 text-right">
                     <button className="text-sm font-semibold text-[#ef4444] hover:text-red-600 transition-colors">
-                      Edit Plan
+                      Chỉnh sửa
                     </button>
                   </td>
                 </tr>
@@ -231,19 +231,19 @@ const SubscriptionPlans = () => {
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>
-            <h3 className="text-base font-semibold">Top Workspaces by AI Credit Consumption</h3>
+            <h3 className="text-base font-semibold">Top Workspace tiêu thụ AI Credits nhiều nhất</h3>
             <p className="text-sm text-[#6b7280] mt-1">
-              Real-time resource utilization across active accounts.
+              Mức độ tiêu thụ tài nguyên thực tế theo thời gian thực.
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors">
               <Calendar className="w-4 h-4 text-gray-500" />
-              Current Month
+              Tháng hiện tại
             </button>
             <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-[#111827] hover:bg-gray-50 transition-colors">
               <Download className="w-4 h-4 text-gray-500" />
-              Export
+              Xuất file
             </button>
           </div>
         </div>
