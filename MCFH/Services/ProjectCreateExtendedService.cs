@@ -53,7 +53,7 @@ public class ProjectCreateExtendedService
             EnableFacebook = dto.EnableFacebook,
             EnableYoutube = dto.EnableYoutube,
             EnableTiktok = dto.EnableTiktok,
-            EnableMaps = dto.EnableMaps,
+            EnableMaps = dto.EnableThreads,
             CreatedAt = DateTime.Now
         };
 
@@ -108,6 +108,7 @@ public class ProjectCreateExtendedService
                 EnableFacebook = p.EnableFacebook == true,
                 EnableYoutube = p.EnableYoutube == true,
                 EnableTiktok = p.EnableTiktok == true,
+                EnableThreads = p.EnableMaps == true,
                 EnableMaps = p.EnableMaps == true,
                 EnableNews = p.DataSources.Any(d => d.Platform == "news" && d.Status == "active"),
                 CreatedAt = p.CreatedAt
@@ -134,7 +135,7 @@ public class ProjectCreateExtendedService
         if (dto.EnableFacebook.HasValue) project.EnableFacebook = dto.EnableFacebook.Value;
         if (dto.EnableYoutube.HasValue) project.EnableYoutube = dto.EnableYoutube.Value;
         if (dto.EnableTiktok.HasValue) project.EnableTiktok = dto.EnableTiktok.Value;
-        if (dto.EnableMaps.HasValue) project.EnableMaps = dto.EnableMaps.Value;
+        if (dto.EnableThreads.HasValue) project.EnableMaps = dto.EnableThreads.Value;
 
         await _context.SaveChangesAsync();
 

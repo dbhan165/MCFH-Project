@@ -103,6 +103,7 @@ public class PlatformCookiePathProvider : IPlatformCookiePathProvider
     {
         "facebook" => ScrapeCookiePaths.FacebookCookiePath,
         "tiktok" => ScrapeCookiePaths.TikTokCookiePath,
+        "threads" => ScrapeCookiePaths.ThreadsCookiePath,
         _ => null
     };
 
@@ -127,12 +128,13 @@ public static class PlatformCookieFileHelper
 
     public static readonly string[] FacebookRequired = ["c_user", "xs"];
     public static readonly string[] TikTokRequired = ["sessionid", "sid_tt"];
+    public static readonly string[] ThreadsRequired = ["auth_token", "ds_user_id"];
 
     public static string NormalizePlatform(string platform)
     {
         var p = platform.Trim().ToLowerInvariant();
-        if (p is not ("facebook" or "tiktok"))
-            throw new ArgumentException("Platform phải là 'facebook' hoặc 'tiktok'.");
+        if (p is not ("facebook" or "tiktok" or "threads"))
+            throw new ArgumentException("Platform phải là 'facebook', 'tiktok', hoặc 'threads'.");
         return p;
     }
 
@@ -166,19 +168,24 @@ public static class PlatformCookieFileHelper
     public static void ValidateRequiredCookies(string platform, List<CookieEditorEntry> entries)
     {
         var names = entries.Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var required = platform == "facebook" ? FacebookRequired : TikTokRequired;
 
-        if (platform == "tiktok")
+        if (platform == "facebook")
+        {
+            foreach (var name in FacebookRequired)
+            {
+                if (!names.Contains(name))
+                    throw new ArgumentException($"Facebook cookie thiếu '{name}'.");
+            }
+        }
+        else if (platform == "tiktok")
         {
             if (!names.Contains("sessionid") && !names.Contains("sid_tt"))
                 throw new ArgumentException("TikTok cookie thiếu sessionid hoặc sid_tt.");
-            return;
         }
-
-        foreach (var name in required)
+        else if (platform == "threads")
         {
-            if (!names.Contains(name))
-                throw new ArgumentException($"Facebook cookie thiếu '{name}'.");
+            if (!names.Contains("auth_token") && !names.Contains("ds_user_id"))
+                throw new ArgumentException("Threads cookie thiếu auth_token hoặc ds_user_id.");
         }
     }
 
@@ -187,16 +194,21 @@ public static class PlatformCookieFileHelper
         var names = entries?.Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
                     ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (platform == "tiktok")
+        return platform switch
         {
-            return new Dictionary<string, bool>
+            "facebook" => FacebookRequired.ToDictionary(n => n, n => names.Contains(n)),
+            "tiktok" => new Dictionary<string, bool>
             {
                 ["sessionid"] = names.Contains("sessionid"),
                 ["sid_tt"] = names.Contains("sid_tt")
-            };
-        }
-
-        return FacebookRequired.ToDictionary(n => n, n => names.Contains(n));
+            },
+            "threads" => new Dictionary<string, bool>
+            {
+                ["auth_token"] = names.Contains("auth_token"),
+                ["ds_user_id"] = names.Contains("ds_user_id")
+            },
+            _ => new Dictionary<string, bool>()
+        };
     }
 
     public static DateTime? ComputeExpiresAt(List<CookieEditorEntry> entries)
