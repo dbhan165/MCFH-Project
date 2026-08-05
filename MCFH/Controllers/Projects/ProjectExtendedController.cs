@@ -1,11 +1,14 @@
+using MCFH.Configuration;
 using MCFH.DTOs;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Services;
+using MCFH.Services.Payments;
 using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace MCFH.Controllers.Projects;
@@ -38,7 +41,11 @@ public class ProjectExtendedController : ControllerBase
         IServiceScopeFactory scopeFactory,
         IEmailService emailService,
         ILogger<ProjectExtendedController> logger,
+        ILogger<BespokeReportService> bespokeLogger,
         ICommentBundleStorage bundleStorage,
+        ScrapeJobRunner scrapeJobRunner,
+        PayOsService payOs,
+        IOptions<PayOsOptions> payOsOptions,
         IAiSentimentService aiSentiment)
     {
         _projectService = projectService;
@@ -50,7 +57,9 @@ public class ProjectExtendedController : ControllerBase
         _mentionFilters = new MentionFilterService(db, _analyticsService);
         _mentionManagement = new MentionManagementService(db);
         _reportService = new ProjectReportService(db, _analyticsService, aiSentiment);
-        _bespokeService = new BespokeReportService(db, _analyticsService, emailService);
+        _bespokeService = new BespokeReportService(
+            db, _analyticsService, emailService, scrapeJobRunner, scopeFactory, _reportService,
+            payOs, payOsOptions, bespokeLogger);
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -317,6 +326,34 @@ public class ProjectExtendedController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("{projectId}/bespoke/{requestId}/pay")]
+    public async Task<IActionResult> PayBespokeRequest(int workspaceId, int projectId, int requestId)
+    {
+        var result = await _bespokeService.PayRequestAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (result == null) return BadRequest(new { message = "Không thể tạo thanh toán cho yêu cầu này." });
+        return Ok(result);
+    }
+
+    [HttpGet("{projectId}/bespoke/{requestId}/payment-status")]
+    public async Task<IActionResult> GetBespokePaymentStatus(int workspaceId, int projectId, int requestId)
+    {
+        var result = await _bespokeService.ConfirmPaymentAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (result == null) return NotFound();
+        return Ok(result);
+    }
+
+    [HttpPost("{projectId}/bespoke/{requestId}/send-to-reporter")]
+    public async Task<IActionResult> SendBespokeToReporter(
+        int workspaceId, int projectId, int requestId, [FromBody] SendBespokeToReporterDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto?.Note))
+            return BadRequest(new { message = "Vui lòng nhập nội dung cần Reporter chỉnh sửa." });
+
+        var result = await _bespokeService.SendToReporterAsync(workspaceId, projectId, GetUserId(), requestId, dto);
+        if (result == null) return BadRequest(new { message = "Không thể gửi Reporter. Cần báo cáo đã sẵn sàng." });
+        return Ok(result);
+    }
+
     [HttpPost("{projectId}/bespoke/{requestId}/assign")]
     public async Task<IActionResult> AssignBespokeReporter(int workspaceId, int projectId, int requestId, [FromBody] AssignBespokeReporterDto dto)
     {
@@ -344,10 +381,17 @@ public class ProjectExtendedController : ControllerBase
     [HttpGet("{projectId}/bespoke/{requestId}/download")]
     public async Task<IActionResult> DownloadBespokeReport(int workspaceId, int projectId, int requestId)
     {
-        var file = await _bespokeService.DownloadDeliverableAsync(workspaceId, projectId, GetUserId(), requestId);
-        if (file == null) return NotFound();
-        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
-        return File(file.Value.Content, contentType, file.Value.FileName);
+        try
+        {
+            var file = await _bespokeService.DownloadDeliverableAsync(workspaceId, projectId, GetUserId(), requestId);
+            if (file == null) return NotFound(new { message = "Chưa có file báo cáo để tải." });
+            var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+            return File(file.Value.Content, contentType, file.Value.FileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
+        }
     }
 
     [HttpPost("{projectId}/bespoke/{requestId}/accept-quote")]

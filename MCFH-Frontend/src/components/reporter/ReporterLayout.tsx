@@ -1,71 +1,71 @@
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ClipboardList,
   LineChart,
   Settings,
-  Plus,
+  User,
+  LogOut,
   Search,
-  Calendar,
+  HelpCircle,
+  LayoutDashboard,
+  Archive,
 } from 'lucide-react';
+import NotificationBell from '../notifications/NotificationBell';
+import { clearAuthSession, getAvatarFallback, loadProfileFromStorage } from '../../utils/authStorage';
 
-const sidebarItems = [
+const navItems = [
+  { label: 'Dashboard', icon: LayoutDashboard, href: '/reporter/dashboard' },
   { label: 'Tasks', icon: ClipboardList, href: '/reporter/tasks' },
   { label: 'My Performance', icon: LineChart, href: '/reporter/performance' },
+  { label: 'Archive', icon: Archive, href: '/reporter/archive' },
   { label: 'Settings', icon: Settings, href: '/reporter/settings' },
-];
-
-const topNavItems = [
-  { label: 'Dashboard', href: '/reporter/dashboard' },
-  { label: 'Reports', href: '/reporter/tasks' },
-  { label: 'Archive', href: '/reporter/archive' },
 ];
 
 interface ReporterLayoutProps {
   children: ReactNode;
+  searchPlaceholder?: string;
+  /** Giữ prop cũ để không phá các page đang truyền activeTopNav */
   activeTopNav?: 'dashboard' | 'reports' | 'archive' | 'settings' | 'performance';
 }
 
-const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutProps) => {
+const ReporterLayout = ({
+  children,
+  searchPlaceholder = 'Tìm kiếm mã đơn hoặc tên...',
+}: ReporterLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const profile = loadProfileFromStorage();
+  const displayName = profile?.fullName?.trim() || 'Reporter';
+  const displayRole = profile?.role || 'Reporter';
+  const avatarSrc = profile?.avatarUrl || getAvatarFallback(displayName);
 
-  const isTopNavActive = (href: string, key: string) => {
-    if (activeTopNav) {
-      if (key === 'dashboard') return activeTopNav === 'dashboard';
-      if (key === 'reports') return activeTopNav === 'reports';
-      if (key === 'archive') return activeTopNav === 'archive';
-    }
-    return location.pathname === href;
+  const handleSignOut = () => {
+    clearAuthSession();
+    navigate('/login');
   };
 
   return (
-    <div className="min-h-screen flex bg-[#f8fafc] text-[#0f172a] font-sans">
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div className="px-5 py-6 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <img
-              src="https://i.pravatar.cc/150?img=33"
-              alt="Analyst avatar"
-              className="w-11 h-11 rounded-full object-cover border-2 border-gray-100"
-            />
-            <div>
-              <p className="text-sm font-semibold text-[#0f172a] leading-tight">Trần Chuyên Viên</p>
-              <p className="text-xs text-[#64748b] mt-0.5">Enterprise Analyst</p>
-            </div>
-          </div>
+    <div className="min-h-screen flex bg-[#faf7f5] text-[#111827] font-sans">
+      <aside className="w-64 bg-white border-r border-stone-200 flex flex-col shrink-0">
+        <div className="px-6 py-6 border-b border-stone-100">
+          <h1 className="text-xl font-bold tracking-tight">MCFH</h1>
+          <p className="text-sm text-[#78716c] mt-0.5">Reporter Portal</p>
         </div>
 
         <nav className="flex-1 py-4 px-3 space-y-1">
-          {sidebarItems.map((item) => {
-            const isActive = location.pathname === item.href;
+          {navItems.map((item) => {
+            const isActive =
+              location.pathname === item.href ||
+              (item.href === '/reporter/tasks' && location.pathname.startsWith('/reporter/requests'));
             return (
               <Link
                 key={item.label}
                 to={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border-l-4 ${
                   isActive
-                    ? 'bg-teal-50 text-teal-700 border-teal-500'
-                    : 'text-[#64748b] border-transparent hover:bg-gray-50 hover:text-[#0f172a]'
+                    ? 'bg-rose-50 text-[#e11d48] border-[#e11d48]'
+                    : 'text-[#78716c] border-transparent hover:bg-stone-50 hover:text-[#111827]'
                 }`}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
@@ -75,50 +75,60 @@ const ReporterLayout = ({ children, activeTopNav = 'reports' }: ReporterLayoutPr
           })}
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
-          <button className="w-full flex items-center justify-center gap-2 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-            <Plus className="w-4 h-4" />
-            New Report
+        <div className="px-3 py-4 border-t border-stone-100 space-y-1">
+          <Link
+            to="/reporter/profile"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              location.pathname === '/reporter/profile'
+                ? 'bg-rose-50 text-[#e11d48]'
+                : 'text-[#78716c] hover:bg-stone-50 hover:text-[#111827]'
+            }`}
+          >
+            <User className="w-5 h-5" />
+            Profile
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#78716c] hover:bg-stone-50 hover:text-[#111827] transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            Sign Out
           </button>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-          <h1 className="text-lg font-bold text-teal-800 tracking-tight shrink-0">Analyst Workspace</h1>
-
-          <nav className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
-            {topNavItems.map((item, index) => {
-              const keys = ['dashboard', 'reports', 'archive'] as const;
-              const isActive = isTopNavActive(item.href, keys[index]);
-              return (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  className={`text-sm font-medium pb-0.5 transition-colors ${
-                    isActive
-                      ? 'text-teal-700 border-b-2 border-teal-600'
-                      : 'text-[#64748b] hover:text-[#0f172a]'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="relative hidden sm:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-6 shrink-0">
+          <div className="flex-1 max-w-xl mx-auto">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
               <input
                 type="text"
-                placeholder="Tìm kiếm mã đơn hoặc tên..."
-                className="w-56 lg:w-72 bg-gray-50 border border-gray-200 rounded-lg pl-10 pr-4 py-2 text-sm text-[#0f172a] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
+                placeholder={searchPlaceholder}
+                className="w-full bg-stone-50 border border-stone-200 rounded-full pl-11 pr-4 py-2.5 text-sm text-[#111827] placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 transition-all"
               />
             </div>
-            <button className="p-2.5 text-gray-500 hover:text-teal-700 hover:bg-teal-50 border border-gray-200 rounded-lg transition-colors">
-              <Calendar className="w-4 h-4" />
+          </div>
+
+          <div className="flex items-center gap-4 ml-6">
+            <NotificationBell theme="light" />
+            <button
+              type="button"
+              className="p-2 text-stone-500 hover:text-[#111827] hover:bg-stone-50 rounded-lg transition-colors"
+            >
+              <HelpCircle className="w-5 h-5" />
             </button>
+            <div className="hidden md:block text-right mr-1">
+              <p className="text-sm font-semibold text-[#111827] leading-tight">{displayName}</p>
+              <p className="text-[10px] font-bold text-[#78716c] tracking-wider uppercase">{displayRole}</p>
+            </div>
+            <Link
+              to="/reporter/profile"
+              className="w-9 h-9 rounded-full overflow-hidden border-2 border-stone-200 ml-1 shrink-0"
+            >
+              <img src={avatarSrc} alt="Reporter avatar" className="w-full h-full object-cover" />
+            </Link>
           </div>
         </header>
 

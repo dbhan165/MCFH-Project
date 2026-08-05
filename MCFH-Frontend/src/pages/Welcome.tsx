@@ -1,10 +1,17 @@
-import { ArrowRight, PlayCircle, BarChart3, BrainCircuit, FileText, Zap, Globe, Shield } from 'lucide-react';
+import { ArrowRight, PlayCircle, BarChart3, FileText, Globe, Shield } from 'lucide-react';
 import wellcome from '../assets/wellcome.png';
-import React from 'react';
 import { Link } from 'react-router-dom';
 import McfhLogo from '../components/brand/McfhLogo';
 
 const Welcome = () => {
+  const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+    e.preventDefault();
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     // Wrapper chính với màu nền Navy tối và pattern lưới (grid) chìm
     <div className="bg-[#0A101D] text-white font-sans flex flex-col relative overflow-x-hidden selection:bg-[#00B4D8] selection:text-white">

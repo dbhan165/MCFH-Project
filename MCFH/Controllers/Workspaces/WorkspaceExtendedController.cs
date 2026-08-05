@@ -1,3 +1,4 @@
+using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using MCFH.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -12,8 +13,13 @@ namespace MCFH.Controllers.Workspaces;
 public class WorkspaceExtendedController : ControllerBase
 {
     private readonly WorkspaceBootstrapService _bootstrap;
+    private readonly BespokeReportService _bespoke;
 
-    public WorkspaceExtendedController(McfhDbContext db) => _bootstrap = new WorkspaceBootstrapService(db);
+    public WorkspaceExtendedController(McfhDbContext db, BespokeReportService bespoke)
+    {
+        _bootstrap = new WorkspaceBootstrapService(db);
+        _bespoke = bespoke;
+    }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -30,5 +36,18 @@ public class WorkspaceExtendedController : ControllerBase
         if (!ok) return NotFound(new { message = "Workspace không tồn tại." });
 
         return Ok(new { message = "Đã khởi tạo tài nguyên workspace." });
+    }
+
+    /// <summary>
+    /// Tạo báo cáo chuyên sâu: tự tạo Project mới trong workspace (không gắn project có sẵn).
+    /// Response có projectId để FE gọi pay/download trên project vừa tạo.
+    /// </summary>
+    [HttpPost("{workspaceId}/bespoke")]
+    public async Task<IActionResult> CreateBespokeStandalone(int workspaceId, [FromBody] CreateBespokeRequestDto dto)
+    {
+        var result = await _bespoke.CreateStandaloneRequestAsync(workspaceId, GetUserId(), dto);
+        if (result == null)
+            return BadRequest(new { message = "Không tạo được yêu cầu. Kiểm tra quyền Owner/Editor và thông tin (title, keyword)." });
+        return Ok(result);
     }
 }

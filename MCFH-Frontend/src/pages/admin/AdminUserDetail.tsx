@@ -127,13 +127,13 @@ const AdminUserDetailPage = () => {
   ];
 
   return (
-    <AdminLayout searchPlaceholder="Search by email or name...">
+    <AdminLayout searchPlaceholder="Tìm kiếm theo email hoặc tên...">
       <Link
         to="/admin/users"
         className="inline-flex items-center gap-2 text-sm text-[#6b7280] hover:text-[#111827] mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
-        Quay lại User Management
+        Quay lại Quản lý người dùng
       </Link>
 
       {errorMessage && (
@@ -170,7 +170,7 @@ const AdminUserDetailPage = () => {
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6b7280]">
                   <span className={`w-2 h-2 rounded-full ${user.isBanned ? 'bg-gray-400' : 'bg-green-500'}`} />
-                  {user.isBanned ? 'Banned' : 'Active'}
+                  {user.isBanned ? 'Đã khóa' : 'Hoạt động'}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs text-[#6b7280]">
                   <UserCheck className="w-3.5 h-3.5" />
@@ -198,7 +198,7 @@ const AdminUserDetailPage = () => {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
               {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
-              {user.isBanned ? 'Unban user' : 'Ban user'}
+              {user.isBanned ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
             </button>
           </div>
         </div>

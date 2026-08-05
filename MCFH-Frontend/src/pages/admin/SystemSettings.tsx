@@ -19,10 +19,10 @@ interface SettingsCategory {
 }
 
 const settingsCategories: SettingsCategory[] = [
-  { id: 'api', label: 'API Integrations', icon: Plug },
-  { id: 'payment', label: 'Payment Gateways', icon: CreditCard },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'thresholds', label: 'Global Thresholds', icon: Gauge },
+  { id: 'api', label: 'Tích hợp API & AI', icon: Plug },
+  { id: 'payment', label: 'Cổng thanh toán', icon: CreditCard },
+  { id: 'notifications', label: 'Thông báo hệ thống', icon: Bell },
+  { id: 'thresholds', label: 'Ngưỡng giới hạn toàn cục', icon: Gauge },
 ];
 
 const defaultModelValue = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
@@ -91,14 +91,14 @@ const SystemSettings = () => {
 
   return (
     <AdminLayout
-      searchPlaceholder="Search settings..."
+      searchPlaceholder="Tìm kiếm cài đặt..."
       adminName="Admin User"
-      adminRole="SUPER ADMIN"
+      adminRole="QUẢN TRỊ VIÊN"
     >
       <div className="mb-8">
-        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">System Settings</h2>
+        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Cài đặt hệ thống</h2>
         <p className="text-[#6b7280] text-sm mt-1">
-          Configure global integrations, API thresholds, and system behaviors.
+          Cấu hình các tích hợp toàn hệ thống, tham số API và hành vi của hệ thống.
         </p>
       </div>
 
@@ -129,13 +129,13 @@ const SystemSettings = () => {
             <>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
                 <div>
-                  <h3 className="text-lg font-semibold text-[#111827]">AI Model Settings</h3>
+                  <h3 className="text-lg font-semibold text-[#111827]">Cấu hình AI Model & TokenRouter</h3>
                   <p className="text-sm text-[#6b7280] mt-1">
-                    Configure Large Language Model integration via TokenRouter.
+                    Cấu hình mô hình ngôn ngữ lớn (LLM) tích hợp qua TokenRouter.
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-blue-50 text-blue-600 shrink-0">
-                  Active
+                  Hoạt động
                 </span>
               </div>
 
@@ -170,28 +170,28 @@ const SystemSettings = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
-                      Base URL
+                      Base URL (Đường dẫn API)
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         value={baseUrl}
                         onChange={(e) => setBaseUrl(e.target.value)}
-                        placeholder="e.g. https://api.groq.com/openai/v1"
+                        placeholder="VD: https://api.groq.com/openai/v1"
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
-                      Default Model
+                      Tên Model mặc định
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         value={defaultModel}
                         onChange={(e) => setDefaultModel(e.target.value)}
-                        placeholder="e.g. nvidia/nemotron-3..."
+                        placeholder="VD: nvidia/nemotron-3..."
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
                     </div>
@@ -203,16 +203,16 @@ const SystemSettings = () => {
                     type="button"
                     onClick={handleTestAiModel}
                     disabled={isTestingAiModel}
-                    className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors"
+                    className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors cursor-pointer"
                   >
-                    {isTestingAiModel ? 'Đang test AI...' : 'Test AI Model'}
+                    {isTestingAiModel ? 'Đang test AI...' : 'Kiểm tra AI Model'}
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-6 py-3 bg-[#ef4444] hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                    className="px-6 py-3 bg-[#ef4444] hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm cursor-pointer"
                   >
-                    {isSaving ? 'Đang lưu...' : 'Save API Configuration'}
+                    {isSaving ? 'Đang lưu...' : 'Lưu cấu hình API'}
                   </button>
                 </div>
               </form>
@@ -227,22 +227,22 @@ const SystemSettings = () => {
 
           {activeTab === 'payment' && (
             <SettingsPlaceholder
-              title="Payment Gateways"
-              description="Configure Stripe, PayPal, and other payment provider credentials."
+              title="Cổng thanh toán"
+              description="Cấu hình thông tin tích hợp cổng thanh toán PayOS và các dịch vụ khác."
             />
           )}
 
           {activeTab === 'notifications' && (
             <SettingsPlaceholder
-              title="Notification Settings"
-              description="Manage email alerts, webhook endpoints, and system notification rules."
+              title="Thông báo hệ thống"
+              description="Quản lý cảnh báo email, webhook và quy tắc thông báo hệ thống."
             />
           )}
 
           {activeTab === 'thresholds' && (
             <SettingsPlaceholder
-              title="Global Thresholds"
-              description="Set system-wide limits for scraping rate, API usage, and resource allocation."
+              title="Ngưỡng giới hạn toàn cục"
+              description="Thiết lập giới hạn tốc độ cào, hạn mức API và phân bổ tài nguyên hệ thống."
             />
           )}
         </div>
@@ -261,7 +261,7 @@ const SettingsPlaceholder = ({
   <div className="py-12 text-center">
     <h3 className="text-lg font-semibold text-[#111827] mb-2">{title}</h3>
     <p className="text-sm text-[#6b7280] max-w-md mx-auto">{description}</p>
-    <p className="text-xs text-gray-400 mt-4">Coming soon in next release.</p>
+    <p className="text-xs text-gray-400 mt-4">Tính năng đang được phát triển trong phiên bản tiếp theo.</p>
   </div>
 );
 

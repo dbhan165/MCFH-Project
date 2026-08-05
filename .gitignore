@@ -453,3 +453,11 @@ MCFH/cookies/
 # Playwright browser binaries (~300MB)
 **/.playwright/
 **/.playwright-temp/
+
+# Cursor editor config (local, không commit)
+.cursor/
+
+# ASP.NET secret config (local only — không commit)
+MCFH/appsettings.json
+MCFH/appsettings.Development.json
+MCFH/appsettings.Production.json

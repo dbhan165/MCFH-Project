@@ -16,8 +16,8 @@ public class ScrapeOptions
     /// <summary>TikTok headless — ẩn Chromium, phù hợp multi-user platform.</summary>
     public bool TikTokHeadless { get; set; } = true;
 
-    /// <summary>Luôn cào headless trước; chỉ mở cửa sổ Chromium khi gặp CAPTCHA (cần TikTokAllowManualCaptcha).</summary>
-    public bool TikTokHeadedOnCaptchaOnly { get; set; } = true;
+    /// <summary>Nếu true: mở cửa sổ Chromium khi gặp CAPTCHA (cần TikTokAllowManualCaptcha). Mặc định false — không mở cửa sổ.</summary>
+    public bool TikTokHeadedOnCaptchaOnly { get; set; } = false;
 
     /// <summary>Chỉ bật trên máy dev: hiện browser + chờ giải CAPTCHA tay.</summary>
     public bool TikTokAllowManualCaptcha { get; set; } = false;
@@ -95,10 +95,10 @@ public class ScrapeOptions
     public int TikTokHumanizeScrollPauseMaxMs { get; set; } = 1100;
 
     /// <summary>Nếu headless không tìm được video, thử lại 1 lần với cửa sổ Chromium thật.</summary>
-    public bool TikTokRetryHeadedOnFailure { get; set; } = true;
+    public bool TikTokRetryHeadedOnFailure { get; set; } = false;
 
     /// <summary>Nếu headless lưu được video nhưng 0 comment (CAPTCHA), thử lại headed.</summary>
-    public bool TikTokRetryHeadedWhenNoComments { get; set; } = true;
+    public bool TikTokRetryHeadedWhenNoComments { get; set; } = false;
 
     // ── Threads ─────────────────────────────────────────────────────────────────
 

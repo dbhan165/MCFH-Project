@@ -94,6 +94,9 @@ jobs:
 
           push: true
 
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }}
+
           tags: |
             ${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
@@ -143,10 +146,10 @@ jobs:
             echo "Tải image mới..."
             docker compose pull backend frontend
 
-            echo "Khởi tạo SQL Server và database..."
+            echo "Khởi tạo SQL Server..."
             docker compose up -d sqlserver
 
-            echo "Chạy service tạo database..."
+            echo "Chạy service tạo hoặc cập nhật database..."
             docker compose up sqlserver-migration
 
             echo "Khởi động backend và frontend..."
@@ -161,7 +164,5 @@ jobs:
             echo "Hiển thị log backend gần nhất..."
             docker compose logs --tail=50 backend
 
-            echo "Xóa image không còn sử dụng..."
-            docker image prune -f
-
+            echo "Đăng xuất Docker Hub..."
             docker logout

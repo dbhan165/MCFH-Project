@@ -15,10 +15,11 @@ public class ReporterController : ControllerBase
 {
     private readonly ReporterPortalService _reporter;
 
-    public ReporterController(McfhDbContext db, IEmailService emailService, ICommentBundleStorage bundleStorage)
+    public ReporterController(McfhDbContext db, IEmailService emailService, ICommentBundleStorage bundleStorage, IAiSentimentService aiSentiment)
     {
         var analytics = new ProjectAnalyticsService(db, bundleStorage);
-        var bespoke = new BespokeReportService(db, analytics, emailService);
+        var reports = new ProjectReportService(db, analytics, aiSentiment);
+        var bespoke = new BespokeReportService(db, analytics, emailService, reportService: reports);
         _reporter = new ReporterPortalService(db, bespoke, analytics);
     }
 

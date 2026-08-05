@@ -2,20 +2,34 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, CreditCard, Loader2, XCircle } from 'lucide-react';
 import { scrapeOrderApi, type ScrapeOrder } from '../api/scrapeOrderApi';
+import { projectApi } from '../api/projectApi';
 import { extractApiError } from '../utils/authStorage';
 
 type ReturnState = 'checking' | 'paid' | 'cancelled' | 'error';
 
 const PAID_STATUSES = ['paid', 'scraping', 'analyzing', 'completed'];
+const BESPOKE_PAID_STATUSES = [
+  'gathering_data',
+  'report_ready',
+  'awaiting_reporter',
+  'assigned',
+  'in_progress',
+  'completed',
+];
 
 /**
  * Trang PayOS redirect về sau thanh toán. KHÔNG tin query param của PayOS —
  * chỉ poll backend (backend tự đối soát với PayOS/webhook) rồi mới chuyển trang.
+ * Hỗ trợ 2 luồng: scrape order (orderId) và báo cáo chuyên sâu (type=bespoke).
  */
 const PaymentReturn = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isBespoke = searchParams.get('type') === 'bespoke';
   const orderId = Number(searchParams.get('orderId'));
+  const requestId = Number(searchParams.get('requestId'));
+  const bespokeWorkspaceId = Number(searchParams.get('workspaceId'));
+  const bespokeProjectId = Number(searchParams.get('projectId'));
 
   const [state, setState] = useState<ReturnState>('checking');
   const [order, setOrder] = useState<ScrapeOrder | null>(null);
@@ -24,6 +38,49 @@ const PaymentReturn = () => {
   const attemptsRef = useRef(0);
 
   useEffect(() => {
+    if (isBespoke) {
+      if (!requestId || Number.isNaN(requestId) || !bespokeWorkspaceId || !bespokeProjectId) {
+        setState('error');
+        setErrorMessage('Thiếu thông tin yêu cầu báo cáo trên đường dẫn.');
+        return;
+      }
+
+      let active = true;
+      const tick = async () => {
+        if (!active) return;
+        try {
+          const result = await projectApi.getBespokePaymentStatus(bespokeWorkspaceId, bespokeProjectId, requestId);
+          if (!active) return;
+
+          if (BESPOKE_PAID_STATUSES.includes(result.status)) {
+            setState('paid');
+            setTimeout(() => {
+              if (active) navigate(`/workspace/${bespokeWorkspaceId}/project/bespoke-reports`);
+            }, 1500);
+            return;
+          }
+          if (result.status === 'pending_payment') {
+            // Vẫn đang chờ / link cũ đã hủy — cho phép thanh toán lại.
+            setState('cancelled');
+            return;
+          }
+        } catch (error) {
+          if (!active) return;
+          attemptsRef.current += 1;
+          if (attemptsRef.current >= 5) {
+            setState('error');
+            setErrorMessage(extractApiError(error, 'Không kiểm tra được trạng thái thanh toán.'));
+            return;
+          }
+        }
+        if (active) setTimeout(tick, 3000);
+      };
+      tick();
+      return () => {
+        active = false;
+      };
+    }
+
     if (!orderId || Number.isNaN(orderId)) {
       setState('error');
       setErrorMessage('Thiếu mã đơn hàng trên đường dẫn.');
@@ -65,12 +122,22 @@ const PaymentReturn = () => {
     return () => {
       active = false;
     };
-  }, [orderId, navigate]);
+  }, [isBespoke, orderId, requestId, bespokeWorkspaceId, bespokeProjectId, navigate]);
 
   const handleRetryPayment = async () => {
     setRetrying(true);
     setErrorMessage('');
     try {
+      if (isBespoke) {
+        const checkout = await projectApi.payBespokeRequest(bespokeWorkspaceId, bespokeProjectId, requestId);
+        if (BESPOKE_PAID_STATUSES.includes(checkout.request.status) || !checkout.checkoutUrl) {
+          navigate(`/workspace/${bespokeWorkspaceId}/project/bespoke-reports`);
+          return;
+        }
+        window.location.href = checkout.checkoutUrl;
+        return;
+      }
+
       const checkout = await scrapeOrderApi.pay(orderId);
       if (PAID_STATUSES.includes(checkout.order.status) || !checkout.checkoutUrl) {
         navigate(`/workspace/${checkout.order.workspaceId}/orders/${checkout.order.orderId}`);
@@ -141,7 +208,15 @@ const PaymentReturn = () => {
                 {retrying && <Loader2 className="w-4 h-4 animate-spin" />}
                 Thanh toán lại
               </button>
-              {order && (
+              {isBespoke && bespokeWorkspaceId > 0 && (
+                <Link
+                  to={`/workspace/${bespokeWorkspaceId}/project/bespoke-reports`}
+                  className="px-6 py-3 rounded-lg text-sm font-semibold text-gray-400 hover:bg-white/5"
+                >
+                  Về báo cáo chuyên sâu
+                </Link>
+              )}
+              {!isBespoke && order && (
                 <Link
                   to={`/workspace/${order.workspaceId}/projects`}
                   className="px-6 py-3 rounded-lg text-sm font-semibold text-gray-400 hover:bg-white/5"

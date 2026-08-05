@@ -2,21 +2,24 @@ import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
     Settings2, Plus, AlertCircle, CheckCircle2, Loader2,
-    UserCheck, Play, Send, Download, ArrowLeft, RefreshCw, Edit3, UploadCloud
+    UserCheck, Play, Send, Download, ArrowLeft, RefreshCw, UploadCloud, CreditCard
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { BespokeCenter, BespokeRequestItem, ReporterOption } from '../types/project';
 import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { isSystemAdmin, isSystemReporter } from '../utils/workspaceHelpers';
 import ProjectCreateBespokeModal from './ProjectCreateBespoke';
-import { RequestRevisionModal, UploadRevisionModal } from './ProjectMockModals';
+import { UploadRevisionModal, SendToReporterModal } from './ProjectMockModals';
 
 function bespokeStatusClass(status: string) {
     switch (status) {
         case 'completed': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
         case 'in_progress': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
         case 'assigned': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+        case 'pending_payment': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
         case 'gathering_data': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+        case 'report_ready': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
+        case 'awaiting_reporter': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
         case 'quoted': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
         case 'quote_rejected': return 'bg-red-500/10 text-red-400 border-red-500/20';
         case 'revision_requested': return 'bg-pink-500/10 text-pink-400 border-pink-500/20';
@@ -27,13 +30,16 @@ function bespokeStatusClass(status: string) {
 // Nhãn theo góc nhìn khách hàng (Client)
 function clientStatusLabel(status: string, fallback: string) {
     switch (status) {
-        case 'pending': return 'Đã gửi yêu cầu';
-        case 'gathering_data':
+        case 'pending_payment': return 'Chờ thanh toán';
+        case 'gathering_data': return 'Đang cào & xuất báo cáo';
+        case 'report_ready': return 'Báo cáo sẵn sàng';
+        case 'awaiting_reporter': return 'Đã gửi Reporter';
         case 'assigned':
-        case 'in_progress': return 'Đang xử lý';
-        case 'completed': return 'Đã chỉnh sửa';
-        case 'revision_requested': return 'Đang xử lý';
+        case 'in_progress': return 'Reporter đang xử lý';
+        case 'completed': return 'Đã nhận báo cáo từ Reporter';
+        case 'revision_requested': return 'Đang chờ sửa lại';
         case 'cancelled': return 'Đã hủy';
+        case 'pending': return 'Đang xử lý';
         default: return fallback;
     }
 }
@@ -46,7 +52,6 @@ const ProjectBespokeReports = () => {
 
     const [bespoke, setBespoke] = useState<BespokeCenter | null>(null);
     const [requestProjectMap, setRequestProjectMap] = useState<Record<number, number>>({});
-    const [firstProjectId, setFirstProjectId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [bespokeActionId, setBespokeActionId] = useState<number | null>(null);
@@ -55,8 +60,8 @@ const ProjectBespokeReports = () => {
     const [successMessage, setSuccessMessage] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-    const [revisionModalOpen, setRevisionModalOpen] = useState(false);
     const [uploadRevisionModalOpen, setUploadRevisionModalOpen] = useState(false);
+    const [sendToReporterModalOpen, setSendToReporterModalOpen] = useState(false);
     const [selectedReqId, setSelectedReqId] = useState<number | null>(null);
 
     const isAdmin = isSystemAdmin(userRole);
@@ -77,7 +82,6 @@ const ProjectBespokeReports = () => {
         setErrorMessage('');
         try {
             const projectList = await projectApi.getProjects(wid);
-            setFirstProjectId(projectList[0]?.projectId ?? null);
 
             if (projectList.length === 0) {
                 setBespoke({ userSystemRole: userRole, requests: [], reporters: [] });
@@ -108,8 +112,9 @@ const ProjectBespokeReports = () => {
                     merged.reporters = data.reporters;
                 }
                 for (const req of data.requests) {
-                    allRequests.push(req);
-                    projectMap[req.requestId] = projectId;
+                    const resolvedProjectId = req.projectId > 0 ? req.projectId : projectId;
+                    allRequests.push({ ...req, projectId: resolvedProjectId });
+                    projectMap[req.requestId] = resolvedProjectId;
                 }
             }
 
@@ -123,7 +128,6 @@ const ProjectBespokeReports = () => {
         } catch (error) {
             setBespoke({ userSystemRole: userRole, requests: [], reporters: [] });
             setRequestProjectMap({});
-            setFirstProjectId(null);
             setErrorMessage(extractApiError(error, 'Không tải được phần báo cáo chuyên sâu. Hãy thử lại sau.'));
         } finally {
             setIsLoading(false);
@@ -181,6 +185,44 @@ const ProjectBespokeReports = () => {
         }
     };
 
+    const handlePay = async (requestId: number) => {
+        const projectId = getProjectIdForRequest(requestId);
+        if (!wid || !projectId) return;
+        setBespokeActionId(requestId);
+        setErrorMessage('');
+        try {
+            const checkout = await projectApi.payBespokeRequest(wid, projectId, requestId);
+            if (checkout.checkoutUrl) {
+                window.location.href = checkout.checkoutUrl;
+                return;
+            }
+            setSuccessMessage('Đã thanh toán — hệ thống đang cào dữ liệu và xuất báo cáo.');
+            await loadBespokeData();
+        } catch (error) {
+            setErrorMessage(extractApiError(error, 'Không thể tạo thanh toán.'));
+        } finally {
+            setBespokeActionId(null);
+        }
+    };
+
+    const handleSendToReporter = async (note: string) => {
+        if (!selectedReqId || !wid) return;
+        const projectId = getProjectIdForRequest(selectedReqId);
+        if (!projectId) return;
+        setBespokeActionId(selectedReqId);
+        setErrorMessage('');
+        try {
+            await projectApi.sendBespokeToReporter(wid, projectId, selectedReqId, note);
+            setSuccessMessage('Đã gửi yêu cầu tới Reporter.');
+            await loadBespokeData();
+        } catch (error) {
+            setErrorMessage(extractApiError(error, 'Không thể gửi Reporter.'));
+            throw error;
+        } finally {
+            setBespokeActionId(null);
+        }
+    };
+
     const handleDownloadBespoke = async (req: BespokeRequestItem) => {
         const projectId = getProjectIdForRequest(req.requestId);
         if (!wid || !projectId) return;
@@ -191,22 +233,6 @@ const ProjectBespokeReports = () => {
             setErrorMessage(extractApiError(error, 'Không thể tải báo cáo chuyên sâu.'));
         } finally {
             setDownloadingId(null);
-        }
-    };
-
-    const handleRequestRevision = async (feedback: string) => {
-        if (!selectedReqId || !wid) return;
-        const projectId = getProjectIdForRequest(selectedReqId);
-        if (!projectId) return;
-        setBespokeActionId(selectedReqId);
-        try {
-            await projectApi.requestBespokeRevision(wid, projectId, selectedReqId, feedback);
-            setSuccessMessage('Đã gửi yêu cầu chỉnh sửa báo cáo.');
-            await loadBespokeData();
-        } catch (error) {
-            setErrorMessage(extractApiError(error, 'Không thể gửi yêu cầu chỉnh sửa.'));
-        } finally {
-            setBespokeActionId(null);
         }
     };
 
@@ -270,7 +296,7 @@ const ProjectBespokeReports = () => {
                                 ? 'Reporter: xem báo cáo hệ thống đã gửi khách, đọc yêu cầu sửa và upload bản đã chỉnh.'
                                 : isAdmin
                                     ? 'Admin: giao Reporter — hệ thống tự gửi báo cáo cho khách; Reporter chỉ xử lý khi khách yêu cầu sửa.'
-                                    : 'Chọn gói & gửi yêu cầu. Khi báo cáo chưa đủ, dùng Yêu cầu sửa để Reporter chỉnh lại.'}
+                                    : 'Điền thông tin → hệ thống cào & xuất báo cáo. Xem xong nếu chưa ưng, gửi Reporter chỉnh tay.'}
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -285,7 +311,7 @@ const ProjectBespokeReports = () => {
                             <button
                                 type="button"
                                 onClick={() => setIsCreateModalOpen(true)}
-                                className={`inline-flex items-center gap-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl transition-colors shrink-0 ${!firstProjectId ? 'opacity-50 pointer-events-none' : ''}`}
+                                className="inline-flex items-center gap-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl transition-colors shrink-0"
                             >
                                 <Plus className="w-4 h-4" /> Yêu cầu báo cáo
                             </button>
@@ -311,10 +337,14 @@ const ProjectBespokeReports = () => {
                                 assignReporterId={assignReporterId[req.requestId]}
                                 onAssignReporterChange={(rid) => setAssignReporterId((prev) => ({ ...prev, [req.requestId]: rid }))}
                                 onAssign={() => handleAssign(req.requestId)}
+                                onPay={() => handlePay(req.requestId)}
                                 onStart={() => handleStartWork(req.requestId)}
                                 onDeliver={() => handleDeliver(req.requestId)}
+                                onSendToReporter={() => {
+                                    setSelectedReqId(req.requestId);
+                                    setSendToReporterModalOpen(true);
+                                }}
                                 onDownload={() => handleDownloadBespoke(req)}
-                                onRequestRevision={() => { setSelectedReqId(req.requestId); setRevisionModalOpen(true); }}
                                 onUploadRevision={() => { setSelectedReqId(req.requestId); setUploadRevisionModalOpen(true); }}
                                 isBusy={bespokeActionId === req.requestId}
                                 isDownloading={downloadingId === `bespoke-${req.requestId}`}
@@ -324,29 +354,26 @@ const ProjectBespokeReports = () => {
                 )}
             </div>
 
-            {firstProjectId && (
-                <ProjectCreateBespokeModal
-                    isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
-                    wid={wid}
-                    projectId={firstProjectId}
-                    onSuccess={() => {
-                        setSuccessMessage('Đã gửi yêu cầu báo cáo chuyên sâu thành công.');
-                        loadBespokeData();
-                    }}
-                />
-            )}
-
-            <RequestRevisionModal 
-                isOpen={revisionModalOpen} 
-                onClose={() => setRevisionModalOpen(false)} 
-                onSubmit={handleRequestRevision} 
+            <ProjectCreateBespokeModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                wid={wid}
+                onSuccess={() => {
+                    setSuccessMessage('Đã tạo yêu cầu — hệ thống đang cào dữ liệu và xuất báo cáo.');
+                    loadBespokeData();
+                }}
             />
-            
+
             <UploadRevisionModal 
                 isOpen={uploadRevisionModalOpen} 
                 onClose={() => setUploadRevisionModalOpen(false)} 
                 onSubmit={handleUploadRevision} 
+            />
+
+            <SendToReporterModal
+                isOpen={sendToReporterModalOpen}
+                onClose={() => setSendToReporterModalOpen(false)}
+                onSubmit={handleSendToReporter}
             />
         </div>
     );
@@ -362,19 +389,21 @@ interface BespokeRequestRowProps {
     assignReporterId?: number;
     onAssignReporterChange: (rid: number) => void;
     onAssign: () => void;
+    onPay: () => void;
     onStart: () => void;
     onDeliver: () => void;
+    onSendToReporter: () => void;
     onDownload: () => void;
     isBusy: boolean;
     isDownloading: boolean;
-    onRequestRevision: () => void;
     onUploadRevision: () => void;
 }
 
-function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assignReporterId, onAssignReporterChange, onAssign, onStart, onDeliver, onDownload, isBusy, isDownloading, onRequestRevision, onUploadRevision }: BespokeRequestRowProps) {
+function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assignReporterId, onAssignReporterChange, onAssign, onPay, onStart, onDeliver, onSendToReporter, onDownload, isBusy, isDownloading, onUploadRevision }: BespokeRequestRowProps) {
     const canWork = ['assigned', 'in_progress'].includes(req.status)
         && (isAdmin || (isReporter && req.reporterId === userId));
-    const showAssign = isAdmin && req.status === 'pending';
+    const showAssign = isAdmin && req.status === 'awaiting_reporter';
+    const showPay = !isAdmin && !isReporter && req.status === 'pending_payment';
     const priceLabel = req.agreedPrice != null
         ? `${req.agreedPrice.toLocaleString('vi-VN')} VND`
         : null;
@@ -394,13 +423,17 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                         <span>Khách hàng: {req.clientName ?? '—'}</span>
                         {req.reporterName && <span>Reporter: {req.reporterName}</span>}
                         {priceLabel && <span className="text-amber-400">Gói: {priceLabel}</span>}
-                        {req.deadline && <span>Hạn: {req.deadline.slice(0, 10)}</span>}
                         {(req.dateFrom || req.dateTo) && <span>Giai đoạn: {req.dateFrom} → {req.dateTo}</span>}
                         <span>{req.modules.length} module</span>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {showPay && (
+                        <button type="button" onClick={onPay} disabled={isBusy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-orange-600/20 text-orange-300 hover:bg-orange-600 hover:text-white disabled:opacity-50">
+                            {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />} Thanh toán
+                        </button>
+                    )}
                     {showAssign && (
                         <>
                             <select
@@ -426,9 +459,9 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                             {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Nộp báo cáo
                         </button>
                     )}
-                    {req.status === 'completed' && !isReporter && !isAdmin && (
-                        <button type="button" onClick={onRequestRevision} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-pink-600/20 text-pink-300 hover:bg-pink-600 hover:text-white disabled:opacity-50">
-                            <Edit3 className="w-4 h-4" /> Yêu cầu sửa
+                    {req.status === 'report_ready' && !isReporter && !isAdmin && (
+                        <button type="button" onClick={onSendToReporter} disabled={isBusy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-purple-600/20 text-purple-300 hover:bg-purple-600 hover:text-white disabled:opacity-50">
+                            {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Gửi Reporter chỉnh sửa
                         </button>
                     )}
                     {req.status === 'revision_requested' && (isReporter || isAdmin) && (
@@ -436,9 +469,10 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                             <UploadCloud className="w-4 h-4" /> Upload bản sửa
                         </button>
                     )}
-                    {(req.hasDeliverable || req.status === 'completed') && (
+                    {(req.hasDeliverable || req.status === 'completed' || req.status === 'report_ready') && (
                         <button type="button" onClick={onDownload} disabled={isDownloading} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-[#00B4D8] bg-[#00B4D8]/10 hover:bg-[#00B4D8] hover:text-white disabled:opacity-50">
-                            {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Tải báo cáo
+                            {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            {req.status === 'completed' ? 'Tải bản đã chỉnh sửa' : 'Tải báo cáo'}
                         </button>
                     )}
                 </div>

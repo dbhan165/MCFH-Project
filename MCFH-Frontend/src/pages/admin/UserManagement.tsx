@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/admin/AdminLayout';
@@ -65,12 +65,12 @@ const UserManagement = () => {
   };
 
   return (
-    <AdminLayout searchPlaceholder="Search by email or name...">
+    <AdminLayout searchPlaceholder="Tìm kiếm theo email hoặc tên...">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">User Management</h2>
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Quản lý người dùng</h2>
           <p className="text-[#6b7280] text-sm mt-1">
-            Quản lý tài khoản hệ thống — {total} users
+            Quản lý tài khoản hệ thống — {total} người dùng
           </p>
         </div>
 
@@ -93,7 +93,7 @@ const UserManagement = () => {
             }}
             className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
           >
-            <option value="">Tất cả role</option>
+            <option value="">Tất cả vai trò</option>
             <option value="Admin">Admin</option>
             <option value="Reporter">Reporter</option>
             <option value="Client">Client</option>
@@ -118,11 +118,11 @@ const UserManagement = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">User</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Người dùng</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Email</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Role</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Status</th>
-                  <th className="text-right px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Actions</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Vai trò</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Trạng thái</th>
+                  <th className="text-right px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -153,7 +153,7 @@ const UserManagement = () => {
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium">
                         <span className={`w-2 h-2 rounded-full ${user.isBanned ? 'bg-gray-400' : 'bg-green-500'}`} />
-                        {user.isBanned ? 'Banned' : 'Active'}
+                        {user.isBanned ? 'Đã khóa' : 'Hoạt động'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -170,7 +170,7 @@ const UserManagement = () => {
                           onClick={() => handleBanToggle(user)}
                           className="text-xs font-semibold text-red-500 hover:text-red-700"
                         >
-                          {user.isBanned ? 'Unban' : 'Ban'}
+                          {user.isBanned ? 'Mở khóa' : 'Khóa'}
                         </button>
                       </div>
                     </td>

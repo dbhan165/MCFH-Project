@@ -13,19 +13,21 @@ import {
   LogOut,
   ChevronDown,
   ShieldCheck,
+  Package,
 } from 'lucide-react';
 import NotificationBell from '../notifications/NotificationBell';
 import { loadProfileFromStorage, clearAuthSession, getAvatarFallback } from '../../utils/authStorage';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
-  { label: 'User Management', icon: Users, href: '/admin/users' },
-  { label: 'Subscription Plans', icon: CreditCard, href: '/admin/subscriptions' },
-  { label: 'Proxy Management', icon: Server, href: '/admin/proxies' },
-  { label: 'Facebook Sources', icon: Globe, href: '/admin/fb-sources' },
-  { label: 'Platform Cookies', icon: Cookie, href: '/admin/cookies' },
-  { label: 'Audit Logs', icon: Clock, href: '/admin/audit-logs' },
-  { label: 'System Settings', icon: Settings, href: '/admin/settings' },
+  { label: 'Quản lý người dùng', icon: Users, href: '/admin/users' },
+  { label: 'Gói đăng ký', icon: CreditCard, href: '/admin/subscriptions' },
+  { label: 'Quản lý Proxy', icon: Server, href: '/admin/proxies' },
+  { label: 'Nguồn Facebook', icon: Globe, href: '/admin/fb-sources' },
+  { label: 'Gói Scraping', icon: Package, href: '/admin/scrape-packages' },
+  { label: 'Cookie Nền tảng', icon: Cookie, href: '/admin/cookies' },
+  { label: 'Nhật ký hệ thống', icon: Clock, href: '/admin/audit-logs' },
+  { label: 'Cài đặt hệ thống', icon: Settings, href: '/admin/settings' },
 ];
 
 interface AdminLayoutProps {
@@ -48,7 +50,7 @@ const AdminLayout = ({
   const cachedProfile = loadProfileFromStorage();
   const displayName = adminName || cachedProfile?.fullName || 'Trường Học';
   const displayEmail = cachedProfile?.email || 'admin@mcfh.com';
-  const displayRole = adminRole || cachedProfile?.role || 'System Administrator';
+  const displayRole = adminRole || cachedProfile?.role || 'Quản trị viên hệ thống';
   const avatarSrc = cachedProfile?.avatarUrl || getAvatarFallback(displayName);
 
   useEffect(() => {
@@ -102,7 +104,7 @@ const AdminLayout = ({
               }`}
           >
             <User className="w-5 h-5" />
-            Profile
+            Hồ sơ cá nhân
           </Link>
           <button
             onClick={handleSignOut}
@@ -110,7 +112,7 @@ const AdminLayout = ({
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] transition-colors text-left cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
-            Sign Out
+            Đăng xuất
           </button>
         </div>
       </aside>

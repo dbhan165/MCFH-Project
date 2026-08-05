@@ -55,17 +55,19 @@ export interface AdminDashboard {
     totalAmount: number;
     transactionCount: number;
   }[];
-  recentRevenueTransactions: {
-    paymentId: number;
-    transactionRef: string | null;
-    userName: string;
-    userEmail: string;
-    featureName: string;
-    type: string;
-    amount: number;
-    status: string;
-    paidAt: string | null;
-  }[];
+  recentRevenueTransactions: AdminRecentRevenueTransaction[];
+}
+
+export interface AdminRecentRevenueTransaction {
+  paymentId: number;
+  transactionRef: string | null;
+  userName: string;
+  userEmail: string;
+  featureName: string;
+  type: string;
+  amount: number;
+  status: string;
+  paidAt: string | null;
 }
 
 export interface AdminUser {
@@ -142,6 +144,38 @@ export interface UpsertFbSource {
   groupName?: string;
   status?: string;
   enabled: boolean;
+}
+
+export interface ScrapePackage {
+  packageId: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  currency: string;
+  durationDays: number;
+  maxItems: number;
+  maxSources?: number | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: number | null;
+  updatedByName?: string | null;
+  activeOrdersCount: number;
+}
+
+export interface UpsertScrapePackage {
+  code: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  durationDays: number;
+  maxItems: number;
+  maxSources?: number | null;
+  isActive: boolean;
+  sortOrder: number;
 }
 
 export interface PlatformCookie {
@@ -568,6 +602,82 @@ export const adminApi = {
     await axiosClient.delete(`/api/admin/fb-sources/${fbSourceId}`);
   },
 
+  getScrapePackages: async (): Promise<ScrapePackage[]> => {
+    const res = await axiosClient.get<unknown[]>('/api/admin/scrape-packages');
+    return (res.data ?? []).map((item) => {
+      const s = item as Record<string, unknown>;
+      return {
+        packageId: pickNumber(s, 'packageId', 'PackageId'),
+        code: pickString(s, 'code', 'Code'),
+        name: pickString(s, 'name', 'Name'),
+        description: pickNullableString(s, 'description', 'Description'),
+        price: Number(pickField(s, 'price', 'Price') ?? 0),
+        currency: pickString(s, 'currency', 'Currency') || 'VND',
+        durationDays: pickNumber(s, 'durationDays', 'DurationDays'),
+        maxItems: pickNumber(s, 'maxItems', 'MaxItems'),
+        maxSources: pickField<number>(s, 'maxSources', 'MaxSources') ?? null,
+        isActive: pickField(s, 'isActive', 'IsActive') === true,
+        sortOrder: pickNumber(s, 'sortOrder', 'SortOrder'),
+        createdAt: pickNullableString(s, 'createdAt', 'CreatedAt'),
+        updatedAt: pickNullableString(s, 'updatedAt', 'UpdatedAt'),
+        updatedBy: pickField<number>(s, 'updatedBy', 'UpdatedBy') ?? null,
+        updatedByName: pickNullableString(s, 'updatedByName', 'UpdatedByName'),
+        activeOrdersCount: pickNumber(s, 'activeOrdersCount', 'ActiveOrdersCount'),
+      };
+    });
+  },
+
+  createScrapePackage: async (payload: UpsertScrapePackage): Promise<ScrapePackage> => {
+    const res = await axiosClient.post<Record<string, unknown>>('/api/admin/scrape-packages', payload);
+    const s = res.data;
+    return {
+      packageId: pickNumber(s, 'packageId', 'PackageId'),
+      code: pickString(s, 'code', 'Code'),
+      name: pickString(s, 'name', 'Name'),
+      description: pickNullableString(s, 'description', 'Description'),
+      price: Number(pickField(s, 'price', 'Price') ?? 0),
+      currency: pickString(s, 'currency', 'Currency') || 'VND',
+      durationDays: pickNumber(s, 'durationDays', 'DurationDays'),
+      maxItems: pickNumber(s, 'maxItems', 'MaxItems'),
+      maxSources: pickField<number>(s, 'maxSources', 'MaxSources') ?? null,
+      isActive: pickField(s, 'isActive', 'IsActive') === true,
+      sortOrder: pickNumber(s, 'sortOrder', 'SortOrder'),
+      createdAt: pickNullableString(s, 'createdAt', 'CreatedAt'),
+      updatedAt: pickNullableString(s, 'updatedAt', 'UpdatedAt'),
+      updatedBy: pickField<number>(s, 'updatedBy', 'UpdatedBy') ?? null,
+      updatedByName: pickNullableString(s, 'updatedByName', 'UpdatedByName'),
+      activeOrdersCount: pickNumber(s, 'activeOrdersCount', 'ActiveOrdersCount'),
+    };
+  },
+
+  updateScrapePackage: async (packageId: number, payload: UpsertScrapePackage): Promise<ScrapePackage> => {
+    const res = await axiosClient.put<Record<string, unknown>>(`/api/admin/scrape-packages/${packageId}`, payload);
+    const s = res.data;
+    return {
+      packageId: pickNumber(s, 'packageId', 'PackageId'),
+      code: pickString(s, 'code', 'Code'),
+      name: pickString(s, 'name', 'Name'),
+      description: pickNullableString(s, 'description', 'Description'),
+      price: Number(pickField(s, 'price', 'Price') ?? 0),
+      currency: pickString(s, 'currency', 'Currency') || 'VND',
+      durationDays: pickNumber(s, 'durationDays', 'DurationDays'),
+      maxItems: pickNumber(s, 'maxItems', 'MaxItems'),
+      maxSources: pickField<number>(s, 'maxSources', 'MaxSources') ?? null,
+      isActive: pickField(s, 'isActive', 'IsActive') === true,
+      sortOrder: pickNumber(s, 'sortOrder', 'SortOrder'),
+      createdAt: pickNullableString(s, 'createdAt', 'CreatedAt'),
+      updatedAt: pickNullableString(s, 'updatedAt', 'UpdatedAt'),
+      updatedBy: pickField<number>(s, 'updatedBy', 'UpdatedBy') ?? null,
+      updatedByName: pickNullableString(s, 'updatedByName', 'UpdatedByName'),
+      activeOrdersCount: pickNumber(s, 'activeOrdersCount', 'ActiveOrdersCount'),
+    };
+  },
+
+  deleteScrapePackage: async (packageId: number) => {
+    const res = await axiosClient.delete<Record<string, unknown>>(`/api/admin/scrape-packages/${packageId}`);
+    return res.data;
+  },
+
   getPlatformCookies: async (): Promise<PlatformCookie[]> => {
     const res = await axiosClient.get<unknown[]>('/api/admin/platform-cookies');
     return (res.data ?? []).map((item) => {
@@ -722,24 +832,12 @@ export const reporterApi = {
     return mapPortalRequest(res.data);
   },
 
-  quote: async (requestId: number, payload: { agreedPrice: number; deadline?: string; note?: string }) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/quote`, payload);
-  },
-
-  startWork: async (requestId: number) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/start`);
-  },
-
-  deliver: async (requestId: number) => {
-    await axiosClient.post(`/api/reporter/requests/${requestId}/deliver`);
-  },
-
   download: async (requestId: number) => {
     const res = await axiosClient.get(`/api/reporter/requests/${requestId}/download`, { responseType: 'blob' });
     const disposition = res.headers['content-disposition'] as string | undefined;
     const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
     const rawName = match?.[1]?.replace(/['"]/g, '');
-    const fileName = rawName || `bespoke-report-${requestId}.html`;
+    const fileName = rawName || `bespoke-report-${requestId}.pdf`;
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
@@ -768,19 +866,6 @@ export const reporterApi = {
       pendingCount: pickNumber(d, 'pendingCount', 'PendingCount'),
       avgProcessingDays: pickField<number>(d, 'avgProcessingDays', 'AvgProcessingDays') ?? null,
       history: history.map(mapPortalRequest),
-    };
-  },
-
-  getAnalyticsPreview: async (requestId: number) => {
-    const res = await axiosClient.get<Record<string, unknown>>(`/api/reporter/requests/${requestId}/analytics-preview`);
-    const d = res.data;
-    return {
-      projectName: pickString(d, 'projectName', 'ProjectName'),
-      totalMentions: pickNumber(d, 'totalMentions', 'TotalMentions'),
-      totalComments: pickNumber(d, 'totalComments', 'TotalComments'),
-      negativeCount: pickNumber(d, 'negativeCount', 'NegativeCount'),
-      positiveCount: pickNumber(d, 'positiveCount', 'PositiveCount'),
-      nsrScore: pickField<number>(d, 'nsrScore', 'NsrScore') ?? 0,
     };
   },
 };

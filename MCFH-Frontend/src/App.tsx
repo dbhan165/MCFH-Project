@@ -12,6 +12,7 @@ import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import Pricing from "./pages/Pricing";
+import ScrapePackagesPublic from "./pages/ScrapePackagesPublic";
 
 // Admin + Reporter (remote)
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -20,17 +21,18 @@ import AdminUserDetail from "./pages/admin/AdminUserDetail";
 import SubscriptionPlans from "./pages/admin/SubscriptionPlans";
 import ProxyManagement from "./pages/admin/ProxyManagement";
 import FbSourceManagement from "./pages/admin/FbSourceManagement";
+import ScrapePackageManagement from "./pages/admin/ScrapePackageManagement";
 import CookieManagement from "./pages/admin/CookieManagement";
 import SystemSettings from "./pages/admin/SystemSettings";
 import AdminProfile from "./pages/admin/AdminProfile";
 import AuditLogs from "./pages/admin/AuditLogs";
 import BespokeRequests from "./pages/reporter/BespokeRequests";
-import ReporterPlaceholder from "./pages/reporter/ReporterPlaceholder";
 import RequestDetail from "./pages/reporter/RequestDetail";
 import MyPerformance from "./pages/reporter/MyPerformance";
-import PipelineConfig from "./pages/reporter/PipelineConfig";
-import RequestDelivery from "./pages/reporter/RequestDelivery";
-import AnalystWorkspace from "./pages/reporter/AnalystWorkspace";
+import ReporterDashboard from "./pages/reporter/ReporterDashboard";
+import ReporterArchive from "./pages/reporter/ReporterArchive";
+import ReporterProfile from "./pages/reporter/ReporterProfile";
+import ReporterSettings from "./pages/reporter/ReporterSettings";
 
 // Workspace + Project (local)
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -58,6 +60,7 @@ import ProjectReports from "./pages/ProjectReports";
 import ProjectComparison from "./pages/ProjectComparison";
 import { AppModalProvider } from "./contexts/AppModalContext";
 import { ScrapeJobProvider } from "./contexts/ScrapeJobContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import ProjectBespokeReports from "./pages/ProjectBespokeReports";
 
 function AppRoutes() {
@@ -77,6 +80,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/scrape-packages" element={<ScrapePackagesPublic />} />
 
       {/* Private */}
       <Route element={<PrivateRoute />}>
@@ -92,6 +96,7 @@ function AppRoutes() {
           <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
           <Route path="/admin/proxies" element={<ProxyManagement />} />
           <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
+          <Route path="/admin/scrape-packages" element={<ScrapePackageManagement />} />
           <Route path="/admin/cookies" element={<CookieManagement />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
@@ -106,43 +111,15 @@ function AppRoutes() {
           />
           <Route path="/reporter/tasks" element={<BespokeRequests />} />
           <Route path="/reporter/requests/:id" element={<RequestDetail />} />
-          <Route
-            path="/reporter/dashboard"
-            element={
-              <ReporterPlaceholder
-                title="Dashboard"
-                description="Tổng quan hiệu suất và đơn yêu cầu của bạn."
-                activeTopNav="dashboard"
-              />
-            }
-          />
+          <Route path="/reporter/dashboard" element={<ReporterDashboard />} />
           <Route path="/reporter/performance" element={<MyPerformance />} />
-          <Route
-            path="/reporter/settings"
-            element={
-              <ReporterPlaceholder
-                title="Settings"
-                description="Cấu hình tài khoản và tùy chọn làm việc."
-                activeTopNav="settings"
-              />
-            }
-          />
-          <Route
-            path="/reporter/archive"
-            element={
-              <ReporterPlaceholder
-                title="Archive"
-                description="Lưu trữ các báo cáo và đơn yêu cầu đã hoàn thành."
-                activeTopNav="archive"
-              />
-            }
-          />
-          <Route path="/reporter/pipeline/:id" element={<PipelineConfig />} />
-          <Route path="/reporter/delivery/:id" element={<RequestDelivery />} />
-          <Route
-            path="/reporter/workspace/:id"
-            element={<AnalystWorkspace />}
-          />
+          <Route path="/reporter/archive" element={<ReporterArchive />} />
+          <Route path="/reporter/profile" element={<ReporterProfile />} />
+          <Route path="/reporter/settings" element={<ReporterSettings />} />
+          {/* Legacy mock routes → Tasks */}
+          <Route path="/reporter/pipeline/:id" element={<Navigate to="/reporter/tasks" replace />} />
+          <Route path="/reporter/delivery/:id" element={<Navigate to="/reporter/tasks" replace />} />
+          <Route path="/reporter/workspace/:id" element={<Navigate to="/reporter/tasks" replace />} />
         </Route>
 
         {/* Workspace */}
@@ -232,7 +209,9 @@ function App() {
     <AppModalProvider>
       <ScrapeJobProvider>
         <Router>
-          <AppRoutes />
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
         </Router>
       </ScrapeJobProvider>
     </AppModalProvider>
