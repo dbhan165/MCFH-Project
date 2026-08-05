@@ -189,7 +189,7 @@ const CreateProject = () => {
         enableFacebook: selectedSources.includes('facebook'),
         enableYoutube: selectedSources.includes('youtube'),
         enableTiktok: selectedSources.includes('tiktok'),
-        enableMaps: selectedSources.includes('maps'),
+        enableThreads: selectedSources.includes('threads'),
         dataSources: buildDataSources(selectedSources),
       });
 

@@ -170,6 +170,7 @@ public class ProjectCreateExtendedService
                 EnableFacebook = p.EnableFacebook == true,
                 EnableYoutube = p.EnableYoutube == true,
                 EnableTiktok = p.EnableTiktok == true,
+                EnableThreads = p.EnableMaps == true,
                 EnableMaps = p.EnableMaps == true,
                 EnableNews = p.DataSources.Any(d => d.Platform == "news" && d.Status == "active"),
                 CreatedAt = p.CreatedAt

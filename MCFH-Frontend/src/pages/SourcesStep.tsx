@@ -1,11 +1,12 @@
 import {
   Users, MonitorPlay, Globe, Hash, Map, FileUp,
-  Check, Lock, Sparkles,
+  Check, Lock, Sparkles, MessageCircle,
 } from 'lucide-react';
 
 const PLATFORMS = [
   { id: 'facebook', icon: Users, label: 'Facebook', description: 'Bài viết, bình luận công khai' },
   { id: 'youtube', icon: MonitorPlay, label: 'YouTube', description: 'Video, bình luận' },
+  { id: 'threads', icon: MessageCircle, label: 'Threads', description: 'Bài viết, bình luận công khai' },
   { id: 'news', icon: Globe, label: 'Tin tức', description: 'Báo điện tử, trang tin' },
 ] as const;
 

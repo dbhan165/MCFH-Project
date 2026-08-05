@@ -59,7 +59,7 @@ export function countUniqueKeywords(keywords: string | null | undefined): number
   return parseKeywordList(keywords).length;
 }
 
-export const SCRAPABLE_PLATFORMS = ['facebook', 'youtube', 'news'] as const;
+export const SCRAPABLE_PLATFORMS = ['facebook', 'youtube', 'news', 'threads'] as const;
 
 export function buildDataSources(
   selectedSources: string[]
