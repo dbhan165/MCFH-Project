@@ -889,9 +889,9 @@ public partial class McfhDbContext : DbContext
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
-                .HasColumnName("updated_at");
+                .HasColumnName("updated_at")
+                .IsRequired(false);
             entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
 
             entity.HasOne(d => d.UpdatedByNavigation).WithMany()
@@ -951,9 +951,9 @@ public partial class McfhDbContext : DbContext
                 .HasColumnName("setting_key");
             entity.Property(e => e.SettingValue).HasColumnName("setting_value");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
-                .HasColumnName("updated_at");
+                .HasColumnName("updated_at")
+                .IsRequired(false);
             entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
 
             entity.HasOne(d => d.UpdatedByNavigation).WithMany(p => p.SystemSettings)
