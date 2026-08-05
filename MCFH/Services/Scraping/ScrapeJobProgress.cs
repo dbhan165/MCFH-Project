@@ -19,8 +19,8 @@ public class ScrapeJobProgress
 
     public void ThrowIfCancellationRequested() => CancellationToken.ThrowIfCancellationRequested();
 
-    public void InitPlatforms(bool facebook, bool youtube, bool tiktok, bool news = false) =>
-        State?.InitPlatforms(facebook, youtube, tiktok, news);
+    public void InitPlatforms(bool facebook, bool youtube, bool tiktok, bool threads = false, bool news = false) =>
+        State?.InitPlatforms(facebook, youtube, tiktok, threads, news);
 
     public void SetPhase(string phase, string? message = null) =>
         State?.SetPhase(phase, message);

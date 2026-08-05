@@ -14,6 +14,7 @@ public class CreateProjectExtendedDto
     public bool EnableFacebook { get; set; }
     public bool EnableYoutube { get; set; }
     public bool EnableTiktok { get; set; }
+    public bool EnableThreads { get; set; }
     public bool EnableMaps { get; set; }
     public List<CreateDataSourceDto> DataSources { get; set; } = new();
 }
@@ -29,6 +30,7 @@ public class ProjectExtendedResponseDto
     public bool EnableFacebook { get; set; }
     public bool EnableYoutube { get; set; }
     public bool EnableTiktok { get; set; }
+    public bool EnableThreads { get; set; }
     public bool EnableMaps { get; set; }
     public bool EnableNews { get; set; }
     public DateTime? CreatedAt { get; set; }
@@ -42,5 +44,6 @@ public class UpdateProjectExtendedDto
     public bool? EnableFacebook { get; set; }
     public bool? EnableYoutube { get; set; }
     public bool? EnableTiktok { get; set; }
+    public bool? EnableThreads { get; set; }
     public bool? EnableMaps { get; set; }
 }

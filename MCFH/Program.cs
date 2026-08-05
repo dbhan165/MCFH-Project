@@ -1,6 +1,7 @@
 using Hangfire;
 using MCFH.Configuration;
 using MCFH.Models;
+using MCFH.Models.Scraping;
 using MCFH.Services;
 using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -186,6 +187,7 @@ namespace MCFH
                 "*/5 * * * *"
             );
 
+           
             app.Run();
         }
     }

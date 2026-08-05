@@ -16,7 +16,7 @@ BEGIN
         CONSTRAINT PK_PlatformCookies PRIMARY KEY (platform_cookie_id),
         CONSTRAINT UQ_PlatformCookies_Platform UNIQUE (platform),
         CONSTRAINT CK_PlatformCookies_Platform
-            CHECK (platform IN ('facebook', 'tiktok')),
+            CHECK (platform IN ('facebook', 'tiktok', 'threads')),
         CONSTRAINT CK_PlatformCookies_Status
             CHECK (status IN ('active', 'disabled', 'expired'))
     );

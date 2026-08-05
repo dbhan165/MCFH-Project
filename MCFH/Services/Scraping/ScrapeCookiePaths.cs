@@ -17,6 +17,9 @@ public static class ScrapeCookiePaths
     public static string FacebookCookiePath =>
         Path.Combine(CookiesDirectory, "fb_cookie.json");
 
+    public static string ThreadsCookiePath =>
+        Path.Combine(CookiesDirectory, "threads_cookie.json");
+
     public static void Initialize(string contentRootPath)
     {
         CookiesDirectory = Path.Combine(contentRootPath, "cookies");
