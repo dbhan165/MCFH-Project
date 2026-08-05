@@ -146,6 +146,17 @@ export interface UpsertFbSource {
   enabled: boolean;
 }
 
+export interface SystemProxy {
+  proxyId: number;
+  ipAddress: string;
+  port: number;
+  authUser?: string | null;
+  status?: string | null;
+  failCount: number;
+  lastUsedAt?: string | null;
+  enabled: boolean;
+}
+
 export interface ScrapePackage {
   packageId: number;
   code: string;
@@ -516,7 +527,7 @@ export const adminApi = {
     return res.data;
   },
 
-  getProxies: async () => {
+  getProxies: async (): Promise<SystemProxy[]> => {
     const res = await axiosClient.get<unknown[]>('/api/admin/proxies');
     return (res.data ?? []).map((item) => {
       const p = item as Record<string, unknown>;
