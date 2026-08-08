@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  Activity,
   BarChart2,
-  GitCompare,
-  FileText,
   Search,
   Bell,
   Calendar,
@@ -35,7 +31,6 @@ import {
   Tooltip,
   LabelList,
 } from 'recharts';
-import McfhLogo from '../components/brand/McfhLogo';
 import { projectApi } from '../api/projectApi';
 import type { Project, ProjectMention, ProjectOverviewStats, SentimentSummary } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
@@ -338,59 +333,6 @@ function buildComparisonTrend(
       entityA: leftWeek.get(key) ?? 0,
       entityB: rightWeek.get(key) ?? 0,
     }));
-}
-
-function ComparisonSidebar({ workspaceId, projectId }: { workspaceId: number; projectId: number }) {
-  const base = `/workspace/${workspaceId}/project/${projectId}`;
-  const navItems = [
-    { path: base, icon: LayoutDashboard, label: 'Tổng quan', exact: true },
-    { path: `${base}/mentions`, icon: Activity, label: 'Lượt nhắc (Mentions)' },
-    { path: `${base}/aspect`, icon: BarChart2, label: 'Khía cạnh (Aspect)' },
-    { path: `${base}/comparison`, icon: GitCompare, label: 'So sánh đối thủ', active: true },
-    { path: `${base}/reports`, icon: FileText, label: 'Báo cáo' },
-  ];
-
-  return (
-    <aside className="hidden lg:flex w-64 xl:w-72 bg-[#0A101D] border-r border-white/5 flex-col shrink-0 h-full">
-      <div className="h-20 flex items-center justify-between px-5 border-b border-white/5 shrink-0 gap-2">
-        <Link
-          to={`/workspace/${workspaceId}/projects`}
-          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-xs font-bold min-w-0"
-        >
-          <ArrowLeft size={16} className="shrink-0 text-[#FF7575]" />
-          <span className="truncate">Quay lại danh sách dự án</span>
-        </Link>
-        <McfhLogo linkTo="/workspaces" size={26} showText={false} className="shrink-0 opacity-80 hover:opacity-100 transition-opacity" />
-      </div>
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.label}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all border ${
-                item.active
-                  ? 'bg-white/[0.06] text-white border-white/10'
-                  : 'text-gray-400 border-transparent hover:text-white hover:bg-white/[0.03]'
-              }`}
-            >
-              <Icon size={18} className={item.active ? 'text-[#FF7575]' : undefined} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="p-4 border-t border-white/5 space-y-3 shrink-0">
-        <Link
-          to={`/create-project?workspaceId=${workspaceId}`}
-          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-[#FF7575] hover:bg-[#ff6262] text-white text-sm font-bold transition-colors"
-        >
-          Tạo dự án mới
-        </Link>
-      </div>
-    </aside>
-  );
 }
 
 function ComparisonHeader({ workspaceId }: { workspaceId?: number }) {
@@ -1425,10 +1367,6 @@ const ProjectComparison = () => {
 
   return (
     <div className="h-screen w-full bg-[#050A15] text-white font-sans flex overflow-hidden selection:bg-[#FF7575] selection:text-white">
-      {!Number.isNaN(wid) && !Number.isNaN(currentProjectId) ? (
-        <ComparisonSidebar workspaceId={wid} projectId={currentProjectId} />
-      ) : null}
-
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         <div
           className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none"
@@ -1442,14 +1380,6 @@ const ProjectComparison = () => {
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 relative z-10">
           <div className="max-w-7xl mx-auto space-y-6 pb-24">
-            <Link
-              to={`/workspace/${wid}/projects`}
-              className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 text-gray-300 hover:text-white text-xs font-bold transition-all shadow-xs"
-            >
-              <ArrowLeft size={16} className="text-[#FF7575]" />
-              <span>Quay lại danh sách dự án</span>
-            </Link>
-
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white">So sánh Đối thủ Cạnh tranh</h1>
               <p className="text-sm text-gray-500 mt-1">Competitor Benchmarking Intelligence — dữ liệu thực từ DB</p>
