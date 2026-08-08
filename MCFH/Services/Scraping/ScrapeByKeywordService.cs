@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using MCFH.Configuration;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
@@ -119,6 +119,7 @@ public class ScrapeByKeywordService
             var hasAnySource = project.EnableFacebook == true
                                || project.EnableYoutube == true
                                || project.EnableTiktok == true
+                               || project.EnableMaps == true
                                || enableNews;
             if (!hasAnySource)
             {

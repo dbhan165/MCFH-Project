@@ -743,7 +743,7 @@ public class ProjectReportService
     {
         var totalMentions = mentions.Count;
         var totalComments = mentions.Sum(m => m.CommentsCount);
-        var platformOrder = new[] { "facebook", "youtube", "tiktok", "news" };
+        var platformOrder = new[] { "facebook", "youtube", "tiktok", "news", "threads" };
 
         var channels = mentions
             .GroupBy(m => (m.Platform ?? "unknown").ToLowerInvariant())
@@ -1003,6 +1003,7 @@ public class ProjectReportService
             "facebook" => "Facebook",
             "youtube" => "YouTube",
             "tiktok" => "TikTok",
+            "threads" => "Threads",
             "news" => "Tin tức",
             null or "" => "Unknown",
             _ => CultureInfo.GetCultureInfo("vi-VN").TextInfo.ToTitleCase(platform.ToLowerInvariant())

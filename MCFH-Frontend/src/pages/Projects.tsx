@@ -41,7 +41,8 @@ const CARD_GRADIENTS = [
 const PLATFORM_STYLES: Record<string, string> = {
   Facebook: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   YouTube: 'bg-red-500/10 text-red-400 border-red-500/20',
-  TikTok: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+  TikTok: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  Threads: 'bg-zinc-800 text-white border-zinc-700',
   'Tin tức': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   Maps: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
 };
@@ -57,6 +58,7 @@ function getPlatformTags(project: Project) {
   if (project.enableFacebook) tags.push('Facebook');
   if (project.enableYoutube) tags.push('YouTube');
   if (project.enableTiktok) tags.push('TikTok');
+  if (project.enableThreads) tags.push('Threads');
   if (project.enableNews) tags.push('Tin tức');
   if (project.enableMaps) tags.push('Maps');
   return tags;
@@ -859,7 +861,7 @@ const Projects = () => {
             </div>
             <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3">Chưa có dự án nào</h3>
             <p className="text-gray-400 mb-8 max-w-lg mx-auto leading-relaxed">
-              Tạo dự án đầu tiên để cào mentions từ Facebook, YouTube, TikTok và chạy phân tích AI sentiment.
+              Tạo dự án đầu tiên để cào mentions từ Facebook, YouTube, TikTok, Threads và chạy phân tích AI sentiment.
             </p>
             <Link
               to={`/create-project?wid=${workspaceId}&onboarding=1`}

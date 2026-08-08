@@ -54,7 +54,8 @@ const ENTITY_B_COLOR = '#4FD1C5';
 const PLATFORM_COLORS: Record<string, string> = {
   facebook: '#1877F2',
   youtube: '#FF0000',
-  tiktok: '#FE2C55',
+  tiktok: '#00F2FE',
+  threads: '#FAFAFA',
   news: '#F59E0B',
   maps: '#34A853',
 };

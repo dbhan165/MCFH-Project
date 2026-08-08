@@ -104,7 +104,7 @@ const CreateProject = () => {
     }
     if (currentStep === 3) {
       if (!hasScrapableSource) {
-        setErrorMessage('Vui lòng chọn ít nhất một nguồn: Facebook, YouTube hoặc Tin tức.');
+        setErrorMessage('Vui lòng chọn ít nhất một nguồn cào dữ liệu (Facebook, YouTube, Tin tức, Threads).');
         return;
       }
       if (maxSources != null && selectedSources.length > maxSources) {
@@ -140,7 +140,7 @@ const CreateProject = () => {
     if (selectedSources.length > maxSources) {
       setSelectedSources(selectedSources.slice(0, maxSources));
     } else if (selectedSources.length === 0) {
-      const order = ['facebook', 'youtube', 'news'];
+      const order = ['facebook', 'youtube', 'news', 'threads'];
       setSelectedSources(order.slice(0, Math.min(maxSources, order.length)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

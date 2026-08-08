@@ -389,7 +389,7 @@ const Workspaces = () => {
             </div>
             <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3">Bắt đầu hành trình lắng nghe khách hàng đa kênh</h3>
             <p className="text-gray-400 mb-8 max-w-lg mx-auto leading-relaxed">
-              Tạo workspace đầu tiên để theo dõi thương hiệu trên Facebook, YouTube, TikTok và biên soạn báo cáo chuyên sâu cùng team.
+              Tạo workspace đầu tiên để theo dõi thương hiệu trên Facebook, YouTube, TikTok, Threads và biên soạn báo cáo chuyên sâu cùng team.
             </p>
             <Link
               to="/create-workspace"

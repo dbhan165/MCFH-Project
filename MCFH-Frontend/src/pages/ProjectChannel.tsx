@@ -272,7 +272,7 @@ const ProjectChannel = () => {
           <Share2 className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa có dữ liệu kênh</p>
           <p className="text-gray-500 text-sm mt-2">
-            Cần cào dữ liệu từ Facebook, YouTube, TikTok hoặc Tin tức.
+            Cần cào dữ liệu từ Facebook, YouTube, TikTok, Tin tức hoặc Threads.
           </p>
         </div>
       ) : (
