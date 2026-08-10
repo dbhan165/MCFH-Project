@@ -21,13 +21,13 @@ import { loadProfileFromStorage, clearAuthSession, getAvatarFallback } from '../
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
   { label: 'Quản lý người dùng', icon: Users, href: '/admin/users' },
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
-  { label: 'Quản lý người dùng', icon: Users, href: '/admin/users' },
   { label: 'Gói đăng ký', icon: CreditCard, href: '/admin/subscriptions' },
   { label: 'Quản lý Proxy', icon: Server, href: '/admin/proxies' },
   { label: 'Nguồn Facebook', icon: Globe, href: '/admin/fb-sources' },
   { label: 'Gói Cào', icon: Package, href: '/admin/scrape-packages' },
   { label: 'Cookie Nền tảng', icon: Cookie, href: '/admin/cookies' },
+  { label: 'Nhật ký hệ thống', icon: Clock, href: '/admin/audit-logs' },
+  { label: 'Cài đặt hệ thống', icon: Settings, href: '/admin/settings' },
 ];
 
 interface AdminLayoutProps {
