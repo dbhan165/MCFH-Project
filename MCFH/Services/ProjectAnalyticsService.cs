@@ -221,10 +221,10 @@ public class ProjectAnalyticsService
                         TagId = t.TagId,
                         Name = t.Name,
                         Color = t.Color
-                    })
-                    .ToList(),
+                    }).ToList(),
                 IsSentimentOverridden = row.AiAnalysis?.SentimentOverrideBy != null,
-                IsCrisisAlert = row.AiAnalysis?.IsCrisisAlert == true
+                IsCrisisAlert = row.AiAnalysis?.IsCrisisAlert == true,
+                PinnedForReport = row.PinnedForReport ?? false
             });
         }
 

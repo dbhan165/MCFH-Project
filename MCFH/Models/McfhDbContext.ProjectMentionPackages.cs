@@ -50,7 +50,7 @@ public partial class McfhDbContext
         {
             entity.HasKey(e => e.PlatformCookieId).HasName("PK_PlatformCookies");
 
-            entity.ToTable("PlatformCookies");
+            entity.ToTable("PLATFORM_COOKIES");
 
             entity.Property(e => e.PlatformCookieId).HasColumnName("platform_cookie_id");
             entity.Property(e => e.Platform)

@@ -78,6 +78,7 @@ export interface ProjectMention {
   tags: MentionTag[];
   isSentimentOverridden: boolean;
   isCrisisAlert: boolean;
+  pinnedForReport?: boolean;
 }
 
 export interface SentimentSummary {

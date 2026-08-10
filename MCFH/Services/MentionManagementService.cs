@@ -68,6 +68,40 @@ public class MentionManagementService
         return new MentionTagDto { TagId = tag.TagId, Name = tag.Name, Color = tag.Color };
     }
 
+    public async Task<MentionTagDto?> UpdateTagAsync(
+        int workspaceId, int projectId, int userId, int tagId, CreateMentionTagDto dto)
+    {
+        if (!await CanAccessProjectAsync(workspaceId, projectId, userId)) return null;
+        if (string.IsNullOrWhiteSpace(dto.Name)) return null;
+
+        var tag = await _context.Tags.FirstOrDefaultAsync(t => t.TagId == tagId && t.ProjectId == projectId);
+        if (tag == null) return null;
+
+        var name = dto.Name.Trim();
+        var exists = await _context.Tags.AnyAsync(t =>
+            t.ProjectId == projectId && t.TagId != tagId && t.Name.ToLower() == name.ToLower());
+        if (exists) return null;
+
+        tag.Name = name;
+        if (!string.IsNullOrWhiteSpace(dto.Color))
+            tag.Color = dto.Color.Trim();
+
+        await _context.SaveChangesAsync();
+        return new MentionTagDto { TagId = tag.TagId, Name = tag.Name, Color = tag.Color };
+    }
+
+    public async Task<bool> DeleteTagAsync(int workspaceId, int projectId, int userId, int tagId)
+    {
+        if (!await CanAccessProjectAsync(workspaceId, projectId, userId)) return false;
+
+        var tag = await _context.Tags.FirstOrDefaultAsync(t => t.TagId == tagId && t.ProjectId == projectId);
+        if (tag == null) return false;
+
+        _context.Tags.Remove(tag);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<bool> AssignTagsAsync(
         int workspaceId, int projectId, int userId, int feedbackId, AssignMentionTagsDto dto)
     {
@@ -92,6 +126,19 @@ public class MentionManagementService
         foreach (var tag in tags)
             feedback.Tags.Add(tag);
 
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> TogglePinForReportAsync(int workspaceId, int projectId, int userId, int feedbackId)
+    {
+        if (!await CanAccessProjectAsync(workspaceId, projectId, userId)) return false;
+
+        var feedback = await _context.ScrapedFeedbacks
+            .FirstOrDefaultAsync(f => f.FeedbackId == feedbackId && f.ProjectId == projectId);
+        if (feedback == null) return false;
+
+        feedback.PinnedForReport = !(feedback.PinnedForReport ?? false);
         await _context.SaveChangesAsync();
         return true;
     }

@@ -21,6 +21,9 @@ import {
   VolumeX,
   AlertTriangle,
   BrainCircuit,
+  Pin,
+  Edit2,
+  Check,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { AiAnalysisProgress, ProjectMention, MentionTag } from '../types/project';
@@ -106,6 +109,7 @@ function MentionCard({
   onManageTags,
   onMuteAuthor,
   onMutePlatform,
+  onPin,
 }: {
   item: ProjectMention;
   isMenuOpen: boolean;
@@ -124,6 +128,7 @@ function MentionCard({
   onManageTags: () => void;
   onMuteAuthor: () => void;
   onMutePlatform: () => void;
+  onPin: () => void;
 }) {
   const hasComments = item.comments.length > 0;
   const hasSentiment = item.sentiment != null && item.sentiment !== '';
@@ -194,6 +199,20 @@ function MentionCard({
                 ? ` · ${Math.round(item.confidenceScore * 100)}%`
                 : ''}
             </span>
+
+            <button
+              type="button"
+              onClick={onPin}
+              disabled={isBusy}
+              className={`p-2 rounded-xl transition-all disabled:opacity-40 mr-1 ${
+                item.pinnedForReport 
+                  ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20' 
+                  : 'text-gray-500 hover:text-white hover:bg-white/10'
+              }`}
+              title={item.pinnedForReport ? 'Bỏ ghim khỏi báo cáo' : 'Ghim vào báo cáo PDF'}
+            >
+              <Pin size={18} className={item.pinnedForReport ? 'fill-current' : ''} />
+            </button>
 
             <div className="relative" ref={isMenuOpen ? menuRef : undefined}>
               <button
@@ -442,6 +461,8 @@ const ProjectMentions = () => {
   const [tagModalMention, setTagModalMention] = useState<ProjectMention | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [newTagName, setNewTagName] = useState('');
+  const [editingTagId, setEditingTagId] = useState<number | null>(null);
+  const [editingTagName, setEditingTagName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const loadMentionsRef = useRef<() => void>(() => {});
   const fetchIdRef = useRef(0);
@@ -821,6 +842,38 @@ const ProjectMentions = () => {
     }
   };
 
+  const handleUpdateTag = async (tagId: number) => {
+    if (!wid || !projectId || !editingTagName.trim()) return;
+    try {
+      const updatedTag = await projectApi.updateMentionTag(wid, projectId, tagId, { name: editingTagName.trim() });
+      setProjectTags((prev) => prev.map(t => t.tagId === tagId ? updatedTag : t));
+      setEditingTagId(null);
+      setEditingTagName('');
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể cập nhật tag.'));
+    }
+  };
+
+  const handleDeleteTag = async (tagId: number) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Xóa tag',
+      message: 'Bạn có chắc chắn muốn xóa tag này khỏi dự án?',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+    
+    try {
+      await projectApi.deleteMentionTag(wid, projectId, tagId);
+      setProjectTags((prev) => prev.filter(t => t.tagId !== tagId));
+      setSelectedTagIds((prev) => prev.filter(id => id !== tagId));
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể xóa tag.'));
+    }
+  };
+
   const handleMuteAuthor = async (item: ProjectMention) => {
     if (!wid || !projectId || !item.authorName) return;
     const confirmed = await confirm({
@@ -841,6 +894,24 @@ const ProjectMentions = () => {
       await loadMentions();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể mute tác giả.'));
+    } finally {
+      setActionMentionId(null);
+    }
+  };
+
+  const handleTogglePin = async (item: ProjectMention) => {
+    if (!wid || !projectId) return;
+    setActionMentionId(item.feedbackId);
+    try {
+      await projectApi.togglePinForReport(wid, projectId, item.feedbackId);
+      // Update local state to avoid full reload
+      setMentions(prev => prev.map(m => 
+        m.feedbackId === item.feedbackId 
+          ? { ...m, pinnedForReport: !m.pinnedForReport } 
+          : m
+      ));
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể ghim mention.'));
     } finally {
       setActionMentionId(null);
     }
@@ -1175,6 +1246,7 @@ const ProjectMentions = () => {
               onManageTags={() => openTagModal(item)}
               onMuteAuthor={() => handleMuteAuthor(item)}
               onMutePlatform={() => handleMutePlatform(item)}
+              onPin={() => handleTogglePin(item)}
             />
           ))}
           {displayLimit < displayedMentions.length && (
@@ -1212,22 +1284,74 @@ const ProjectMentions = () => {
                 projectTags.map((tag) => {
                   const checked = selectedTagIds.includes(tag.tagId);
                   return (
-                    <label
-                      key={tag.tagId}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 hover:bg-white/5 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setSelectedTagIds((prev) =>
-                            checked ? prev.filter((id) => id !== tag.tagId) : [...prev, tag.tagId]
-                          )
-                        }
-                        className="rounded border-white/20"
-                      />
-                      <span className="text-sm text-white">{tag.name}</span>
-                    </label>
+                    <div key={tag.tagId} className="flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 hover:bg-white/5 group">
+                      {editingTagId === tag.tagId ? (
+                        <div className="flex flex-1 items-center gap-2">
+                          <input
+                            type="text"
+                            value={editingTagName}
+                            onChange={(e) => setEditingTagName(e.target.value)}
+                            className="flex-1 px-2 py-1 rounded bg-[#0A101D] border border-[#00B4D8]/50 text-sm text-white outline-none"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateTag(tag.tagId);
+                              if (e.key === 'Escape') setEditingTagId(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTag(tag.tagId)}
+                            className="p-1.5 rounded-lg text-green-400 hover:bg-green-400/10"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTagId(null)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:bg-white/10"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <label className="flex-1 flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setSelectedTagIds((prev) =>
+                                  checked ? prev.filter((id) => id !== tag.tagId) : [...prev, tag.tagId]
+                                )
+                              }
+                              className="rounded border-white/20"
+                            />
+                            <span className="text-sm text-white">{tag.name}</span>
+                          </label>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTagId(tag.tagId);
+                                setEditingTagName(tag.name);
+                              }}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10"
+                              title="Sửa tag"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTag(tag.tagId)}
+                              className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                              title="Xóa tag"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   );
                 })
               )}
