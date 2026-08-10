@@ -48,22 +48,26 @@ public partial class McfhDbContext
 
         modelBuilder.Entity<PlatformCookie>(entity =>
         {
-            entity.HasKey(e => e.PlatformCookieId).HasName("PK_PlatformCookies");
-
+            entity.HasKey(e => e.PlatformCookieId);
             entity.ToTable("PLATFORM_COOKIES");
+            entity.HasIndex(e => e.Platform, "UQ_PlatformCookies_Platform").IsUnique();
 
             entity.Property(e => e.PlatformCookieId).HasColumnName("platform_cookie_id");
             entity.Property(e => e.Platform)
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("platform");
-            entity.Property(e => e.FilePath).HasColumnName("file_path");
+            entity.Property(e => e.FilePath)
+                .HasMaxLength(500)
+                .HasColumnName("file_path");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
-                .HasDefaultValue("active")
-                .HasColumnName("status");
-            entity.Property(e => e.Note).HasColumnName("note");
+                .HasColumnName("status")
+                .HasDefaultValue("active");
+            entity.Property(e => e.Note)
+                .HasMaxLength(1000)
+                .HasColumnName("note");
             entity.Property(e => e.CookieCount)
                 .HasDefaultValue(0)
                 .HasColumnName("cookie_count");
@@ -77,9 +81,9 @@ public partial class McfhDbContext
                 .HasColumnType("datetime")
                 .HasColumnName("last_used_at");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
-                .HasColumnName("created_at");
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("(getdate())");
         });
     }
 }

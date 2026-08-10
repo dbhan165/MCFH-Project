@@ -248,5 +248,10 @@ public static class PlatformCookieFileHelper
     }
 
     public static bool IsExpiringSoon(DateTime? expiresAt) =>
-        expiresAt.HasValue && expiresAt.Value <= DateTime.Now.AddDays(7);
+        expiresAt.HasValue &&
+        expiresAt.Value > DateTime.Now &&
+        expiresAt.Value <= DateTime.Now.AddDays(7);
+
+    public static bool IsExpired(DateTime? expiresAt) =>
+        expiresAt.HasValue && expiresAt.Value < DateTime.Now;
 }
