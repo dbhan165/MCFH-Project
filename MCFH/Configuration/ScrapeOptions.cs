@@ -100,6 +100,38 @@ public class ScrapeOptions
     /// <summary>Nếu headless lưu được video nhưng 0 comment (CAPTCHA), thử lại headed.</summary>
     public bool TikTokRetryHeadedWhenNoComments { get; set; } = false;
 
+    // ── Threads ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Threads chạy headless (ẩn browser) hay headed (hiện cửa sổ để giám sát).</summary>
+    public bool ThreadsHeadless { get; set; } = true;
+
+    /// <summary>Timeout navigation Threads (ms).</summary>
+    public int ThreadsNavigationTimeoutMs { get; set; } = 60_000;
+
+    /// <summary>Số bài viết (posts) tối đa thu thập từ một profile Threads.</summary>
+    public int ThreadsMaxPosts { get; set; } = 30;
+
+    /// <summary>Số bình luận tối đa thu thập từ một bài viết Threads.</summary>
+    public int ThreadsMaxComments { get; set; } = 100;
+
+    /// <summary>Số bước scroll tối đa khi tải comment Threads (lazy load).</summary>
+    public int ThreadsCommentScrollMaxIterations { get; set; } = 40;
+
+    /// <summary>Số vòng ổn định liên tiếp trước khi dừng scroll comment Threads.</summary>
+    public int ThreadsCommentScrollStableRounds { get; set; } = 6;
+
+    /// <summary>Số lần tăng tối thiểu trước khi tín hiệu dừng được tính (chống false-stop ngay sau lần paint đầu).</summary>
+    public int ThreadsCommentScrollMinGrowthRounds { get; set; } = 2;
+
+    /// <summary>Chờ giữa các thao tác scroll/click (ms, min).</summary>
+    public int ThreadsHumanizeDelayMinMs { get; set; } = 800;
+
+    /// <summary>Chờ giữa các thao tác scroll/click (ms, max).</summary>
+    public int ThreadsHumanizeDelayMaxMs { get; set; } = 2500;
+
+    /// <summary>Số bước scroll tối đa khi thu thập feed/profile.</summary>
+    public int ThreadsMaxScrollSteps { get; set; } = 10;
+
     /// <summary>Chế độ demo: ít bài/comment, bỏ cào sâu FB, TikTok song song, không chờ AI.</summary>
     public bool FastDemoMode { get; set; } = false;
 
@@ -129,6 +161,21 @@ public class ScrapeOptions
 
     public int EffectiveFacebookMaxComments =>
         FastDemoMode ? FastDemoMaxCommentsPerItem : FacebookMaxComments;
+
+    public int EffectiveThreadsMaxComments =>
+        FastDemoMode ? FastDemoMaxCommentsPerItem : ThreadsMaxComments;
+
+    public int EffectiveThreadsCommentScrollMaxIterations =>
+        FastDemoMode ? Math.Min(ThreadsCommentScrollMaxIterations, 20) : ThreadsCommentScrollMaxIterations;
+
+    public int EffectiveThreadsCommentScrollStableRounds =>
+        FastDemoMode ? Math.Max(ThreadsCommentScrollStableRounds, 4) : ThreadsCommentScrollStableRounds;
+
+    public int EffectiveThreadsCommentScrollMinGrowthRounds =>
+        FastDemoMode ? Math.Max(ThreadsCommentScrollMinGrowthRounds, 2) : ThreadsCommentScrollMinGrowthRounds;
+
+    public int EffectiveThreadsMaxPosts =>
+        FastDemoMode ? Math.Min(ThreadsMaxPosts, 5) : ThreadsMaxPosts;
 
     public int EffectiveTikTokDiscoveryTimeoutSeconds =>
         FastDemoMode ? Math.Min(TikTokDiscoveryTimeoutSeconds, 45) : TikTokDiscoveryTimeoutSeconds;

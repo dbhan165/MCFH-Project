@@ -26,6 +26,10 @@ public class PayOsService
         _options = options.Value;
         _authOptions = authOptions.Value;
         _logger = logger;
+
+        _logger.LogInformation("[PayOS DEBUG] ClientId={ClientId}, ApiKey={ApiKey}, ChecksumKey={ChecksumKey}",
+            _options.ClientId, _options.ApiKey, _options.ChecksumKey);
+
         _client = new Lazy<PayOSClient>(() =>
         {
             if (!_options.IsConfigured)
@@ -115,13 +119,27 @@ public class PayOsService
     /// </summary>
     public async Task<WebhookData?> VerifyWebhookAsync(Webhook webhook)
     {
+        if (webhook?.Data == null || string.IsNullOrEmpty(webhook.Signature))
+        {
+            _logger.LogWarning("Webhook thiếu Data hoặc Signature — bỏ qua.");
+            return null;
+        }
+
         try
         {
-            return await _client.Value.Webhooks.VerifyAsync(webhook);
+            var result = await _client.Value.Webhooks.VerifyAsync(webhook);
+            _logger.LogInformation("Webhook PayOS verify thành công: orderCode={OrderCode}", webhook.Data.OrderCode);
+            return result;
         }
         catch (WebhookException ex)
         {
-            _logger.LogWarning(ex, "Webhook PayOS có chữ ký không hợp lệ (orderCode {OrderCode})", webhook?.Data?.OrderCode);
+            _logger.LogWarning(ex, "Webhook PayOS có chữ ký không hợp lệ (orderCode {OrderCode}). Message={Message}",
+                webhook?.Data?.OrderCode, ex.Message);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi verify webhook PayOS: {Message}", ex.Message);
             return null;
         }
     }

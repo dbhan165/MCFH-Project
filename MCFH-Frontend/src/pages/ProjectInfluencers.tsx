@@ -367,7 +367,7 @@ const ProjectInfluencers = () => {
           <Users className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa phát hiện KOL nào</p>
           <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
-            Cần dữ liệu từ Facebook, YouTube, TikTok hoặc Tin tức.
+            Cần dữ liệu từ Facebook, YouTube, TikTok, Tin tức hoặc Threads.
           </p>
         </div>
       ) : (

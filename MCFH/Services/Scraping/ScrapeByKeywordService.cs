@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using MCFH.Configuration;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
@@ -40,6 +40,7 @@ public class ScrapeByKeywordService
         _db = db;
         _aiAnalysisService = aiAnalysisService;
         _scrapeOptions = scrapeOptions.Value;
+        Console.WriteLine($"[CFG] ScrapeOptions.SocialHeadless={_scrapeOptions.SocialHeadless}, FastDemoMode={_scrapeOptions.FastDemoMode}");
         _proxyRotation = proxyRotation;
         _proxyOptions = proxyOptions.Value;
         _serpApiNewsDiscovery = serpApiNewsDiscovery;
@@ -104,6 +105,7 @@ public class ScrapeByKeywordService
                 project.EnableFacebook == true,
                 project.EnableYoutube == true,
                 project.EnableTiktok == true,
+                project.EnableMaps == true,
                 enableNews);
             progress?.SetPhase("scraping", _activeOptions.FastDemoMode
                 ? $"Chế độ demo nhanh — cào «{keyword}»..."
@@ -117,6 +119,7 @@ public class ScrapeByKeywordService
             var hasAnySource = project.EnableFacebook == true
                                || project.EnableYoutube == true
                                || project.EnableTiktok == true
+                               || project.EnableMaps == true
                                || enableNews;
             if (!hasAnySource)
             {
@@ -137,6 +140,9 @@ public class ScrapeByKeywordService
 
             if (project.EnableTiktok == true && _activeOptions.FastDemoMode && _activeOptions.FastDemoRunTikTokParallel)
                 parallelTasks.Add(RunTikTokAsync(projectId, keyword, result, progress, timeFilter, allowUnknownDates));
+
+            if (project.EnableMaps == true)
+                parallelTasks.Add(RunThreadsAsync(projectId, keyword, result, progress, timeFilter, allowUnknownDates));
 
             if (parallelTasks.Count > 0)
             {
@@ -162,7 +168,7 @@ public class ScrapeByKeywordService
         {
             if (_activeProxy != null)
             {
-                var total = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.News.Count;
+                var total = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.Threads.Count + result.News.Count;
                 if (total > 0)
                     await _proxyRotation.RecordSuccessAsync(_activeProxy.ProxyId);
                 else if (result.Errors.Count > 0 || !string.IsNullOrWhiteSpace(result.ErrorMessage))
@@ -260,13 +266,13 @@ public class ScrapeByKeywordService
     private async Task<ScrapeByKeywordResult> FinalizeResultAsync(
         int projectId, ScrapeByKeywordResult result, ScrapeJobProgress? progress, bool cancelled)
     {
-        var totalSaved = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.News.Count;
+        var totalSaved = result.Facebook.Count + result.YouTube.Count + result.TikTok.Count + result.Threads.Count + result.News.Count;
 
         if (cancelled)
         {
             progress?.SkipPendingPlatforms("Đã bỏ qua — người dùng dừng");
             result.Message = totalSaved > 0
-                ? $"Đã dừng — giữ {totalSaved} bài (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}, News: {result.News.Count})."
+                ? $"Đã dừng — giữ {totalSaved} bài (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}, Threads: {result.Threads.Count}, News: {result.News.Count})."
                 : "Đã dừng — chưa lưu bài nào.";
             result.Errors.Add("Đã dừng theo yêu cầu người dùng.");
             return result;
@@ -289,10 +295,11 @@ public class ScrapeByKeywordService
         {
             var totalComments = result.Facebook.Sum(p => p.CommentsCount)
                 + result.YouTube.Sum(p => p.CommentsCount)
-                + result.TikTok.Sum(p => p.CommentsCount);
+                + result.TikTok.Sum(p => p.CommentsCount)
+                + result.Threads.Sum(p => p.CommentsCount);
 
             result.Message =
-                $"Đã lưu {totalSaved} bản ghi + {totalComments} bình luận text (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}, News: {result.News.Count}).";
+                $"Đã lưu {totalSaved} bản ghi + {totalComments} bình luận text (FB: {result.Facebook.Count}, YT: {result.YouTube.Count}, TT: {result.TikTok.Count}, Threads: {result.Threads.Count}, News: {result.News.Count}).";
 
             progress?.SetPhase("analyzing", "Đang phân tích AI các bài vừa cào...");
             if (_activeOptions.FastDemoMode && _activeOptions.FastDemoSkipAiAnalysis)
@@ -346,13 +353,14 @@ public class ScrapeByKeywordService
                 var searchUrl = FacebookUrlHelper.BuildKeywordSearchUrl(groupUrl, keyword);
                 var feedUrl = FacebookUrlHelper.BuildFeedUrl(groupUrl);
 
+                // Thử feed group (URL gốc) trước — search (?q=) chỉ render 3-4 profile cards không cuộn được.
                 var scraper = new FacebookGroupScraper();
-                var posts = await scraper.ScrapeAsync(searchUrl, poolSize, _activeOptions, proxy: CurrentPlaywrightProxy());
+                var posts = await scraper.ScrapeAsync(feedUrl, poolSize, _activeOptions, proxy: CurrentPlaywrightProxy());
 
                 if (posts.Count == 0 && !string.Equals(searchUrl, feedUrl, StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"[Facebook] Search rỗng — thử feed group: {feedUrl}");
-                    posts = await scraper.ScrapeAsync(feedUrl, poolSize, _activeOptions, proxy: CurrentPlaywrightProxy());
+                    Console.WriteLine($"[Facebook] Feed rỗng — fallback về search: {searchUrl}");
+                    posts = await scraper.ScrapeAsync(searchUrl, poolSize, _activeOptions, proxy: CurrentPlaywrightProxy());
                 }
 
                 foreach (var post in posts)
@@ -578,6 +586,178 @@ public class ScrapeByKeywordService
         }
     }
 
+    private async Task RunThreadsAsync(
+        int projectId, string keyword, ScrapeByKeywordResult result, ScrapeJobProgress? progress,
+        ScrapeTimeFilter timeFilter, bool allowUnknownDates)
+    {
+        var targetCount = _activeOptions.EffectiveThreadsMaxPosts;
+        var savedBefore = result.Threads.Count;
+        progress?.StartPlatform("threads", "Đang tìm bài viết trên Threads...");
+
+        IBrowserContext? threadsContext = null;
+
+        try
+        {
+            var scraper = new ThreadsScraper();
+            var maxComments = Math.Max(_activeOptions.EffectiveThreadsMaxComments, _activeOptions.EffectiveMaxCommentsPerItem);
+
+            var scrapeResult = await scraper.ScrapeSearchAsync(
+                keyword,
+                targetCount,
+                _activeOptions,
+                proxy: CurrentPlaywrightProxy(),
+                onStatus: msg => progress?.UpdatePlatform("threads", result.Threads.Count, msg));
+
+            if (!scrapeResult.Success || scrapeResult.Posts.Count == 0)
+            {
+                progress?.CompletePlatform("threads", 0, "Threads: không tìm thấy bài phù hợp");
+                lock (result.Errors)
+                    result.Errors.Add($"Threads: {scrapeResult.ErrorMessage ?? "Không tìm thấy bài viết"}");
+                return;
+            }
+
+            var postUrls = scrapeResult.Posts
+                .Where(p => !string.IsNullOrEmpty(p.PostUrl))
+                .Select(p => p.PostUrl!)
+                .ToList();
+
+            if (postUrls.Count == 0)
+            {
+                progress?.CompletePlatform("threads", 0, "Threads: không tìm thấy URL bài viết");
+                return;
+            }
+
+            progress?.UpdatePlatform("threads", 0, $"Threads: tìm thấy {postUrls.Count} bài, đang lấy comment...");
+            Console.WriteLine($"[Threads] Found {postUrls.Count} post(s), target {targetCount}");
+
+            // Tạo shared browser context cho toàn bộ session Threads
+            threadsContext = await CreateThreadsSharedContextAsync(progress);
+
+            var skipped = 0;
+
+            foreach (var post in scrapeResult.Posts)
+            {
+                if (progress?.IsCancellationRequested == true)
+                    break;
+                if (result.Threads.Count >= targetCount)
+                    break;
+
+                if (string.IsNullOrEmpty(post.PostUrl))
+                    continue;
+
+                if (IsAlreadyScraped("threads", post.PostUrl))
+                {
+                    NoteSkipped();
+                    skipped++;
+                    Console.WriteLine($"[Threads] Skip existing: {post.PostUrl}");
+                    continue;
+                }
+
+                var scrapeCommentsResult = await scraper.ScrapeCommentsAsync(
+                    post.PostUrl,
+                    maxComments,
+                    sharedBrowser: null,
+                    _activeOptions,
+                    onStatus: msg => progress?.UpdatePlatform("threads", result.Threads.Count, msg),
+                    sharedContext: threadsContext);
+
+                if (!scrapeCommentsResult.Success)
+                {
+                    Console.WriteLine($"[Threads] Skip {post.PostUrl}: {scrapeCommentsResult.ErrorMessage}");
+                    continue;
+                }
+
+                if (!timeFilter.IsWithinRange(post.PostedAt, allowUnknownDates))
+                {
+                    Console.WriteLine($"[Threads] Skip ngoài khoảng thời gian: {post.PostUrl} posted={post.PostedAt}");
+                    continue;
+                }
+
+                var commentTexts = CommentTextHelper.FromScraped(
+                    scrapeCommentsResult.Comments, maxComments, "threads",
+                    post.Text, post.AuthorDisplayName);
+
+                // AuthorName = AuthorUsername raw từ URL (vd "@depressed__coffee")
+                // Ưu tiên AuthorUsername; nếu rỗng thì fallback AuthorDisplayName
+                // KHÔNG prepend thêm "@", KHÔNG gắn display name
+                var authorName = !string.IsNullOrWhiteSpace(post.AuthorUsername)
+                    ? post.AuthorUsername
+                    : post.AuthorDisplayName;
+
+                var (feedbackId, savedComments, wasSkipped) = await SaveFeedbackWithMetricsAsync(
+                    projectId, "threads",
+                    post.Text ?? $"Threads post: {post.PostUrl}",
+                    authorName, post.PostUrl, commentTexts, post.PostedAt,
+                    post.LikeCount, post.CommentCount, post.ViewCount);
+
+                if (wasSkipped)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                lock (result.Threads)
+                {
+                    result.Threads.Add(new PlatformPostResult
+                    {
+                        FeedbackId = feedbackId,
+                        Author = authorName,
+                        Text = post.Text,
+                        Url = post.PostUrl,
+                        CommentsCount = savedComments
+                    });
+                }
+
+                progress?.UpdatePlatform(
+                    "threads",
+                    result.Threads.Count,
+                    skipped > 0
+                        ? $"Threads: đã lưu {result.Threads.Count}/{postUrls.Count} bài (bỏ qua {skipped} cũ)..."
+                        : $"Threads: đã lưu {result.Threads.Count}/{postUrls.Count} bài...");
+            }
+
+            if (result.Threads.Count == 0 && skipped > 0)
+                progress?.CompletePlatform("threads", 0, $"Threads: {skipped} bài đã cào trước đó — bỏ qua");
+            else if (result.Threads.Count == 0)
+            {
+                progress?.FailPlatform("threads", "Tìm thấy bài nhưng không lưu được — kiểm tra Playwright.");
+                lock (result.Errors)
+                    result.Errors.Add("Threads: Tìm thấy bài nhưng không lưu được — kiểm tra Playwright.");
+            }
+            else
+            {
+                progress?.CompletePlatform("threads", result.Threads.Count,
+                    skipped > 0 ? $"Hoàn tất — {result.Threads.Count} bài mới (+{skipped} đã cào trước)" : null);
+            }
+        }
+        catch (Exception ex)
+        {
+            progress?.FailPlatform("threads", ex.Message);
+            lock (result.Errors)
+                result.Errors.Add($"Threads: {ex.Message}{PlaywrightErrorHint(ex)}");
+        }
+        finally
+        {
+            // Lưu cookies nếu có bài mới
+            var newSaved = result.Threads.Count - savedBefore;
+            await ThreadsSessionHelper.TrySaveAfterSuccessfulSessionAsync(threadsContext, newSaved);
+
+            if (threadsContext != null)
+                await threadsContext.CloseAsync();
+        }
+    }
+
+    private async Task<IBrowserContext> CreateThreadsSharedContextAsync(ScrapeJobProgress? progress)
+    {
+        var playwright = await Playwright.CreateAsync();
+        var browser = await playwright.Chromium.LaunchAsync(
+            ThreadsStealthHelper.CreateLaunchOptions(_activeOptions.ThreadsHeadless, CurrentPlaywrightProxy()));
+        var context = await ThreadsStealthHelper.CreateContextAsync(browser, _activeOptions.ThreadsHeadless,
+            msg => progress?.UpdatePlatform("threads", 0, msg));
+        await ThreadsSessionHelper.LoadCookiesAsync(context);
+        return context;
+    }
+
     private async Task<bool> ProjectEnablesNewsAsync(int projectId) =>
         await _db.DataSources.AsNoTracking()
             .AnyAsync(d => d.ProjectId == projectId
@@ -752,66 +932,16 @@ public class ScrapeByKeywordService
         if (progress?.IsCancellationRequested == true)
             return;
 
-        progress?.StartPlatform("tiktok", "Đang tìm video công khai trên TikTok...");
+        progress?.StartPlatform("tiktok", "Đang mở cửa sổ Chromium để bạn giải CAPTCHA thủ công...");
 
         try
         {
-            var captchaTracker = new TikTokCaptchaTracker();
-            var headedOnCaptchaOnly = _activeOptions.TikTokHeadedOnCaptchaOnly;
-            var initialHeadless = headedOnCaptchaOnly || _activeOptions.TikTokHeadless;
-
-            using var discoveryCts = CreateTikTokSessionCts(
+            using var headedCts = CreateTikTokSessionCts(
                 progress, _activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds);
 
             var saved = await RunTikTokBrowserSessionAsync(
-                projectId, keyword, result, progress, discoveryCts.Token,
-                initialHeadless, timeFilter, allowUnknownDates, captchaTracker);
-
-            if (headedOnCaptchaOnly)
-            {
-                if (captchaTracker.Encountered
-                    && _activeOptions.TikTokAllowManualCaptcha
-                    && _activeOptions.TikTokCaptchaWaitSeconds > 0
-                    && progress?.IsCancellationRequested != true)
-                {
-                    if (saved > 0 && result.TikTok.Sum(t => t.CommentsCount) == 0)
-                        await ClearTikTokPostsWithoutCommentsAsync(projectId, result);
-
-                    progress?.UpdatePlatform("tiktok", result.TikTok.Count,
-                        "TikTok: CAPTCHA — mở cửa sổ Chromium, vui lòng giải trong 2 phút...");
-                    using var headedCts = CreateTikTokSessionCts(progress, HeadedRetryTimeoutSeconds());
-                    saved += await RunTikTokBrowserSessionAsync(
-                        projectId, keyword, result, progress, headedCts.Token,
-                        headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
-                }
-            }
-            else if (saved == 0
-                && _activeOptions.TikTokHeadless
-                && _activeOptions.EffectiveTikTokRetryHeaded
-                && progress?.IsCancellationRequested != true)
-            {
-                progress?.UpdatePlatform("tiktok", 0,
-                    "TikTok: thử lại với cửa sổ Chromium thật (không cần đăng nhập)...");
-                using var headedCts = CreateTikTokSessionCts(progress, HeadedRetryTimeoutSeconds());
-                saved = await RunTikTokBrowserSessionAsync(
-                    projectId, keyword, result, progress, headedCts.Token,
-                    headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
-            }
-            else if (_activeOptions.TikTokHeadless
-                     && _activeOptions.TikTokRetryHeadedWhenNoComments
-                     && _activeOptions.EffectiveTikTokRetryHeaded
-                     && progress?.IsCancellationRequested != true
-                     && saved > 0
-                     && result.TikTok.Sum(t => t.CommentsCount) == 0)
-            {
-                await ClearTikTokPostsWithoutCommentsAsync(projectId, result);
-                progress?.UpdatePlatform("tiktok", 0,
-                    "TikTok: có video nhưng 0 comment (CAPTCHA) — thử lại với cửa sổ thật...");
-                using var headedCts = CreateTikTokSessionCts(progress, HeadedRetryTimeoutSeconds());
-                saved += await RunTikTokBrowserSessionAsync(
-                    projectId, keyword, result, progress, headedCts.Token,
-                    headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
-            }
+                projectId, keyword, result, progress, headedCts.Token,
+                headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
 
             if (progress?.IsCancellationRequested == true)
                 return;
@@ -1156,6 +1286,76 @@ public class ScrapeByKeywordService
             MarkScraped(platform, originalUrl);
 
             Console.WriteLine($"[{platform}] Feedback {feedback.FeedbackId}: lưu {savedCount} comment text");
+
+            return (feedback.FeedbackId, savedCount, false);
+        }
+        finally
+        {
+            _saveLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Extended save used by Threads scraper. Same as <see cref="SaveFeedbackAsync"/> but
+    /// additionally maps:
+    ///   - <c>viewCount</c> → <c>feedback.Reach</c>
+    ///   - <c>likeCount + commentCount</c> → <c>feedback.EngagementCount</c>
+    ///     (only when both are non-null; otherwise the column keeps its default 0)
+    ///   - <c>commentCount</c> → <c>feedback.CommentsCount</c>
+    ///     (only when commentCount > 0; otherwise falls back to the count of normalized
+    ///     comment texts we actually persisted)
+    /// </summary>
+    private async Task<(int FeedbackId, int SavedComments, bool Skipped)> SaveFeedbackWithMetricsAsync(
+        int projectId, string platform, string content, string? authorName, string originalUrl,
+        List<string> comments, DateTime? postedAt = null,
+        int? likeCount = null, int? commentCount = null, int? viewCount = null)
+    {
+        await _saveLock.WaitAsync();
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(originalUrl) && IsAlreadyScraped(platform, originalUrl))
+            {
+                NoteSkipped();
+                Console.WriteLine($"[{platform}] Skip trùng URL: {originalUrl}");
+                return (0, 0, true);
+            }
+
+            var normalized = CommentTextHelper.Normalize(comments);
+
+            var feedback = new ScrapedFeedback
+            {
+                SourceId = null,
+                ProjectId = projectId,
+                Platform = platform,
+                Content = content,
+                AuthorName = authorName,
+                OriginalUrl = originalUrl,
+                PostedAt = postedAt,
+                Reach = viewCount,
+                CommentsCount = normalized.Count,
+                ScrapedAt = DateTime.Now
+            };
+
+            _db.ScrapedFeedbacks.Add(feedback);
+            await _db.SaveChangesAsync();
+
+            var savedCount = await _bundleStorage.SaveAsync(feedback.FeedbackId, normalized);
+            feedback.CommentsCount = savedCount;
+            feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
+
+            // engagement_count = like + comment, only when both are known
+            if (likeCount.HasValue && commentCount.HasValue)
+                feedback.EngagementCount = likeCount.Value + commentCount.Value;
+
+            // Override CommentsCount with the real reply count when we have one
+            if (commentCount.HasValue && commentCount.Value > 0)
+                feedback.CommentsCount = commentCount.Value;
+
+            await _db.SaveChangesAsync();
+
+            MarkScraped(platform, originalUrl);
+
+            Console.WriteLine($"[{platform}] Feedback {feedback.FeedbackId}: lưu {savedCount} comment text | reach={feedback.Reach} | engagement={feedback.EngagementCount} | comments={feedback.CommentsCount}");
 
             return (feedback.FeedbackId, savedCount, false);
         }

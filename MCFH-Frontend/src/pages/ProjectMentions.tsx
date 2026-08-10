@@ -426,7 +426,7 @@ const ProjectMentions = () => {
   const [activeSentiment, setActiveSentiment] = useState<MentionSentimentFilter>('all');
   const [searchText, setSearchText] = useState('');
   const [showCrisisOnly, setShowCrisisOnly] = useState(false);
-  const [savedFilters, setSavedFilters] = useState<{ filterId: number; name: string }[]>([]);
+  const [savedFilters, setSavedFilters] = useState<{ filterId: number; name: string; config?: any }[]>([]);
   const [filterName, setFilterName] = useState('');
   const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
   const [expandedContent, setExpandedContent] = useState<Record<number, boolean>>({});
@@ -444,6 +444,7 @@ const ProjectMentions = () => {
   const [newTagName, setNewTagName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const loadMentionsRef = useRef<() => void>(() => {});
+  const fetchIdRef = useRef(0);
   const { confirm, alert } = useAppModal();
 
   const loadProjectTags = useCallback(async () => {
@@ -459,6 +460,8 @@ const ProjectMentions = () => {
   const loadMentions = useCallback(async () => {
     if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
 
+    const currentFetchId = ++fetchIdRef.current;
+
     setIsLoading(true);
     setErrorMessage('');
     try {
@@ -466,6 +469,9 @@ const ProjectMentions = () => {
         search: searchText.trim() || undefined,
         isCrisisAlert: showCrisisOnly || undefined,
       });
+
+      if (currentFetchId !== fetchIdRef.current) return;
+
       setMentions(data);
 
       const defaultExpanded: Record<number, boolean> = {};
@@ -474,9 +480,12 @@ const ProjectMentions = () => {
       }
       setExpandedComments(defaultExpanded);
     } catch (error) {
+      if (currentFetchId !== fetchIdRef.current) return;
       setErrorMessage(extractApiError(error, 'Không thể tải danh sách mentions.'));
     } finally {
-      setIsLoading(false);
+      if (currentFetchId === fetchIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [wid, projectId, searchText, showCrisisOnly]);
 
@@ -515,7 +524,7 @@ const ProjectMentions = () => {
     if (!wid || !projectId) return;
     try {
       const filters = await projectApi.getMentionFilters(wid, projectId);
-      setSavedFilters(filters.map((f) => ({ filterId: f.filterId, name: f.name })));
+      setSavedFilters(filters.map((f) => ({ filterId: f.filterId, name: f.name, config: f.config })));
     } catch {
       setSavedFilters([]);
     }
@@ -537,6 +546,16 @@ const ProjectMentions = () => {
 
   const saveCurrentFilter = async () => {
     if (!wid || !projectId || !filterName.trim()) return;
+
+    if (!searchText.trim() && activePlatform === 'all' && activeSentiment === 'all' && !showCrisisOnly) {
+      await alert({
+        title: 'Cảnh báo',
+        message: 'Vui lòng thiết lập ít nhất một điều kiện lọc (nhập từ khóa tìm kiếm, chọn nền tảng hoặc cảm xúc) trước khi lưu!',
+        type: 'warning'
+      });
+      return;
+    }
+
     try {
       await projectApi.saveMentionFilter(wid, projectId, {
         name: filterName.trim(),
@@ -551,6 +570,24 @@ const ProjectMentions = () => {
       await loadSavedFilters();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể lưu bộ lọc.'));
+    }
+  };
+
+  const handleDeleteFilter = async (filterId: number) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Xóa bộ lọc',
+      message: 'Bạn có chắc muốn xóa bộ lọc này không?',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      type: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await projectApi.deleteMentionFilter(wid, projectId, filterId);
+      await loadSavedFilters();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể xóa bộ lọc.'));
     }
   };
 
@@ -580,6 +617,7 @@ const ProjectMentions = () => {
       youtube: 0,
       tiktok: 0,
       facebook: 0,
+      threads: 0,
       news: 0,
     };
     for (const item of mentions) {
@@ -997,12 +1035,32 @@ const ProjectMentions = () => {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mr-1">Đã lưu</span>
             {savedFilters.map((f) => (
-              <span
-                key={f.filterId}
-                className="px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-xs text-gray-300"
-              >
-                {f.name}
-              </span>
+              <div key={f.filterId} className="group relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    console.log('Filter clicked:', f.name, f.config);
+                    if (f.config?.platform) setActivePlatform(f.config.platform);
+                    if (f.config?.sentiment) setActiveSentiment(f.config.sentiment);
+                    if (f.config?.search !== undefined) setSearchText(f.config.search || '');
+                    if (f.config?.isCrisisAlert !== undefined) setShowCrisisOnly(f.config.isCrisisAlert);
+                  }}
+                  className="px-3 py-1.5 pr-7 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-xs text-gray-300 transition-colors"
+                >
+                  {f.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteFilter(f.filterId);
+                  }}
+                  title="Xóa bộ lọc"
+                  className="absolute right-1 p-1 rounded-full text-gray-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -1093,7 +1151,7 @@ const ProjectMentions = () => {
           <MessageCircle className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa có mention nào</p>
           <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
-            Chạy cào dữ liệu từ trang Dự án để thu thập bài đăng từ Facebook, YouTube, TikTok và Tin tức.
+            Chạy cào dữ liệu từ trang Dự án để thu thập bài đăng từ Facebook, YouTube, TikTok, Tin tức hoặc Threads.
           </p>
         </div>
       ) : (

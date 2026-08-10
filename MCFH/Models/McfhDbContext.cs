@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,6 +42,8 @@ public partial class McfhDbContext : DbContext
     public virtual DbSet<Payment> Payments { get; set; }
 
     public virtual DbSet<Project> Projects { get; set; }
+
+    public virtual DbSet<ProjectMentionPackage> ProjectMentionPackages { get; set; }
 
     public virtual DbSet<SavedFilter> SavedFilters { get; set; }
 
@@ -589,6 +591,13 @@ public partial class McfhDbContext : DbContext
                 .HasForeignKey(d => d.WorkspaceId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Project_Workspace");
+
+            entity.Property(e => e.MentionsQuotaTotal).HasColumnName("mentions_quota_total");
+            entity.Property(e => e.MentionsQuotaUsed).HasColumnName("mentions_quota_used");
+            entity.Property(e => e.MentionsExpiresAt)
+                .HasColumnType("datetime")
+                .HasColumnName("mentions_expires_at");
+            entity.Property(e => e.MentionsFullUnlimited).HasColumnName("mentions_full_unlimited");
         });
 
         modelBuilder.Entity<SavedFilter>(entity =>
@@ -785,6 +794,110 @@ public partial class McfhDbContext : DbContext
             entity.Property(e => e.Price)
                 .HasColumnType("decimal(18, 2)")
                 .HasColumnName("price");
+        });
+
+        modelBuilder.Entity<ScrapeOrder>(entity =>
+        {
+            entity.HasKey(e => e.OrderId);
+
+            entity.ToTable("SCRAPE_ORDERS");
+
+            entity.Property(e => e.OrderId).HasColumnName("order_id");
+            entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
+            entity.Property(e => e.ProjectId).HasColumnName("project_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Keyword).HasMaxLength(500).HasColumnName("keyword");
+            entity.Property(e => e.PostedSinceDays).HasColumnName("posted_since_days");
+            entity.Property(e => e.MentionsPackage)
+                .HasMaxLength(20)
+                .HasColumnName("mentions_package");
+            entity.Property(e => e.MentionsIncluded).HasColumnName("mentions_included");
+            entity.Property(e => e.QuotedPrice).HasColumnType("decimal(18,2)").HasColumnName("quoted_price");
+            entity.Property(e => e.Status).HasMaxLength(50).HasColumnName("status");
+            entity.Property(e => e.PaymentId).HasColumnName("payment_id");
+            entity.Property(e => e.ScrapeJobId).HasMaxLength(100).HasColumnName("scrape_job_id");
+            entity.Property(e => e.ProgressPercent).HasColumnName("progress_percent");
+            entity.Property(e => e.StatusMessage).HasMaxLength(500).HasColumnName("status_message");
+            entity.Property(e => e.EstimatedReportAt).HasColumnType("datetime").HasColumnName("estimated_report_at");
+            entity.Property(e => e.ReportReadyAt).HasColumnType("datetime").HasColumnName("report_ready_at");
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime").HasColumnName("created_at");
+            entity.Property(e => e.PaidAt).HasColumnType("datetime").HasColumnName("paid_at");
+            entity.Property(e => e.CompletedAt).HasColumnType("datetime").HasColumnName("completed_at");
+
+            entity.HasOne(d => d.Workspace).WithMany()
+                .HasForeignKey(d => d.WorkspaceId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.Project).WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.User).WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasOne(d => d.Payment).WithMany()
+                .HasForeignKey(d => d.PaymentId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+
+            entity.HasIndex(e => e.UserId, "IX_ScrapeOrders_User");
+            entity.HasIndex(e => e.ProjectId, "IX_ScrapeOrders_Project");
+
+            entity.HasOne(d => d.Package).WithMany(p => p.ScrapeOrders)
+                .HasPrincipalKey(p => p.Code)
+                .HasForeignKey(d => d.MentionsPackage)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ScrapeOrders_Package");
+        });
+
+        modelBuilder.Entity<ScrapePackage>(entity =>
+        {
+            entity.HasKey(e => e.PackageId).HasName("PK__SCRAPE_P__B66AD3F4E5A8B6C2");
+
+            entity.ToTable("SCRAPE_PACKAGES");
+
+            entity.HasIndex(e => e.Code, "UQ_ScrapePackages_Code").IsUnique();
+
+            entity.Property(e => e.PackageId).HasColumnName("package_id");
+            entity.Property(e => e.Code)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("code");
+            entity.Property(e => e.Name)
+                .HasMaxLength(255)
+                .HasColumnName("name");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.Price)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("price");
+            entity.Property(e => e.Currency)
+                .HasMaxLength(10)
+                .IsUnicode(false)
+                .HasDefaultValue("VND")
+                .HasColumnName("currency");
+            entity.Property(e => e.DurationDays).HasColumnName("duration_days");
+            entity.Property(e => e.MaxItems).HasColumnName("max_items");
+            entity.Property(e => e.MaxSources).HasColumnName("max_sources");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.SortOrder)
+                .HasDefaultValue(0)
+                .HasColumnName("sort_order");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.UpdatedByNavigation).WithMany()
+                .HasForeignKey(d => d.UpdatedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ScrapePackages_UpdatedBy");
         });
 
         modelBuilder.Entity<SystemProxy>(entity =>

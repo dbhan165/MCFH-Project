@@ -12,6 +12,7 @@ import Welcome from "./pages/Welcome";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import Pricing from "./pages/Pricing";
+import ScrapePackagesPublic from "./pages/ScrapePackagesPublic";
 
 // Admin + Reporter (remote)
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -20,6 +21,7 @@ import AdminUserDetail from "./pages/admin/AdminUserDetail";
 import SubscriptionPlans from "./pages/admin/SubscriptionPlans";
 import ProxyManagement from "./pages/admin/ProxyManagement";
 import FbSourceManagement from "./pages/admin/FbSourceManagement";
+import ScrapePackageManagement from "./pages/admin/ScrapePackageManagement";
 import CookieManagement from "./pages/admin/CookieManagement";
 import SystemSettings from "./pages/admin/SystemSettings";
 import AdminProfile from "./pages/admin/AdminProfile";
@@ -58,6 +60,7 @@ import ProjectReports from "./pages/ProjectReports";
 import ProjectComparison from "./pages/ProjectComparison";
 import { AppModalProvider } from "./contexts/AppModalContext";
 import { ScrapeJobProvider } from "./contexts/ScrapeJobContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import ProjectBespokeReports from "./pages/ProjectBespokeReports";
 
 function AppRoutes() {
@@ -77,6 +80,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/scrape-packages" element={<ScrapePackagesPublic />} />
 
       {/* Private */}
       <Route element={<PrivateRoute />}>
@@ -92,6 +96,7 @@ function AppRoutes() {
           <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
           <Route path="/admin/proxies" element={<ProxyManagement />} />
           <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
+          <Route path="/admin/scrape-packages" element={<ScrapePackageManagement />} />
           <Route path="/admin/cookies" element={<CookieManagement />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
@@ -204,7 +209,9 @@ function App() {
     <AppModalProvider>
       <ScrapeJobProvider>
         <Router>
-          <AppRoutes />
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
         </Router>
       </ScrapeJobProvider>
     </AppModalProvider>

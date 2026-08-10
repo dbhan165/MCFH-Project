@@ -22,6 +22,7 @@ public class ScrapeOrderService
     private readonly ScrapeOptions _scrapeOptions;
     private readonly PayOsOptions _payOsOptions;
     private readonly PayOsService _payOs;
+    private readonly ScrapePackageCatalog _catalog;
     private readonly ILogger<ScrapeOrderService> _logger;
 
     public ScrapeOrderService(
@@ -31,6 +32,7 @@ public class ScrapeOrderService
         IOptions<ScrapeOptions> scrapeOptions,
         IOptions<PayOsOptions> payOsOptions,
         PayOsService payOs,
+        ScrapePackageCatalog catalog,
         ILogger<ScrapeOrderService> logger)
     {
         _context = context;
@@ -39,28 +41,62 @@ public class ScrapeOrderService
         _scrapeOptions = scrapeOptions.Value;
         _payOsOptions = payOsOptions.Value;
         _payOs = payOs;
+        _catalog = catalog;
         _logger = logger;
     }
 
-    public ScrapeQuoteDto GetQuote(int postedSinceDays) => new()
+    public async Task<ScrapeQuoteDto?> GetQuoteAsync(string mentionsPackage, Project? project = null)
     {
-        PostedSinceDays = postedSinceDays,
-        TimeRangeLabel = GetTimeRangeLabel(postedSinceDays),
-        Price = QuotePrice(postedSinceDays),
-        PriceLabel = FormatVnd(QuotePrice(postedSinceDays)),
-        EstimatedMinutes = EstimateMinutes(postedSinceDays),
-        EstimatedDeliveryLabel = FormatEtaLabel(postedSinceDays)
-    };
+        var pkg = await _catalog.GetActiveByCodeAsync(mentionsPackage);
+        if (pkg == null) return null;
+
+        return new ScrapeQuoteDto
+        {
+            MentionsPackage = pkg.Code,
+            PackageLabel = pkg.Name,
+            MentionsIncluded = pkg.MaxItems ?? 0,
+            Price = pkg.Price,
+            PriceLabel = FormatVnd(pkg.Price),
+            EstimatedMinutes = EstimateMinutesByPackage(pkg),
+            EstimatedDeliveryLabel = FormatEtaLabelByPackage(pkg),
+            ProjectRemainingMentions = project == null ? null : CalcRemainingMentions(project),
+            ProjectHasFullUnlimited = project?.MentionsFullUnlimited ?? false
+        };
+    }
+
+    /// <summary>Tính số mentions còn lại có thể cào (NULL = unlimited).</summary>
+    public static int? CalcRemainingMentions(Project p)
+    {
+        if (p.MentionsFullUnlimited) return null;
+        var remaining = p.MentionsQuotaTotal - p.MentionsQuotaUsed;
+        return remaining < 0 ? 0 : remaining;
+    }
 
     public async Task<ScrapeOrderDto?> CreateOrderAsync(int userId, CreateScrapeOrderDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.Keyword))
+        {
+            _logger.LogWarning("[CreateOrder] Thiếu keyword.");
             return null;
+        }
+
+        // Lookup gói từ catalog — không hardcode enum: chấp nhận mọi code hợp lệ trong SCRAPE_PACKAGES.
+        // Trước đây dùng MentionPackageTypes.Normalize chỉ match PACK_100/300/600/FULL_UNLIMITED —
+        // nếu admin tạo gói với code khác sẽ bị trả null dù gói đang active.
+        var pkg = await _catalog.GetActiveByCodeAsync(dto.MentionsPackage);
+        if (pkg == null)
+        {
+            _logger.LogWarning("[CreateOrder] Gói '{Code}' không tồn tại hoặc không active.", dto.MentionsPackage);
+            return null;
+        }
 
         var member = await _context.WorkspaceMembers
             .AnyAsync(m => m.WorkspaceId == dto.WorkspaceId && m.UserId == userId);
         if (!member)
+        {
+            _logger.LogWarning("[CreateOrder] User {UserId} không phải member của workspace {WorkspaceId}.", userId, dto.WorkspaceId);
             return null;
+        }
 
         var project = await _context.Projects
             .FirstOrDefaultAsync(p =>
@@ -68,9 +104,17 @@ public class ScrapeOrderService
                 p.WorkspaceId == dto.WorkspaceId &&
                 p.IsDeleted != true);
         if (project == null)
+        {
+            _logger.LogWarning("[CreateOrder] Project {ProjectId} không tồn tại trong workspace {WorkspaceId}.", dto.ProjectId, dto.WorkspaceId);
             return null;
+        }
 
-        var price = QuotePrice(dto.PostedSinceDays);
+        // Không chặn ở đây: quota sẽ được cộng vào Project SAU khi thanh toán thành công (xem FulfillPaidOrderAsync).
+        // CreateOrder chỉ tạo order "quoted"; job cào thật sẽ kiểm quota khi chạy (ScrapeJobRunner / Controller job start).
+        // Logic cũ (reject nếu hết quota) chặn cả order đầu tiên của project mới (total=0, used=0 → remaining=0).
+        var pkgCodeUpper = pkg.Code?.Trim().ToUpperInvariant() ?? string.Empty;
+        var isFull = pkgCodeUpper.StartsWith("FULL", StringComparison.OrdinalIgnoreCase);
+
         var now = DateTime.Now;
         var order = new ScrapeOrder
         {
@@ -78,8 +122,10 @@ public class ScrapeOrderService
             ProjectId = dto.ProjectId,
             UserId = userId,
             Keyword = dto.Keyword.Trim(),
-            PostedSinceDays = dto.PostedSinceDays,
-            QuotedPrice = price,
+            PostedSinceDays = 30, // Hardcode theo contract đã confirm
+            MentionsPackage = pkg.Code,
+            MentionsIncluded = isFull ? -1 : (pkg.MaxItems ?? 0),
+            QuotedPrice = pkg.Price,
             Status = "quoted",
             ProgressPercent = 0,
             StatusMessage = "Chờ thanh toán để bắt đầu cào dữ liệu.",
@@ -339,6 +385,8 @@ public class ScrapeOrderService
     /// <summary>
     /// Idempotent: đánh dấu payment success + order paid, rồi khởi động job cào → "scraping".
     /// Gọi lặp lại (webhook retry / confirm poll) sẽ no-op nếu đã xử lý.
+    /// Sau khi thanh toán, nếu order có MentionsPackage thì tạo 1 row PROJECT_MENTION_PACKAGES (active)
+    /// cho Project và cập nhật Project.MentionsQuotaTotal / MentionsFullUnlimited.
     /// </summary>
     private async Task FulfillPaidOrderAsync(ScrapeOrder order, Payment payment)
     {
@@ -358,6 +406,10 @@ public class ScrapeOrderService
                 await _context.SaveChangesAsync();
             }
 
+            // Cấp package cho Project (idempotent — đã cấp rồi thì bỏ qua).
+            if (!string.IsNullOrEmpty(order.MentionsPackage))
+                await EnsureProjectPackageFromOrderAsync(order, payment);
+
             if (order.Status == "paid" && string.IsNullOrEmpty(order.ScrapeJobId))
                 await StartScrapeForPaidOrderAsync(order);
         }
@@ -367,9 +419,61 @@ public class ScrapeOrderService
         }
     }
 
+    /// <summary>
+    /// Cấp/cộng dồn quota cho Project. Tránh double-create bằng cách check existing Package theo PaymentId.
+    /// </summary>
+    private async Task EnsureProjectPackageFromOrderAsync(ScrapeOrder order, Payment payment)
+    {
+        var exists = await _context.ProjectMentionPackages
+            .AnyAsync(p => p.PaymentId == payment.PaymentId);
+        if (exists) return;
+
+        var pkgType = order.MentionsPackage!;
+        var isFull = pkgType == MentionPackageTypes.FullUnlimited;
+        // MentionsIncluded đã được fill từ catalog khi tạo order (DB là source of truth).
+        var included = isFull ? -1 : (order.MentionsIncluded ?? await ResolveMentionsIncludedAsync(pkgType));
+        var now = DateTime.Now;
+
+        var pkg = new ProjectMentionPackage
+        {
+            ProjectId = order.ProjectId,
+            PaymentId = payment.PaymentId,
+            PackageType = pkgType,
+            MentionsIncluded = included,
+            MentionsUsed = 0,
+            Status = "active",
+            CreatedAt = now
+        };
+        _context.ProjectMentionPackages.Add(pkg);
+
+        var project = await _context.Projects.FirstOrDefaultAsync(p => p.ProjectId == order.ProjectId);
+        if (project != null)
+        {
+            if (isFull)
+            {
+                project.MentionsFullUnlimited = true;
+                // Không cộng vào tổng quota (Full = vô hạn); vẫn có thể cộng để hiển thị "đã từng mua"
+            }
+            else
+            {
+                project.MentionsQuotaTotal += included;
+            }
+        }
+        await _context.SaveChangesAsync();
+    }
+
+    /// <summary>Fallback cho order cũ tạo trước khi catalog lookup — lấy max_items từ SCRAPE_PACKAGES.</summary>
+    private async Task<int> ResolveMentionsIncludedAsync(string packageCode)
+    {
+        var pkg = await _catalog.GetActiveByCodeAsync(packageCode);
+        return pkg?.MaxItems ?? 0;
+    }
+
     private async Task StartScrapeForPaidOrderAsync(ScrapeOrder order)
     {
-        var postedDays = order.PostedSinceDays > 0 ? order.PostedSinceDays : (int?)null;
+        // Contract đã confirm: runtime scrape nhận postedDays cố định 30 — chỉ quota mới ảnh hưởng Project.
+        // member khác không đụng.
+        var postedDays = 30;
         var jobId = await _jobRunner.StartAsync(order.ProjectId, order.UserId, postedDays);
         if (jobId == null)
         {
@@ -378,11 +482,19 @@ public class ScrapeOrderService
             return;
         }
 
+        // Estimate minutes lấy từ catalog (đồng bộ với giá client thấy khi quote).
+        var pkg = order.MentionsPackage != null
+            ? await _catalog.GetActiveByCodeAsync(order.MentionsPackage)
+            : null;
+        var estimatedMinutes = pkg != null
+            ? EstimateMinutesByPackage(pkg)
+            : 60;
+
         var now = DateTime.Now;
         order.ScrapeJobId = jobId;
         order.Status = "scraping";
         order.ProgressPercent = 5;
-        order.EstimatedReportAt = now.AddMinutes(EstimateMinutes(order.PostedSinceDays));
+        order.EstimatedReportAt = now.AddMinutes(estimatedMinutes);
         order.StatusMessage = $"Thanh toán thành công. Báo cáo dự kiến sẵn sàng trước {order.EstimatedReportAt:HH:mm dd/MM/yyyy}.";
         await _context.SaveChangesAsync();
     }
@@ -421,8 +533,96 @@ public class ScrapeOrderService
             .Where(p => projectIds.Contains(p.ProjectId))
             .ToDictionaryAsync(p => p.ProjectId, p => p.Name);
 
-        return orders.Select(order => MapOrderFromEntity(order, projectNames, userId)).ToList();
+        // Load catalog 1 lần để tránh N+1 label lookup.
+        var packageLabelMap = await BuildPackageLabelMapAsync(orders);
+
+        return orders.Select(order => MapOrderFromEntity(order, projectNames, packageLabelMap, userId)).ToList();
     }
+
+    /// <summary>Build dictionary Code → Name cho các package xuất hiện trong orders (cache hit).</summary>
+    private async Task<IReadOnlyDictionary<string, string>> BuildPackageLabelMapAsync(IEnumerable<ScrapeOrder> orders)
+    {
+        var codes = orders
+            .Where(o => !string.IsNullOrEmpty(o.MentionsPackage))
+            .Select(o => o.MentionsPackage!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (codes.Count == 0) return new Dictionary<string, string>();
+
+        var all = await _catalog.GetAllActiveAsync();
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pkg in all)
+            if (codes.Contains(pkg.Code))
+                map[pkg.Code] = pkg.Name;
+        return map;
+    }
+
+    /// <summary>
+    /// Lấy quota mentions hiện tại của Project + danh sách package active.
+    /// Trả về null nếu user không phải member của workspace hoặc project không tồn tại.
+    /// </summary>
+    public async Task<ProjectMentionsQuotaDto?> GetProjectMentionsQuotaAsync(int userId, int projectId)
+    {
+        var project = await _context.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.ProjectId == projectId && p.IsDeleted != true);
+        if (project == null) return null;
+
+        var member = await _context.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == project.WorkspaceId && m.UserId == userId);
+        if (!member) return null;
+
+        var packages = await _context.ProjectMentionPackages.AsNoTracking()
+            .Where(p => p.ProjectId == projectId && p.Status == "active")
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+
+        // Load catalog 1 lần để tra label — không gọi catalog trong .Select (tránh async-over-sync deadlock).
+        var catalog = await _catalog.GetAllActiveAsync();
+        var catalogMap = catalog.ToDictionary(p => p.Code, p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+        var dto = new ProjectMentionsQuotaDto
+        {
+            ProjectId = project.ProjectId,
+            MentionsQuotaTotal = project.MentionsQuotaTotal,
+            MentionsQuotaUsed = project.MentionsQuotaUsed,
+            FullUnlimited = project.MentionsFullUnlimited,
+            ExpiresAt = project.MentionsExpiresAt,
+            MentionsRemaining = CalcRemainingMentions(project)
+        };
+        dto.ActivePackages = packages.Select(p => new MentionsPackageDto
+        {
+            PackageId = p.PackageId,
+            PackageType = p.PackageType,
+            PackageLabel = catalogMap.TryGetValue(p.PackageType, out var label)
+                ? label
+                : DefaultPackageLabel(p.PackageType),
+            MentionsIncluded = p.MentionsIncluded,
+            MentionsUsed = p.MentionsUsed,
+            MentionsRemaining = p.MentionsIncluded == -1 ? null : (p.MentionsIncluded - p.MentionsUsed),
+            ExpiresAt = p.ExpiresAt,
+            CreatedAt = p.CreatedAt
+        }).ToList();
+        return dto;
+    }
+
+    /// <summary>
+    /// Trả label hiển thị cho mã gói — ưu tiên tên từ SCRAPE_PACKAGES, fallback về label mặc định.
+    /// </summary>
+    private async Task<string> GetPackageLabelAsync(string? packageType)
+    {
+        if (string.IsNullOrEmpty(packageType)) return "";
+        var pkg = await _catalog.GetActiveByCodeAsync(packageType);
+        return pkg?.Name ?? DefaultPackageLabel(packageType);
+    }
+
+    private static string DefaultPackageLabel(string code) => code switch
+    {
+        MentionPackageTypes.Pack100 => "Gói 100 mentions",
+        MentionPackageTypes.Pack300 => "Gói 300 mentions",
+        MentionPackageTypes.Pack600 => "Gói 600 mentions",
+        MentionPackageTypes.FullUnlimited => "Full Unlimited",
+        _ => code
+    };
 
     private async Task SyncOrderProgressAsync(int orderId)
     {
@@ -586,28 +786,43 @@ public class ScrapeOrderService
             .Select(p => p.Name)
             .FirstOrDefaultAsync() ?? $"Dự án #{order.ProjectId}";
 
-        return MapOrderFromEntity(order, projectName, userId);
+        var projectNames = new Dictionary<int, string> { [order.ProjectId] = projectName };
+        return MapOrderFromEntity(order, projectNames, null, userId);
     }
 
     private ScrapeOrderDto MapOrderFromEntity(
         ScrapeOrder order,
         IReadOnlyDictionary<int, string> projectNames,
+        IReadOnlyDictionary<string, string>? packageLabels = null,
         int? userId = null)
     {
         var projectName = projectNames.TryGetValue(order.ProjectId, out var name)
             ? name
             : $"Dự án #{order.ProjectId}";
 
-        return MapOrderFromEntity(order, projectName, userId);
+        return MapOrderFromEntity(order, projectName, packageLabels, userId);
     }
 
-    private ScrapeOrderDto MapOrderFromEntity(ScrapeOrder order, string projectName, int? userId = null)
+    private ScrapeOrderDto MapOrderFromEntity(
+        ScrapeOrder order,
+        string projectName,
+        IReadOnlyDictionary<string, string>? packageLabels = null,
+        int? userId = null)
     {
         ScrapeJobStatusDto? jobDto = null;
         if (userId.HasValue && !string.IsNullOrEmpty(order.ScrapeJobId))
         {
             var job = _jobRunner.GetJob(order.ScrapeJobId, userId.Value);
             jobDto = job?.ToDto();
+        }
+
+        string? packageLabel = null;
+        if (!string.IsNullOrEmpty(order.MentionsPackage))
+        {
+            if (packageLabels != null && packageLabels.TryGetValue(order.MentionsPackage!, out var lbl))
+                packageLabel = lbl;
+            else
+                packageLabel = DefaultPackageLabel(order.MentionsPackage!);
         }
 
         return new ScrapeOrderDto
@@ -618,7 +833,9 @@ public class ScrapeOrderService
             ProjectName = projectName,
             Keyword = order.Keyword,
             PostedSinceDays = order.PostedSinceDays,
-            TimeRangeLabel = GetTimeRangeLabel(order.PostedSinceDays),
+            MentionsPackage = order.MentionsPackage,
+            MentionsIncluded = order.MentionsIncluded,
+            PackageLabel = packageLabel,
             QuotedPrice = order.QuotedPrice,
             PriceLabel = FormatVnd(order.QuotedPrice),
             Status = order.Status,
@@ -635,25 +852,25 @@ public class ScrapeOrderService
         };
     }
 
-    // Giá test (tạm giảm để dễ test PayOS): 10k / 20k / 50k. TODO: khôi phục giá thật trước khi lên production.
-    public static decimal QuotePrice(int postedSinceDays) => postedSinceDays switch
-    {
-        0 => 50_000m, // Mọi thời gian
-        <= 7 => 10_000m,
-        <= 30 => 10_000m,
-        <= 90 => 20_000m,
-        <= 180 => 50_000m,
-        _ => 50_000m
-    };
+    // === Pricing/ETA theo SCRAPE_PACKAGES (đọc từ catalog) ===
 
-    public static int EstimateMinutes(int postedSinceDays) => postedSinceDays switch
+    /// <summary>Số phút ước tính dựa trên <c>duration_days</c> của gói trong DB.</summary>
+    public static int EstimateMinutesByPackage(ScrapePackage pkg)
     {
-        <= 7 => 20,
-        <= 30 => 30,
-        <= 90 => 60,
-        <= 180 => 120,
-        _ => 240
-    };
+        // Quy tắc đơn giản: 1 ngày ≈ 10 phút xử lý; full unlimited gấp đôi.
+        var baseMinutes = pkg.DurationDays * 10;
+        var code = pkg.Code ?? "";
+        return code == MentionPackageTypes.FullUnlimited ? baseMinutes * 2 : baseMinutes;
+    }
+
+    public static string FormatEtaLabelByPackage(ScrapePackage pkg)
+    {
+        var mins = EstimateMinutesByPackage(pkg);
+        if (mins < 60)
+            return $"Khoảng {mins} phút";
+        var hours = mins / 60.0;
+        return hours < 2 ? "Khoảng 1–2 giờ" : "Khoảng 2–4 giờ";
+    }
 
     private int CalcProgress(ScrapeJobState job)
     {
@@ -761,26 +978,6 @@ public class ScrapeOrderService
         "tiktok" => 3,
         _ => 9
     };
-
-    private static string GetTimeRangeLabel(int days) => days switch
-    {
-        0 => "Mọi thời gian",
-        7 => "1 tuần gần đây",
-        30 => "1 tháng gần đây",
-        90 => "3 tháng gần đây",
-        180 => "6 tháng gần đây",
-        365 => "1 năm gần đây",
-        _ => $"{days} ngày gần đây"
-    };
-
-    private static string FormatEtaLabel(int days)
-    {
-        var mins = EstimateMinutes(days);
-        if (mins < 60)
-            return $"Khoảng {mins} phút";
-        var hours = mins / 60.0;
-        return hours < 2 ? "Khoảng 1–2 giờ" : "Khoảng 2–4 giờ";
-    }
 
     private static string GetStatusLabel(string status) => status switch
     {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace MCFH.Models;
@@ -48,4 +48,18 @@ public partial class Project
     public bool? EnableYoutube { get; set; }
 
     public bool? EnableMaps { get; set; }
+
+    /// <summary>Tổng mentions quota đã mua cho Project (snapshot các package active).</summary>
+    public int MentionsQuotaTotal { get; set; }
+
+    /// <summary>Mentions đã dùng (do scrape order consume). Còn lại = Total - Used (trừ khi FullUnlimited).</summary>
+    public int MentionsQuotaUsed { get; set; }
+
+    /// <summary>Thời điểm quota hiện tại hết hạn. NULL = không hết hạn.</summary>
+    public DateTime? MentionsExpiresAt { get; set; }
+
+    /// <summary>True nếu user đã mua Full Unlimited — không giới hạn mentions.</summary>
+    public bool MentionsFullUnlimited { get; set; }
+
+    public virtual ICollection<ProjectMentionPackage> MentionPackages { get; set; } = new List<ProjectMentionPackage>();
 }

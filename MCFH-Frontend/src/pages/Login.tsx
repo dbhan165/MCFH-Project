@@ -44,7 +44,8 @@ const Login = () => {
         }
 
         const response = await authApi.login(email, password);
-        saveAuthSession(response.data as unknown as Record<string, unknown>);
+        const authData = (response.data as any).data || response.data;
+        saveAuthSession(authData);
         try {
           navigate(await resolvePostLoginPath());
         } catch {
@@ -344,7 +345,8 @@ const Login = () => {
                     setIsLoading(true);
                     setErrorMessage('');
                     const response = await authApi.googleLogin(credentialResponse.credential!);
-                    saveAuthSession(response.data as unknown as Record<string, unknown>);
+                    const authData = (response.data as any).data || response.data;
+                    saveAuthSession(authData);
                     try {
                       navigate(await resolvePostLoginPath());
                     } catch {

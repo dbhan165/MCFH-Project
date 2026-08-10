@@ -9,11 +9,16 @@ public class PlatformCookieAdminService
 {
     private readonly McfhDbContext _context;
     private readonly IPlatformCookiePathProvider _pathProvider;
+    private readonly ILogger<PlatformCookieAdminService> _logger;
 
-    public PlatformCookieAdminService(McfhDbContext context, IPlatformCookiePathProvider pathProvider)
+    public PlatformCookieAdminService(
+        McfhDbContext context,
+        IPlatformCookiePathProvider pathProvider,
+        ILogger<PlatformCookieAdminService> logger)
     {
         _context = context;
         _pathProvider = pathProvider;
+        _logger = logger;
     }
 
     public async Task<List<PlatformCookieDto>> ListAsync(int adminUserId)
@@ -27,7 +32,36 @@ public class PlatformCookieAdminService
 
         var result = new List<PlatformCookieDto>();
         foreach (var row in rows)
-            result.Add(await MapDtoAsync(row, includeRequired: false));
+        {
+            try
+            {
+                result.Add(await MapDtoAsync(row, includeRequired: false));
+            }
+            catch (Exception ex)
+            {
+                // Không để 1 row hỏng làm hỏng cả list. Log chi tiết để debug.
+                _logger.LogError(ex,
+                    "MapDtoAsync thất bại cho PLATFORM_COOKIES id={Id} platform={Platform} filePath={FilePath}",
+                    row.PlatformCookieId, row.Platform, row.FilePath);
+                // Trả row tối thiểu để UI vẫn hiển thị thay vì trắng.
+                result.Add(new PlatformCookieDto
+                {
+                    PlatformCookieId = row.PlatformCookieId,
+                    Platform = row.Platform,
+                    FilePath = row.FilePath,
+                    Status = row.Status,
+                    Note = row.Note,
+                    CookieCount = row.CookieCount,
+                    ExpiresAt = row.ExpiresAt,
+                    UploadedAt = row.UploadedAt,
+                    LastUsedAt = row.LastUsedAt,
+                    FileExists = false,
+                    FileMissing = true,
+                    IsExpiringSoon = PlatformCookieFileHelper.IsExpiringSoon(row.ExpiresAt),
+                    RequiredCookiesPresent = null
+                });
+            }
+        }
 
         return result;
     }

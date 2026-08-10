@@ -34,6 +34,7 @@ function normalizeProject(data: Record<string, unknown>): Project {
     enableFacebook: Boolean(pickField(data, 'enableFacebook', 'EnableFacebook')),
     enableYoutube: Boolean(pickField(data, 'enableYoutube', 'EnableYoutube')),
     enableTiktok: Boolean(pickField(data, 'enableTiktok', 'EnableTiktok')),
+    enableThreads: Boolean(pickField(data, 'enableThreads', 'EnableThreads')),
     enableMaps: Boolean(pickField(data, 'enableMaps', 'EnableMaps')),
     enableNews: Boolean(pickField(data, 'enableNews', 'EnableNews')),
     createdAt: pickNullableString(data, 'createdAt', 'CreatedAt'),
@@ -71,6 +72,7 @@ export const projectApi = {
       payload.enableFacebook != null ||
       payload.enableYoutube != null ||
       payload.enableTiktok != null ||
+      payload.enableThreads != null ||
       payload.enableMaps != null ||
       (payload.dataSources?.length ?? 0) > 0;
 
@@ -86,6 +88,7 @@ export const projectApi = {
           enableFacebook: payload.enableFacebook ?? false,
           enableYoutube: payload.enableYoutube ?? false,
           enableTiktok: payload.enableTiktok ?? false,
+          enableThreads: payload.enableThreads ?? false,
           enableMaps: payload.enableMaps ?? false,
           dataSources: (payload.dataSources ?? []).map((s) => ({
             platform: s.platform,
@@ -112,6 +115,7 @@ export const projectApi = {
       enableFacebook?: boolean;
       enableYoutube?: boolean;
       enableTiktok?: boolean;
+      enableThreads?: boolean;
       enableMaps?: boolean;
     }
   ): Promise<Project> => {
@@ -124,6 +128,7 @@ export const projectApi = {
         enableFacebook: payload.enableFacebook,
         enableYoutube: payload.enableYoutube,
         enableTiktok: payload.enableTiktok,
+        enableThreads: payload.enableThreads,
         enableMaps: payload.enableMaps,
       }
     );
@@ -577,6 +582,7 @@ export const projectApi = {
           search: pickNullableString(config, 'search', 'Search'),
           dateFrom: pickNullableString(config, 'dateFrom', 'DateFrom'),
           dateTo: pickNullableString(config, 'dateTo', 'DateTo'),
+          isCrisisAlert: pickField(config, 'isCrisisAlert', 'IsCrisisAlert') === true,
         },
         createdAt: pickNullableString(d, 'createdAt', 'CreatedAt'),
       };

@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Users, Hash, Map, FileUp, Check, MonitorPlay, Globe,
-  Loader2, AlertCircle, CreditCard, Clock,
+  Loader2, AlertCircle, CreditCard, Clock, Check,
 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import axiosClient from '../api/axiosClient';
+import PackageStep, { type ScrapePackageOption } from './PackageStep';
+import SourcesStep from './SourcesStep';
 import KeywordStep from './KeywordStep';
 import { projectApi } from '../api/projectApi';
 import { scrapeOrderApi, type ScrapeQuote } from '../api/scrapeOrderApi';
 import { extractApiError } from '../utils/authStorage';
+import { pickField, pickNullableString, pickNumber, pickString } from '../utils/normalizeApi';
 import {
   buildDataSources,
   getPrimaryKeyword,
@@ -15,6 +18,8 @@ import {
 } from '../utils/onboardingHelpers';
 
 type LaunchPhase = 'idle' | 'creating' | 'paying' | 'done' | 'error';
+
+const STEP_LABELS = ['THÔNG TIN', 'GÓI CÀO', 'NGUỒN DỮ LIỆU', 'TỪ KHOÁ & BÁO GIÁ'];
 
 const CreateProject = () => {
   const navigate = useNavigate();
@@ -28,32 +33,89 @@ const CreateProject = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [quote, setQuote] = useState<ScrapeQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
-
+  const [packages, setPackages] = useState<ScrapePackageOption[]>([]);
   const [campaignName, setCampaignName] = useState('');
-  const [selectedSources, setSelectedSources] = useState<string[]>(['facebook', 'youtube']);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [keywords, setKeywords] = useState('');
-  const [postedSinceDays, setPostedSinceDays] = useState(0);
+  const [selectedPackageCode, setSelectedPackageCode] = useState('');
 
-  const toggleSource = (sourceId: string) => {
-    if (selectedSources.includes(sourceId)) {
-      setSelectedSources(selectedSources.filter((id) => id !== sourceId));
-    } else {
-      setSelectedSources([...selectedSources, sourceId]);
-    }
-  };
+  // Load package catalog 1 lần ở parent — share cho cả PackageStep (UI) và SourcesStep (maxSources).
+  useEffect(() => {
+    let cancelled = false;
+    axiosClient
+      .get<unknown[]>('/api/packages')
+      .then((res) => {
+        if (cancelled) return;
+        const items = (res.data ?? []) as Record<string, unknown>[];
+        const parsed: ScrapePackageOption[] = items
+          .map((p) => ({
+            code: pickString(p, 'code', 'Code'),
+            name: pickString(p, 'name', 'Name'),
+            description: pickNullableString(p, 'description', 'Description'),
+            price: Number(pickField(p, 'price', 'Price') ?? 0),
+            currency: pickString(p, 'currency', 'Currency') || 'VND',
+            durationDays: pickNumber(p, 'durationDays', 'DurationDays'),
+            maxItems: pickNumber(p, 'maxItems', 'MaxItems'),
+            maxSources: pickField<number>(p, 'maxSources', 'MaxSources') ?? null,
+            sortOrder: pickNumber(p, 'sortOrder', 'SortOrder'),
+          }))
+          .filter((p) => p.code)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        setPackages(parsed);
+        setSelectedPackageCode((current) => {
+          if (current && parsed.some((p) => p.code === current)) return current;
+          return parsed[0]?.code ?? '';
+        });
+      })
+      .catch(() => {
+        /* PackageStep sẽ hiển thị empty state nếu không tải được */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selectedPackage = useMemo(
+    () => packages.find((p) => p.code === selectedPackageCode),
+    [packages, selectedPackageCode]
+  );
+  const maxSources = selectedPackage?.maxSources ?? null;
+
 
   const hasScrapableSource = selectedSources.some((source) =>
     SCRAPABLE_PLATFORMS.includes(source as (typeof SCRAPABLE_PLATFORMS)[number])
   );
 
+  const isStep1Valid = campaignName.trim() !== '';
+  const isStep2Valid = !!selectedPackageCode;
+  const isStep3Valid =
+    hasScrapableSource &&
+    (maxSources == null || selectedSources.length <= maxSources);
+  const isStep4Valid = !!getPrimaryKeyword(keywords);
+
+  const stepIsValid = [isStep1Valid, isStep2Valid, isStep3Valid, isStep4Valid];
+
   const handleNext = () => {
     setErrorMessage('');
-    if (currentStep === 2 && !hasScrapableSource) {
-      setErrorMessage('Vui lòng chọn ít nhất một nền tảng: Facebook hoặc YouTube.');
+    if (currentStep === 2 && !selectedPackageCode) {
+      setErrorMessage('Vui lòng chọn gói cào dữ liệu.');
       return;
     }
-    if (currentStep === 3 && !getPrimaryKeyword(keywords)) {
-      setErrorMessage('Vui lòng nhập ít nhất một từ khóa.');
+    if (currentStep === 3) {
+      if (!hasScrapableSource) {
+        setErrorMessage('Vui lòng chọn ít nhất một nguồn cào dữ liệu (Facebook, YouTube, Tin tức, Threads).');
+        return;
+      }
+      if (maxSources != null && selectedSources.length > maxSources) {
+        setErrorMessage(
+          `Gói đã chọn chỉ cho phép tối đa ${maxSources} nguồn. Hiện tại bạn đã chọn ${selectedSources.length}.`
+        );
+        return;
+      }
+    }
+    if (currentStep === 4 && !getPrimaryKeyword(keywords)) {
+      setErrorMessage('Vui lòng nhập ít nhất một từ khoá.');
       return;
     }
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -61,13 +123,28 @@ const CreateProject = () => {
 
   useEffect(() => {
     if (currentStep !== 4) return;
+    if (!selectedPackageCode) return;
     setQuoteLoading(true);
     scrapeOrderApi
-      .getQuote(postedSinceDays)
+      .getQuote(selectedPackageCode)
       .then(setQuote)
       .catch(() => setQuote(null))
       .finally(() => setQuoteLoading(false));
-  }, [currentStep, postedSinceDays]);
+  }, [currentStep, selectedPackageCode]);
+
+  // Khi user đổi gói ở step 2/3: nếu số nguồn đã chọn vượt maxSources của gói mới → trim về top N.
+  // Nếu chưa chọn gì và vừa vào step 3 → auto-suggest theo maxSources.
+  useEffect(() => {
+    if (currentStep !== 3) return;
+    if (maxSources == null) return;
+    if (selectedSources.length > maxSources) {
+      setSelectedSources(selectedSources.slice(0, maxSources));
+    } else if (selectedSources.length === 0) {
+      const order = ['facebook', 'youtube', 'news', 'threads'];
+      setSelectedSources(order.slice(0, Math.min(maxSources, order.length)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, maxSources]);
 
   const handleBack = () => {
     setErrorMessage('');
@@ -83,11 +160,21 @@ const CreateProject = () => {
       return;
     }
     if (!primaryKeyword) {
-      setErrorMessage('Vui lòng nhập từ khóa.');
+      setErrorMessage('Vui lòng nhập từ khoá.');
+      return;
+    }
+    if (!selectedPackageCode) {
+      setErrorMessage('Vui lòng chọn gói cào dữ liệu.');
       return;
     }
     if (!hasScrapableSource) {
-      setErrorMessage('Vui lòng chọn ít nhất một nền tảng để cào dữ liệu.');
+      setErrorMessage('Vui lòng chọn ít nhất một nguồn để cào dữ liệu.');
+      return;
+    }
+    if (maxSources != null && selectedSources.length > maxSources) {
+      setErrorMessage(
+        `Gói đã chọn chỉ cho phép tối đa ${maxSources} nguồn. Hiện tại bạn đã chọn ${selectedSources.length}.`
+      );
       return;
     }
 
@@ -102,7 +189,7 @@ const CreateProject = () => {
         enableFacebook: selectedSources.includes('facebook'),
         enableYoutube: selectedSources.includes('youtube'),
         enableTiktok: selectedSources.includes('tiktok'),
-        enableMaps: selectedSources.includes('maps'),
+        enableThreads: selectedSources.includes('threads'),
         dataSources: buildDataSources(selectedSources),
       });
 
@@ -110,7 +197,7 @@ const CreateProject = () => {
         workspaceId: wid,
         projectId: project.projectId,
         keyword: primaryKeyword,
-        postedSinceDays,
+        mentionsPackage: selectedPackageCode,
       });
 
       setLaunchPhase('paying');
@@ -135,8 +222,6 @@ const CreateProject = () => {
     }
   };
 
-  const isStep1Valid = campaignName.trim() !== '';
-
   const phaseLabel: Record<LaunchPhase, string> = {
     idle: '',
     creating: 'Đang tạo dự án...',
@@ -144,6 +229,9 @@ const CreateProject = () => {
     done: 'Đang chuyển đến cổng thanh toán PayOS...',
     error: 'Có lỗi xảy ra',
   };
+
+  // Nút Tiếp tục ở mỗi step yêu cầu valid trước khi cho nhảy.
+  const canAdvance = !isSubmitting && stepIsValid[currentStep - 1];
 
   return (
     <div className="min-h-screen bg-[#050A15] text-white font-sans flex items-center justify-center p-6 selection:bg-[#FF7575] selection:text-white relative overflow-hidden">
@@ -159,7 +247,7 @@ const CreateProject = () => {
           </h1>
           {isOnboarding && (
             <p className="text-gray-400 mt-2 text-sm">
-              Chọn nền tảng và nhập từ khóa — hệ thống sẽ tự động cào dữ liệu và phân tích bằng AI.
+              Chọn gói, nguồn và từ khoá — hệ thống sẽ tự động cào dữ liệu và phân tích bằng AI.
             </p>
           )}
         </div>
@@ -173,10 +261,10 @@ const CreateProject = () => {
 
         <div className="flex items-center justify-between mb-12 relative">
           <div className="absolute top-1/2 left-0 w-full h-px bg-white/10 -z-10 -translate-y-1/2" />
-          {['THÔNG TIN', 'NGUỒN DỮ LIỆU', 'TỪ KHÓA', 'BÁO GIÁ'].map((label, index) => {
+          {STEP_LABELS.map((label, index) => {
             const step = index + 1;
             return (
-              <div key={label} className={`flex items-center gap-3 bg-[#0A101D] ${index === 0 ? 'pr-4' : index === 3 ? 'pl-4' : 'px-4'}`}>
+              <div key={label} className={`flex items-center gap-3 bg-[#0A101D] ${index === 0 ? 'pr-4' : index === STEP_LABELS.length - 1 ? 'pl-4' : 'px-4'}`}>
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors ${
                   currentStep >= step ? 'bg-[#FF7575]/10 border-2 border-[#FF7575] text-[#FF7575]' : 'bg-white/5 border-2 border-white/10 text-gray-500'
                 }`}>
@@ -210,117 +298,105 @@ const CreateProject = () => {
           )}
 
           {currentStep === 2 && (
-            <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-              <h2 className="text-xl font-bold mb-2">Nguồn thu thập</h2>
-              <p className="text-gray-400 text-sm mb-6">
-                Chọn nền tảng cần cào. Giai đoạn này hỗ trợ <strong className="text-white">Facebook, YouTube, Tin tức</strong>.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {[
-                  { id: 'facebook', icon: Users, label: 'FACEBOOK' },
-                  { id: 'youtube', icon: MonitorPlay, label: 'YOUTUBE' },
-                  { id: 'news', icon: Globe, label: 'TIN TỨC' },
-                ].map(({ id, icon: Icon, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => toggleSource(id)}
-                    className={`flex items-center gap-4 p-5 rounded-xl border text-left transition-all ${
-                      selectedSources.includes(id)
-                        ? 'bg-[#FF7575]/5 border-[#FF7575]'
-                        : 'bg-[#151B2B] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded flex items-center justify-center border ${selectedSources.includes(id) ? 'bg-[#FF7575] border-[#FF7575]' : 'border-gray-500'}`}>
-                      {selectedSources.includes(id) && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
-                    </div>
-                    <Icon className={`w-5 h-5 ${selectedSources.includes(id) ? 'text-[#FF7575]' : 'text-gray-400'}`} />
-                    <span className="font-semibold text-sm">{label}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
-                {[
-                  { id: 'tiktok', icon: Hash, label: 'TIKTOK' },
-                  { id: 'maps', icon: Map, label: 'GOOGLE MAPS' },
-                  { id: 'file', icon: FileUp, label: 'IMPORT FILE' },
-                ].map(({ id, icon: Icon, label }) => (
-                  <div key={id} className="flex items-center gap-4 p-4 rounded-xl border border-white/5 bg-[#151B2B]/50 text-gray-500">
-                    <Icon className="w-5 h-5" />
-                    <span className="text-sm font-semibold">{label}</span>
-                    <span className="ml-auto text-xs">Sắp ra mắt</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <PackageStep
+              packages={packages}
+              isLoading={false}
+              errorMessage=""
+              selectedPackageCode={selectedPackageCode}
+              setSelectedPackageCode={setSelectedPackageCode}
+            />
           )}
 
           {currentStep === 3 && (
-            <KeywordStep
-              keywords={keywords}
-              setKeywords={setKeywords}
-              postedSinceDays={postedSinceDays}
-              setPostedSinceDays={setPostedSinceDays}
+            <SourcesStep
+              selectedSources={selectedSources}
+              setSelectedSources={setSelectedSources}
+              maxSources={maxSources}
             />
           )}
 
           {currentStep === 4 && (
-            <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-              {launchPhase === 'idle' ? (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-[#FF7575]/10 flex items-center justify-center mb-6 mx-auto">
-                    <CreditCard className="w-8 h-8 text-[#FF7575]" />
-                  </div>
-                  <h2 className="text-2xl font-bold mb-2 text-center">Báo giá & Thanh toán</h2>
-                  <p className="text-gray-400 text-center max-w-lg mx-auto mb-8">
-                    Dự án <strong className="text-white">"{campaignName}"</strong> — từ khóa{' '}
-                    <strong className="text-white">"{getPrimaryKeyword(keywords)}"</strong>
-                  </p>
+            <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6">
+              <KeywordStep keywords={keywords} setKeywords={setKeywords} />
 
-                  {quoteLoading ? (
+              <div className="bg-[#151B2B] border border-white/10 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="w-5 h-5 text-[#FF7575]" />
+                  <h3 className="font-bold">Báo giá dự kiến</h3>
+                </div>
+
+                {launchPhase === 'idle' ? (
+                  quoteLoading ? (
                     <div className="flex justify-center py-8">
                       <Loader2 className="w-8 h-8 animate-spin text-[#FF7575]" />
                     </div>
                   ) : quote ? (
-                    <div className="max-w-md mx-auto space-y-4">
-                      <div className="bg-[#151B2B] border border-white/10 rounded-xl p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-gray-400">Khoảng thời gian</span>
-                          <span className="font-semibold">{quote.timeRangeLabel}</span>
-                        </div>
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-gray-400">Phí cào dữ liệu</span>
-                          <span className="text-2xl font-bold text-[#FF7575]">{quote.priceLabel}</span>
-                        </div>
-                        <div className="flex items-start gap-2 text-sm text-gray-400 border-t border-white/5 pt-4">
-                          <Clock className="w-4 h-4 text-[#00B4D8] shrink-0 mt-0.5" />
-                          <span>
-                            Sau thanh toán, báo cáo dự kiến sẵn sàng trong{' '}
-                            <strong className="text-white">{quote.estimatedDeliveryLabel}</strong>.
-                            Bạn có thể rời trang và theo dõi % tiến độ bất cứ lúc nào.
-                          </span>
-                        </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Dự án</span>
+                        <span className="font-semibold text-right">{campaignName.trim()}</span>
                       </div>
-                      <p className="text-xs text-center text-gray-500">
-                        Thanh toán an toàn qua PayOS — quét mã VietQR hoặc chuyển khoản ngân hàng.
-                        Dữ liệu chỉ được cào sau khi thanh toán thành công.
-                      </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Gói cào</span>
+                        <span className="font-semibold text-right">
+                          {quote.packageLabel}
+                          <span className="block text-xs text-gray-500 font-mono mt-0.5">
+                            {quote.mentionsPackage}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Số nguồn giám sát</span>
+                        <span className="font-semibold text-white">{selectedSources.length}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Số mentions tối đa</span>
+                        <span className="font-semibold text-white">
+                          {quote.projectHasFullUnlimited
+                            ? 'Không giới hạn'
+                            : quote.mentionsIncluded.toLocaleString('vi-VN')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-3 border-t border-white/5">
+                        <span className="text-gray-400">Phí cào dữ liệu</span>
+                        <span className="text-2xl font-bold text-[#FF7575]">{quote.priceLabel}</span>
+                      </div>
+                      <div className="flex items-start gap-2 text-sm text-gray-400 pt-2">
+                        <Clock className="w-4 h-4 text-[#00B4D8] shrink-0 mt-0.5" />
+                        <span>
+                          Sau thanh toán, báo cáo dự kiến sẵn sàng trong{' '}
+                          <strong className="text-white">{quote.estimatedDeliveryLabel}</strong>.
+                          Bạn có thể rời trang và theo dõi % tiến độ bất cứ lúc nào.
+                        </span>
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-center text-red-400">Không tải được báo giá. Vui lòng quay lại bước trước.</p>
-                  )}
-                </>
-              ) : (
-                <div className="text-center space-y-4 py-8">
-                  {launchPhase === 'error' ? (
-                    <AlertCircle className="w-12 h-12 mx-auto text-red-400" />
-                  ) : (
-                    <Loader2 className={`w-12 h-12 mx-auto animate-spin ${launchPhase === 'done' ? 'text-emerald-400' : 'text-[#FF7575]'}`} />
-                  )}
-                  <h2 className="text-xl font-bold">{phaseLabel[launchPhase]}</h2>
-                </div>
-              )}
+                    <p className="text-center text-red-400 text-sm">
+                      Không tải được báo giá. Vui lòng quay lại bước chọn gói.
+                    </p>
+                  )
+                ) : (
+                  <div className="text-center space-y-4 py-6">
+                    {launchPhase === 'error' ? (
+                      <AlertCircle className="w-10 h-10 mx-auto text-red-400" />
+                    ) : (
+                      <Loader2
+                        className={`w-10 h-10 mx-auto animate-spin ${
+                          launchPhase === 'done' ? 'text-emerald-400' : 'text-[#FF7575]'
+                        }`}
+                      />
+                    )}
+                    <p className="text-sm font-semibold">{phaseLabel[launchPhase]}</p>
+                  </div>
+                )}
+
+                {launchPhase === 'idle' && quote && (
+                  <p className="text-xs text-center text-gray-500 mt-4">
+                    Thanh toán an toàn qua PayOS — quét mã VietQR hoặc chuyển khoản ngân hàng.
+                    Dữ liệu chỉ được cào sau khi thanh toán thành công.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -345,8 +421,8 @@ const CreateProject = () => {
             {currentStep < 4 ? (
               <button
                 onClick={handleNext}
-                disabled={(currentStep === 1 && !isStep1Valid) || isSubmitting}
-                className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-8 py-3 rounded-lg text-sm font-semibold disabled:opacity-50"
+                disabled={!canAdvance}
+                className="bg-[#FF7575] hover:bg-[#ff6262] text-white px-8 py-3 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Tiếp tục
               </button>

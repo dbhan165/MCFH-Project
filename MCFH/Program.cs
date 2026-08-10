@@ -1,6 +1,7 @@
 using Hangfire;
 using MCFH.Configuration;
 using MCFH.Models;
+using MCFH.Models.Scraping;
 using MCFH.Services;
 using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -144,6 +145,9 @@ namespace MCFH
             builder.Services.AddScoped<ProxyRotationService>();
             builder.Services.AddScoped<ProxyAdminService>();
             builder.Services.AddScoped<FbSourceAdminService>();
+            builder.Services.AddScoped<ScrapePackageAdminService>();
+            builder.Services.AddScoped<ScrapePackagePublicService>();
+            builder.Services.AddSingleton<ScrapePackageCatalog>();
             builder.Services.AddSingleton<IPlatformCookiePathProvider, PlatformCookiePathProvider>();
             builder.Services.AddScoped<PlatformCookieAdminService>();
             builder.Services.AddSingleton<ScrapeJobStore>();
@@ -193,7 +197,6 @@ namespace MCFH
                 service => service.RecoverStuckOrdersAsync(),
                 "*/5 * * * *"
             );
-
             // Recovery: bespoke kẹt gathering_data (watcher mất khi restart / job treo).
             RecurringJob.AddOrUpdate<BespokeReportService>(
                 "recover-stuck-bespoke-requests",

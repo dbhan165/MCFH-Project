@@ -92,10 +92,10 @@ const FbSourceManagement = () => {
   const activeCount = sources.filter((s) => s.status === 'active').length;
 
   return (
-    <AdminLayout searchPlaceholder="Search Facebook group URL...">
+    <AdminLayout searchPlaceholder="Tìm kiếm URL nhóm Facebook...">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Facebook Sources</h2>
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Quản lý nguồn Facebook</h2>
           <p className="text-[#6b7280] text-sm mt-1">
             Quản lý URL group/page Facebook toàn hệ thống (FB_SOURCES) — {activeCount} active / {sources.length} tổng
           </p>

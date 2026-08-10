@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import {
@@ -96,26 +96,26 @@ const ScrapingMonitor = () => {
   }, []);
 
   return (
-    <AdminLayout searchPlaceholder="Search crawlers or job IDs...">
+    <AdminLayout searchPlaceholder="Tìm kiếm tiến trình hoặc Mã Job...">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-8">
         <div>
           <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">
-            Crawler Engine Monitor (Python Jobs)
+            Giám sát Tiến trình Cào dữ liệu (Python Jobs)
           </h2>
           <p className="text-[#6b7280] text-sm mt-1">
-            Real-time supervision of distributed web scrapers and data ingestion nodes.
+            Giám sát thời gian thực hệ thống cào dữ liệu phân tán & luồng dữ liệu đầu vào.
           </p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-full text-xs font-semibold text-[#111827] shrink-0">
           <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
-          LIVE CLUSTER STATUS: ACTIVE
+          TRẠNG THÁI CLUSTER: ĐANG HOẠT ĐỘNG
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-semibold">Active Engines</h3>
+            <h3 className="text-base font-semibold">Động cơ Scraping đang chạy</h3>
             <button className="p-2 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -139,21 +139,21 @@ const ScrapingMonitor = () => {
           </div>
 
           <button className="w-full py-3 border-2 border-gray-200 rounded-lg text-xs font-bold tracking-wider text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] hover:border-gray-300 transition-colors">
-            MANAGE CLUSTER NODES
+            QUẢN LÝ NÚT CLUSTER
           </button>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-semibold">Daily Scraping Throughput</h3>
+            <h3 className="text-base font-semibold">Băng thông cào dữ liệu theo ngày</h3>
             <div className="flex items-center gap-4 text-xs text-[#6b7280]">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                Pages/Sec
+                Trang/Giây
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
-                API Calls
+                Gọi API
               </span>
             </div>
           </div>
@@ -179,7 +179,7 @@ const ScrapingMonitor = () => {
                     border: '1px solid #e5e7eb',
                     fontSize: '12px',
                   }}
-                  formatter={(value) => [`${value}`, 'Throughput']}
+                  formatter={(value: any) => [`${value}`, 'Băng thông']}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {throughputData.map((entry, index) => (
@@ -194,10 +194,10 @@ const ScrapingMonitor = () => {
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-gray-100">
-          <h3 className="text-base font-semibold">Current Job Registry</h3>
+          <h3 className="text-base font-semibold">Danh sách tiến trình cào dữ liệu</h3>
           <button className="flex items-center gap-2 px-5 py-2.5 bg-[#ef4444] hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
             <Plus className="w-4 h-4" />
-            NEW JOB
+            TẠO TIẾN TRÌNH MỚI
           </button>
         </div>
 
@@ -206,25 +206,25 @@ const ScrapingMonitor = () => {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Job ID
+                  Mã tiến trình
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Source
+                  Nguồn / Proxy
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Start Time
+                  Thời gian bắt đầu
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Duration
+                  Thời lượng
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Nodes Scanned
+                  Số mục đã cào
                 </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Status
+                  Trạng thái
                 </th>
                 <th className="text-right px-6 py-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">
-                  Action
+                  Thao tác
                 </th>
               </tr>
             </thead>
@@ -239,18 +239,18 @@ const ScrapingMonitor = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-[#6b7280]">{job.startTime}</td>
-                  <td className="px-6 py-4 text-[#111827] font-medium">{job.duration}</td>
-                  <td className="px-6 py-4 text-[#111827]">{job.nodesScanned.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-[#111827] font-medium">{job.duration === 'done' ? 'Đã xong' : 'Đang chạy'}</td>
+                  <td className="px-6 py-4 text-[#111827]">{job.nodesScanned.toLocaleString('vi-VN')}</td>
                   <td className="px-6 py-4">
                     <span
                       className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border ${jobStatusStyles[job.status]}`}
                     >
-                      {job.status}
+                      {job.status === 'COMPLETED' ? 'Hoàn thành' : job.status === 'FAILED' ? 'Thất bại' : 'Đang chạy'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <button className="text-sm font-semibold text-[#ef4444] hover:text-red-600 transition-colors">
-                      View Logs
+                      Xem nhật ký
                     </button>
                   </td>
                 </tr>

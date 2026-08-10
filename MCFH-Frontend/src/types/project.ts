@@ -8,6 +8,7 @@ export interface Project {
   enableFacebook: boolean;
   enableYoutube: boolean;
   enableTiktok: boolean;
+  enableThreads?: boolean;
   enableMaps: boolean;
   enableNews?: boolean;
   createdAt: string | null;
@@ -20,6 +21,7 @@ export interface CreateProjectPayload {
   enableFacebook?: boolean;
   enableYoutube?: boolean;
   enableTiktok?: boolean;
+  enableThreads?: boolean;
   enableMaps?: boolean;
   dataSources?: Array<{ platform: string; targetUrl?: string | null }>;
 }

@@ -34,6 +34,8 @@ export function getPlatformLabel(platform: string) {
       return 'TT';
     case 'news':
       return 'Tin';
+    case 'threads':
+      return 'TH';
     default:
       return platform.toUpperCase().slice(0, 2);
   }
@@ -49,15 +51,17 @@ export function getPlatformDisplayName(platform: string) {
       return 'TikTok';
     case 'news':
       return 'Tin tức';
+    case 'threads':
+      return 'Threads';
     default:
       return platform.charAt(0).toUpperCase() + platform.slice(1);
   }
 }
 
-export const MENTION_PLATFORMS = ['all', 'youtube', 'tiktok', 'facebook', 'news'] as const;
+export const MENTION_PLATFORMS = ['all', 'youtube', 'tiktok', 'facebook', 'threads', 'news'] as const;
 export type MentionPlatformFilter = (typeof MENTION_PLATFORMS)[number];
 
-export const PLATFORM_SORT_ORDER = ['facebook', 'youtube', 'tiktok', 'news'] as const;
+export const PLATFORM_SORT_ORDER = ['facebook', 'youtube', 'tiktok', 'threads', 'news'] as const;
 
 export function sortByPlatformOrder<T extends { platform: string }>(
   items: T[],
@@ -110,15 +114,17 @@ export function getSentimentFilterBadgeClass(filter: MentionSentimentFilter) {
 export function getPlatformBadgeClass(platform: string) {
   switch (platform.toLowerCase()) {
     case 'facebook':
-      return 'bg-blue-500/20 text-blue-400';
+      return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     case 'youtube':
-      return 'bg-red-500/20 text-red-400';
+      return 'bg-red-500/10 text-red-400 border-red-500/20';
     case 'tiktok':
-      return 'bg-pink-500/20 text-pink-400';
+      return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
     case 'news':
-      return 'bg-amber-500/20 text-amber-400';
+      return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    case 'threads':
+      return 'bg-zinc-800 text-white border-zinc-700';
     default:
-      return 'bg-gray-500/20 text-gray-400';
+      return 'bg-white/10 text-gray-400 border-white/10';
   }
 }
 
@@ -155,6 +161,7 @@ export const PLATFORM_CHART_COLORS: Record<string, string> = {
   youtube: '#EF4444',
   tiktok: '#EC4899',
   news: '#F59E0B',
+  threads: '#FAFAFA',
   unknown: '#64748B',
 };
 

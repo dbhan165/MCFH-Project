@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, CheckCircle2, Clock, FileText, Loader2, AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 import { scrapeOrderApi, type ScrapeOrder } from '../api/scrapeOrderApi';
+import { extractApiError } from '../utils/authStorage';
 
 function formatDateTime(iso?: string | null) {
   if (!iso) return '—';
@@ -45,9 +47,33 @@ const ScrapeOrderTracking = () => {
     return () => stop();
   }, [orderId]);
 
-  const isActive = order && !['completed', 'failed', 'quoted'].includes(order.status);
+  const isActive = order && !['completed', 'failed', 'quoted', 'pending_payment'].includes(order.status);
   const isDone = order?.status === 'completed';
   const isFailed = order?.status === 'failed';
+  const isAwaitingPayment = order?.status === 'quoted' || order?.status === 'pending_payment';
+
+  const [payingNow, setPayingNow] = useState(false);
+  const [payError, setPayError] = useState('');
+
+  const handlePayNow = async () => {
+    if (!order) return;
+    setPayingNow(true);
+    setPayError('');
+    try {
+      const checkout = await scrapeOrderApi.pay(order.orderId);
+      if (!checkout.checkoutUrl) {
+        // Order đã paid hoặc không cần thanh toán — reload để tracking tự cập nhật.
+        const refreshed = await scrapeOrderApi.get(order.orderId);
+        setOrder(refreshed);
+        setPayingNow(false);
+        return;
+      }
+      window.location.href = checkout.checkoutUrl;
+    } catch (err) {
+      setPayError(extractApiError(err, 'Không tạo được thanh toán. Vui lòng thử lại.'));
+      setPayingNow(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#050A15] text-white font-sans p-6">
@@ -82,6 +108,8 @@ const ScrapeOrderTracking = () => {
                   <CheckCircle2 className="w-10 h-10 text-emerald-400 shrink-0" />
                 ) : isFailed ? (
                   <AlertCircle className="w-10 h-10 text-red-400 shrink-0" />
+                ) : isAwaitingPayment ? (
+                  <CreditCard className="w-10 h-10 text-amber-400 shrink-0" />
                 ) : (
                   <Loader2 className="w-10 h-10 text-[#FF7575] animate-spin shrink-0" />
                 )}
@@ -93,7 +121,7 @@ const ScrapeOrderTracking = () => {
                   <p className="text-gray-400 text-sm mt-1">
                     Từ khóa: <span className="text-white">{order.keyword}</span>
                     {' · '}
-                    {order.timeRangeLabel}
+                    {order.packageLabel ?? order.timeRangeLabel}
                   </p>
                 </div>
               </div>
@@ -151,6 +179,33 @@ const ScrapeOrderTracking = () => {
                 <p className="text-xs text-gray-500 bg-amber-500/10 border border-amber-500/20 text-amber-200/90 rounded-lg px-4 py-3">
                   Bạn có thể đóng trang này — hệ thống vẫn tiếp tục cào và phân tích. Quay lại bất cứ lúc nào để xem % tiến độ.
                 </p>
+              </div>
+            )}
+
+            {isAwaitingPayment && (
+              <div className="px-8 pb-8 space-y-4">
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+                  <p className="font-semibold mb-1">Đơn chưa được thanh toán</p>
+                  <p className="text-amber-200/80 text-xs leading-relaxed">
+                    Cào dữ liệu sẽ tự động khởi động ngay khi PayOS xác nhận thanh toán thành công.
+                    Bạn có thể thanh toán ngay bây giờ hoặc quay lại trang dự án để thử lại sau.
+                  </p>
+                </div>
+                {payError && (
+                  <p className="text-xs text-red-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {payError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handlePayNow}
+                  disabled={payingNow}
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FF7575] hover:bg-[#ff6262] font-semibold text-sm disabled:opacity-60"
+                >
+                  {payingNow ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                  Thanh toán ngay
+                </button>
               </div>
             )}
 

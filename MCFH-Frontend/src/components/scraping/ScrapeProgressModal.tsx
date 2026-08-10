@@ -5,6 +5,7 @@ const PLATFORM_STYLE: Record<string, { dot: string; label: string }> = {
   facebook: { dot: 'bg-blue-400', label: 'Facebook' },
   youtube: { dot: 'bg-red-400', label: 'YouTube' },
   tiktok: { dot: 'bg-cyan-300', label: 'TikTok' },
+  threads: { dot: 'bg-zinc-100', label: 'Threads' },
   news: { dot: 'bg-amber-400', label: 'Tin tức' },
 };
 
@@ -119,8 +120,9 @@ export default function ScrapeProgressModal({
             : [
                 { platform: 'facebook', label: 'Facebook', status: 'pending', count: 0, message: 'Chờ...' },
                 { platform: 'youtube', label: 'YouTube', status: 'pending', count: 0, message: 'Chờ...' },
-                { platform: 'news', label: 'Tin tức', status: 'pending', count: 0, message: 'Chờ...' },
                 { platform: 'tiktok', label: 'TikTok', status: 'pending', count: 0, message: 'Chờ...' },
+                { platform: 'threads', label: 'Threads', status: 'pending', count: 0, message: 'Chờ...' },
+                { platform: 'news', label: 'Tin tức', status: 'pending', count: 0, message: 'Chờ...' },
               ]
           ).map((item) => {
             const style = PLATFORM_STYLE[item.platform] ?? { dot: 'bg-gray-400', label: item.label };

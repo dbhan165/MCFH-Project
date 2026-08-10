@@ -127,10 +127,10 @@ const CookieManagement = () => {
   const activeCount = cookies.filter((c) => c.status === 'active' && c.fileExists).length;
 
   return (
-    <AdminLayout searchPlaceholder="Search platform cookies...">
+    <AdminLayout searchPlaceholder="Tìm kiếm cookie...">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Platform Cookies</h2>
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Quản lý Cookie Nền tảng</h2>
           <p className="text-[#6b7280] text-sm mt-1">
             Quản lý session cookie cho scraper — {activeCount} active / {cookies.length} platform
           </p>
