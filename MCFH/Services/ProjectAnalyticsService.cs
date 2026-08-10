@@ -95,6 +95,46 @@ public class ProjectAnalyticsService
         };
     }
 
+    public async Task<List<ProjectOverviewDto>> GetWorkspaceOverviewsAsync(int workspaceId, int userId)
+    {
+        if (!await IsMemberAsync(workspaceId, userId)) return new List<ProjectOverviewDto>();
+
+        var projects = await _context.Projects
+            .Where(p => p.WorkspaceId == workspaceId && p.IsDeleted != true)
+            .ToListAsync();
+
+        var list = new List<ProjectOverviewDto>();
+        foreach (var project in projects)
+        {
+            await ProjectFeedbackQueryHelper.BackfillProjectIdsAsync(_context, project.ProjectId);
+            var feedbacks = await ProjectFeedbackQueryHelper.ForProject(_context, project.ProjectId)
+                .Include(f => f.AiAnalysis)
+                .ToListAsync();
+
+            var sentiment = BuildSentimentCounts(feedbacks);
+
+            list.Add(new ProjectOverviewDto
+            {
+                ProjectId = project.ProjectId,
+                ProjectName = project.Name,
+                TotalMentions = feedbacks.Count,
+                TotalComments = feedbacks.Sum(f => f.CommentsCount ?? 0),
+                AnalyzedCount = sentiment.Analyzed,
+                PendingAnalysisCount = sentiment.Unanalyzed,
+                NsrScore = sentiment.NsrScore,
+                PositiveCount = sentiment.Positive,
+                NegativeCount = sentiment.Negative,
+                NeutralCount = sentiment.Neutral,
+                PlatformBreakdown = feedbacks
+                    .GroupBy(f => f.Platform ?? "unknown")
+                    .ToDictionary(g => g.Key, g => g.Count())
+            });
+        }
+
+        return list;
+    }
+
+
     public async Task<List<MentionDto>> GetMentionsAsync(
         int workspaceId, int projectId, int userId, MentionQueryDto? filter = null)
     {

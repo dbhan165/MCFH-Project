@@ -136,6 +136,14 @@ public class ProjectExtendedController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("analytics/overviews")]
+    public async Task<IActionResult> GetWorkspaceOverviews(int workspaceId)
+    {
+        var result = await _analyticsService.GetWorkspaceOverviewsAsync(workspaceId, GetUserId());
+        return Ok(result);
+    }
+
+
     [HttpGet("{projectId}/analytics/mentions")]
     public async Task<IActionResult> GetMentions(
         int workspaceId, int projectId,

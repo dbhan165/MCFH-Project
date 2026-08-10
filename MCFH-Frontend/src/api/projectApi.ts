@@ -205,6 +205,29 @@ export const projectApi = {
     };
   },
 
+  getWorkspaceOverviews: async (workspaceId: number): Promise<ProjectOverviewStats[]> => {
+    const response = await axiosClient.get<unknown[]>(
+      `/api/workspaces/${workspaceId}/projects/analytics/overviews`
+    );
+    return (response.data ?? []).map((item) => {
+      const d = item as Record<string, unknown>;
+      return {
+        projectId: pickNumber(d, 'projectId', 'ProjectId'),
+        projectName: pickString(d, 'projectName', 'ProjectName'),
+        totalMentions: pickNumber(d, 'totalMentions', 'TotalMentions'),
+        totalComments: pickNumber(d, 'totalComments', 'TotalComments'),
+        analyzedCount: pickNumber(d, 'analyzedCount', 'AnalyzedCount'),
+        pendingAnalysisCount: pickNumber(d, 'pendingAnalysisCount', 'PendingAnalysisCount'),
+        nsrScore: Number(pickField(d, 'nsrScore', 'NsrScore') ?? 0),
+        positiveCount: pickNumber(d, 'positiveCount', 'PositiveCount'),
+        negativeCount: pickNumber(d, 'negativeCount', 'NegativeCount'),
+        neutralCount: pickNumber(d, 'neutralCount', 'NeutralCount'),
+        platformBreakdown: (pickField<Record<string, number>>(d, 'platformBreakdown', 'PlatformBreakdown') ?? {}),
+      };
+    });
+  },
+
+
   getMentions: async (
     workspaceId: number,
     projectId: number,
