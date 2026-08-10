@@ -136,6 +136,14 @@ public class ProjectExtendedController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("analytics/overviews")]
+    public async Task<IActionResult> GetWorkspaceOverviews(int workspaceId)
+    {
+        var result = await _analyticsService.GetWorkspaceOverviewsAsync(workspaceId, GetUserId());
+        return Ok(result);
+    }
+
+
     [HttpGet("{projectId}/analytics/mentions")]
     public async Task<IActionResult> GetMentions(
         int workspaceId, int projectId,
@@ -172,6 +180,22 @@ public class ProjectExtendedController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPut("{projectId}/mention-tags/{tagId}")]
+    public async Task<IActionResult> UpdateMentionTag(int workspaceId, int projectId, int tagId, [FromBody] CreateMentionTagDto dto)
+    {
+        var result = await _mentionManagement.UpdateTagAsync(workspaceId, projectId, GetUserId(), tagId, dto);
+        if (result == null) return BadRequest(new { message = "Không thể cập nhật tag." });
+        return Ok(result);
+    }
+
+    [HttpDelete("{projectId}/mention-tags/{tagId}")]
+    public async Task<IActionResult> DeleteMentionTag(int workspaceId, int projectId, int tagId)
+    {
+        var ok = await _mentionManagement.DeleteTagAsync(workspaceId, projectId, GetUserId(), tagId);
+        if (!ok) return NotFound();
+        return Ok(new { message = "Đã xóa tag." });
+    }
+
     [HttpPut("{projectId}/analytics/mentions/{feedbackId}/tags")]
     public async Task<IActionResult> AssignMentionTags(
         int workspaceId, int projectId, int feedbackId, [FromBody] AssignMentionTagsDto dto)
@@ -179,6 +203,14 @@ public class ProjectExtendedController : ControllerBase
         var ok = await _mentionManagement.AssignTagsAsync(workspaceId, projectId, GetUserId(), feedbackId, dto);
         if (!ok) return NotFound();
         return Ok(new { message = "Đã gán tag." });
+    }
+
+    [HttpPut("{projectId}/analytics/mentions/{feedbackId}/pin")]
+    public async Task<IActionResult> TogglePinForReport(int workspaceId, int projectId, int feedbackId)
+    {
+        var ok = await _mentionManagement.TogglePinForReportAsync(workspaceId, projectId, GetUserId(), feedbackId);
+        if (!ok) return NotFound();
+        return Ok(new { message = "Đã cập nhật trạng thái ghim." });
     }
 
     [HttpPut("{projectId}/analytics/mentions/{feedbackId}/sentiment")]

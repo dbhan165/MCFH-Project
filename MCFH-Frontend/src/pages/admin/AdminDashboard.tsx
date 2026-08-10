@@ -69,7 +69,7 @@ const AdminDashboard = () => {
   return (
     <AdminLayout>
       <div className="mb-8">
-        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Dashboard Overview</h2>
+        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Tổng quan Dashboard</h2>
         <p className="text-[#6b7280] text-sm mt-1">
           Thống kê hiệu năng hệ thống & Doanh thu thực tế theo từng tính năng riêng biệt.
         </p>
@@ -90,14 +90,14 @@ const AdminDashboard = () => {
           icon={UserPlus}
           iconBg="bg-blue-50"
           iconColor="text-blue-500"
-          label="Tổng Users"
+          label="Tổng Người dùng"
           value={stats ? String(stats.totalUsers) : '—'}
         />
         <MetricCard
           icon={ShieldCheck}
           iconBg="bg-gray-50"
           iconColor="text-gray-600"
-          label="Reporters"
+          label="Nhân viên báo cáo"
           value={stats ? String(stats.totalReporters) : '—'}
         />
         <MetricCard
@@ -376,10 +376,10 @@ const AdminDashboard = () => {
       {/* Proxy Health */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-base font-semibold">Proxy Health Overview</h3>
+          <h3 className="text-base font-semibold">Trạng thái hoạt động Proxy</h3>
           <span className="flex items-center gap-1.5 text-xs font-medium text-[#3b82f6]">
             <span className="w-2 h-2 rounded-full bg-[#3b82f6] animate-pulse" />
-            Live Update
+            Cập nhật trực tiếp
           </span>
         </div>
         <div className="space-y-6">

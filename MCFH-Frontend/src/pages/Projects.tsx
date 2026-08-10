@@ -19,17 +19,349 @@ import {
   ChevronLeft,
   GitCompare,
   Check,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Trophy,
+  Activity,
+  BarChart3,
+  ArrowUpRight,
 } from 'lucide-react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { projectApi } from '../api/projectApi';
 import { scrapeOrderApi, type ScrapeOrder } from '../api/scrapeOrderApi';
 import { workspaceApi } from '../api/workspaceApi';
-import type { Project, AiAnalysisProgress } from '../types/project';
+import type { Project, AiAnalysisProgress, ProjectOverviewStats } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDate } from '../utils/workspaceHelpers';
 import { countUniqueKeywords, parseKeywordList } from '../utils/onboardingHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
 import { useScrapeJob } from '../contexts/ScrapeJobContext';
+
+interface NsrAnalyticsData {
+  hasData: boolean;
+  totalAnalyzedProjects: number;
+  lowest: { project: Project; overview: ProjectOverviewStats } | null;
+  highest: { project: Project; overview: ProjectOverviewStats } | null;
+  avgNsr: number;
+  goodCount: number;
+  neutralCount: number;
+  badCount: number;
+  rankedList: { project: Project; overview: ProjectOverviewStats }[];
+}
+
+function NsrWorkspaceWidget({
+  analytics,
+  isLoading,
+  onNavigateProject,
+}: {
+  analytics: NsrAnalyticsData;
+  isLoading: boolean;
+  onNavigateProject: (projectId: number) => void;
+}) {
+  const [showRanking, setShowRanking] = useState(false);
+  const [rankingFilter, setRankingFilter] = useState<'all' | 'high' | 'low'>('all');
+
+  if (isLoading) {
+    return (
+      <div className="rounded-3xl border border-white/5 bg-[#151B2B] p-6 flex items-center justify-center gap-3 text-sm text-gray-400">
+        <Loader2 className="w-5 h-5 animate-spin text-[#00B4D8]" />
+        <span>Đang tính toán chỉ số NSR các dự án...</span>
+      </div>
+    );
+  }
+
+  if (!analytics.hasData) {
+    return (
+      <div className="rounded-3xl border border-white/10 bg-[#151B2B]/70 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+            <Activity size={24} />
+          </div>
+          <div>
+            <h4 className="text-base font-bold text-white">Chưa có chỉ số NSR tổng quan</h4>
+            <p className="text-xs text-gray-400 mt-0.5 max-w-xl">
+              Cần ít nhất 1 dự án đã cào dữ liệu &amp; chạy Phân tích AI cảm xúc để tổng hợp dự án có điểm NSR cao nhất và thấp nhất.
+            </p>
+          </div>
+        </div>
+        <span className="text-xs font-semibold text-[#00B4D8] bg-[#00B4D8]/10 border border-[#00B4D8]/20 px-3 py-1.5 rounded-xl shrink-0">
+          Chỉ số NSR (Net Sentiment Rate)
+        </span>
+      </div>
+    );
+  }
+
+  const filteredRankings = analytics.rankedList.filter((item) => {
+    if (rankingFilter === 'high') return item.overview.nsrScore >= 20;
+    if (rankingFilter === 'low') return item.overview.nsrScore <= -20;
+    return true;
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#151B2B]/90 border border-white/10 rounded-2xl px-5 py-3.5 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00B4D8]/20 via-purple-500/10 to-[#FF7575]/20 border border-white/10 flex items-center justify-center text-white shrink-0 shadow-[0_4px_16px_rgba(0,180,216,0.15)]">
+            <BarChart3 size={20} className="text-[#00B4D8]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-white">Thống Kê Điểm NSR Workspace</h3>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#00B4D8]/15 text-[#00B4D8] border border-[#00B4D8]/30">
+                {analytics.totalAnalyzedProjects} dự án đã phân tích
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              NSR = % Tích cực - % Tiêu cực | Đánh giá sức khỏe thương hiệu &amp; phản hồi người dùng
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowRanking(!showRanking)}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all shrink-0"
+        >
+          <Activity size={14} className="text-[#00B4D8]" />
+          {showRanking ? 'Ẩn bảng xếp hạng' : 'Xem xếp hạng NSR'}
+        </button>
+      </div>
+
+      {/* 3 Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Card 1: Lowest NSR Project */}
+        {analytics.lowest && (
+          <div
+            onClick={() => onNavigateProject(analytics.lowest!.project.projectId)}
+            className="group relative overflow-hidden rounded-2xl border border-red-500/30 bg-gradient-to-br from-red-500/10 via-[#151B2B] to-[#0A101D] p-5 cursor-pointer hover:border-red-500/60 hover:shadow-[0_10px_30px_rgba(255,117,117,0.15)] transition-all duration-300"
+          >
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/20 border border-red-500/30 text-[10px] font-black uppercase tracking-wider text-[#FF7575]">
+                <AlertTriangle size={12} className="animate-pulse" />
+                Dự án NSR Thấp Nhất
+              </span>
+              <ArrowUpRight size={16} className="text-gray-500 group-hover:text-[#FF7575] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <h4 className="text-lg font-bold text-white line-clamp-1 group-hover:text-[#FF7575] transition-colors">
+                {analytics.lowest.project.name}
+              </h4>
+              <span className="text-2xl font-black text-[#FF7575] tabular-nums shrink-0">
+                {analytics.lowest.overview.nsrScore > 0 ? '+' : ''}
+                {analytics.lowest.overview.nsrScore}%
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5 text-xs text-gray-400 pt-3 border-t border-white/5 flex-wrap">
+              <span>Đề cập: <strong className="text-white">{analytics.lowest.overview.totalMentions}</strong></span>
+              <span className="w-1 h-1 rounded-full bg-gray-600" />
+              <span className="text-emerald-400 font-semibold">+{analytics.lowest.overview.positiveCount} tích cực</span>
+              <span className="w-1 h-1 rounded-full bg-gray-600" />
+              <span className="text-[#FF7575] font-semibold">-{analytics.lowest.overview.negativeCount} tiêu cực</span>
+            </div>
+          </div>
+        )}
+
+        {/* Card 2: Highest NSR Project */}
+        {analytics.highest && (
+          <div
+            onClick={() => onNavigateProject(analytics.highest!.project.projectId)}
+            className="group relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-[#151B2B] to-[#0A101D] p-5 cursor-pointer hover:border-emerald-500/60 hover:shadow-[0_10px_30px_rgba(16,185,129,0.15)] transition-all duration-300"
+          >
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                <Trophy size={12} />
+                Dự án NSR Cao Nhất
+              </span>
+              <ArrowUpRight size={16} className="text-gray-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <h4 className="text-lg font-bold text-white line-clamp-1 group-hover:text-emerald-400 transition-colors">
+                {analytics.highest.project.name}
+              </h4>
+              <span className="text-2xl font-black text-emerald-400 tabular-nums shrink-0">
+                {analytics.highest.overview.nsrScore > 0 ? '+' : ''}
+                {analytics.highest.overview.nsrScore}%
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5 text-xs text-gray-400 pt-3 border-t border-white/5 flex-wrap">
+              <span>Đề cập: <strong className="text-white">{analytics.highest.overview.totalMentions}</strong></span>
+              <span className="w-1 h-1 rounded-full bg-gray-600" />
+              <span className="text-emerald-400 font-semibold">+{analytics.highest.overview.positiveCount} tích cực</span>
+              <span className="w-1 h-1 rounded-full bg-gray-600" />
+              <span className="text-[#FF7575] font-semibold">-{analytics.highest.overview.negativeCount} tiêu cực</span>
+            </div>
+          </div>
+        )}
+
+        {/* Card 3: Workspace Average NSR & Distribution */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#00B4D8]/10 via-[#151B2B] to-[#0A101D] p-5">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#00B4D8]/20 border border-[#00B4D8]/30 text-[10px] font-black uppercase tracking-wider text-[#00B4D8]">
+              <Activity size={12} />
+              NSR Trung Bình Workspace
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <h4 className="text-sm font-medium text-gray-300">Điểm trung bình toàn bộ:</h4>
+            <span
+              className={`text-2xl font-black tabular-nums ${
+                analytics.avgNsr >= 20
+                  ? 'text-emerald-400'
+                  : analytics.avgNsr <= -20
+                  ? 'text-[#FF7575]'
+                  : 'text-amber-400'
+              }`}
+            >
+              {analytics.avgNsr > 0 ? '+' : ''}
+              {analytics.avgNsr}%
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-3 border-t border-white/5 text-[11px] flex-wrap">
+            <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              {analytics.goodCount} Tích cực (≥20%)
+            </span>
+            <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              {analytics.neutralCount} Trung tính
+            </span>
+            <span className="inline-flex items-center gap-1 text-[#FF7575] font-semibold">
+              <span className="w-2 h-2 rounded-full bg-[#FF7575]" />
+              {analytics.badCount} Tiêu cực (≤-20%)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Expandable Project NSR Ranking Table */}
+      {showRanking && (
+        <div className="rounded-2xl border border-white/10 bg-[#151B2B] p-5 space-y-4 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-3">
+            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+              <Trophy size={16} className="text-amber-400" />
+              Xếp Hạng Điểm NSR Tất Cả Dự Án ({analytics.rankedList.length})
+            </h4>
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
+              <button
+                type="button"
+                onClick={() => setRankingFilter('all')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                  rankingFilter === 'all' ? 'bg-[#00B4D8] text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Tất cả ({analytics.rankedList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRankingFilter('high')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                  rankingFilter === 'high' ? 'bg-emerald-500 text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                NSR Cao (≥20%)
+              </button>
+              <button
+                type="button"
+                onClick={() => setRankingFilter('low')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                  rankingFilter === 'low' ? 'bg-red-500 text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                NSR Thấp (≤-20%)
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {filteredRankings.length === 0 ? (
+              <p className="text-xs text-gray-500 text-center py-4">Không có dự án nào khớp với bộ lọc.</p>
+            ) : (
+              filteredRankings.map((item, idx) => {
+                const nsr = item.overview.nsrScore;
+                const tone = nsr >= 20 ? 'good' : nsr <= -20 ? 'bad' : 'neutral';
+                const total = item.overview.analyzedCount || 1;
+                const posP = Math.round((item.overview.positiveCount / total) * 100);
+                const neuP = Math.round((item.overview.neutralCount / total) * 100);
+                const negP = Math.round((item.overview.negativeCount / total) * 100);
+
+                return (
+                  <div
+                    key={item.project.projectId}
+                    onClick={() => onNavigateProject(item.project.projectId)}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 hover:border-white/10 cursor-pointer transition-all"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span
+                        className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                          idx === 0
+                            ? 'bg-amber-400/20 text-amber-400 border border-amber-400/30'
+                            : idx === 1
+                            ? 'bg-gray-300/20 text-gray-300 border border-gray-300/30'
+                            : idx === 2
+                            ? 'bg-amber-700/20 text-amber-600 border border-amber-700/30'
+                            : 'bg-white/5 text-gray-400 border border-white/10'
+                        }`}
+                      >
+                        #{idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white truncate hover:text-[#00B4D8] transition-colors">
+                          {item.project.name}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {item.overview.totalMentions} đề cập • {item.overview.analyzedCount} đã phân tích
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Sentiment Ratio Bar */}
+                    <div className="w-full sm:w-48 flex flex-col gap-1 shrink-0">
+                      <div className="h-2 w-full rounded-full bg-white/5 flex overflow-hidden">
+                        <div style={{ width: `${posP}%` }} className="bg-[#00B4D8] h-full" title={`Tích cực: ${posP}%`} />
+                        <div style={{ width: `${neuP}%` }} className="bg-[#EAB308] h-full" title={`Trung tính: ${neuP}%`} />
+                        <div style={{ width: `${negP}%` }} className="bg-[#FF7575] h-full" title={`Tiêu cực: ${negP}%`} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 tabular-nums">
+                        <span className="text-[#00B4D8]">+{posP}%</span>
+                        <span className="text-[#EAB308]">{neuP}%</span>
+                        <span className="text-[#FF7575]">-{negP}%</span>
+                      </div>
+                    </div>
+
+                    {/* NSR Badge */}
+                    <div className="flex items-center gap-2 shrink-0 justify-between sm:justify-end">
+                      <span
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border text-xs font-black tabular-nums ${
+                          tone === 'good'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                            : tone === 'bad'
+                            ? 'bg-red-500/10 text-[#FF7575] border-red-500/30'
+                            : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                        }`}
+                      >
+                        {tone === 'good' ? <TrendingUp size={14} /> : tone === 'bad' ? <TrendingDown size={14} /> : <Activity size={14} />}
+                        NSR {nsr > 0 ? '+' : ''}{nsr}%
+                      </span>
+                      <ArrowRight size={14} className="text-gray-500" />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const CARD_GRADIENTS = [
   'from-[#FF7575]/15 via-transparent to-transparent',
@@ -38,10 +370,12 @@ const CARD_GRADIENTS = [
   'from-emerald-500/15 via-transparent to-transparent',
 ];
 
+
 const PLATFORM_STYLES: Record<string, string> = {
   Facebook: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   YouTube: 'bg-red-500/10 text-red-400 border-red-500/20',
-  TikTok: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+  TikTok: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  Threads: 'bg-zinc-800 text-white border-zinc-700',
   'Tin tức': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   Maps: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
 };
@@ -57,6 +391,7 @@ function getPlatformTags(project: Project) {
   if (project.enableFacebook) tags.push('Facebook');
   if (project.enableYoutube) tags.push('YouTube');
   if (project.enableTiktok) tags.push('TikTok');
+  if (project.enableThreads) tags.push('Threads');
   if (project.enableNews) tags.push('Tin tức');
   if (project.enableMaps) tags.push('Maps');
   return tags;
@@ -85,6 +420,7 @@ function isRecentlyCompleted(order: ScrapeOrder) {
 
 function ProjectCard({
   project,
+  overview,
   activeOrder,
   workspaceId,
   isMenuOpen,
@@ -103,6 +439,7 @@ function ProjectCard({
   onRetryPayment,
 }: {
   project: Project;
+  overview?: ProjectOverviewStats;
   activeOrder?: ScrapeOrder | null;
   workspaceId: string | undefined;
   isMenuOpen: boolean;
@@ -293,7 +630,7 @@ function ProjectCard({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1.5 mb-5">
+        <div className="flex flex-wrap gap-1.5 mb-4">
           {platforms.length > 0 ? (
             platforms.map((tag) => (
               <span
@@ -307,6 +644,68 @@ function ProjectCard({
             <span className="text-xs text-gray-600">Chưa cấu hình nguồn</span>
           )}
         </div>
+
+        {overview && overview.analyzedCount > 0 ? (
+          <div className="mb-4 bg-[#0A101D]/70 border border-white/5 rounded-2xl p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-gray-400 flex items-center gap-1">
+                <Activity size={12} className="text-[#00B4D8]" />
+                Điểm NSR
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-xs font-black tabular-nums ${
+                  overview.nsrScore >= 20
+                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                    : overview.nsrScore <= -20
+                    ? 'bg-red-500/15 text-[#FF7575] border-red-500/30'
+                    : 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30'
+                }`}
+              >
+                {overview.nsrScore >= 20 ? (
+                  <TrendingUp size={13} />
+                ) : overview.nsrScore <= -20 ? (
+                  <TrendingDown size={13} />
+                ) : (
+                  <Activity size={13} />
+                )}
+                {overview.nsrScore > 0 ? '+' : ''}
+                {overview.nsrScore}%
+              </span>
+            </div>
+
+            {/* Mini sentiment ratio bar */}
+            <div className="space-y-1">
+              <div className="h-1.5 w-full rounded-full bg-white/5 flex overflow-hidden">
+                <div
+                  style={{ width: `${Math.round((overview.positiveCount / (overview.analyzedCount || 1)) * 100)}%` }}
+                  className="bg-[#00B4D8] h-full"
+                  title={`Tích cực: ${overview.positiveCount}`}
+                />
+                <div
+                  style={{ width: `${Math.round((overview.neutralCount / (overview.analyzedCount || 1)) * 100)}%` }}
+                  className="bg-[#EAB308] h-full"
+                  title={`Trung tính: ${overview.neutralCount}`}
+                />
+                <div
+                  style={{ width: `${Math.round((overview.negativeCount / (overview.analyzedCount || 1)) * 100)}%` }}
+                  className="bg-[#FF7575] h-full"
+                  title={`Tiêu cực: ${overview.negativeCount}`}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-gray-500 font-medium tabular-nums">
+                <span className="text-[#00B4D8]">+{overview.positiveCount} tích cực</span>
+                <span className="text-[#EAB308]">{overview.neutralCount}</span>
+                <span className="text-[#FF7575]">-{overview.negativeCount} tiêu cực</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-4 bg-[#0A101D]/40 border border-white/5 rounded-2xl px-3 py-2 flex items-center justify-between text-xs text-gray-500">
+            <span className="text-[10px] uppercase font-bold tracking-wide text-gray-400">Điểm NSR</span>
+            <span className="text-[11px] font-medium text-gray-500">Chưa phân tích AI</span>
+          </div>
+        )}
+
 
         <div className="grid grid-cols-2 gap-2 mb-5">
           <div className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2">
@@ -421,6 +820,8 @@ const Projects = () => {
   const [compareMode, setCompareMode] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<number[]>([]);
   const [aiProgressByProject, setAiProgressByProject] = useState<Record<number, AiAnalysisProgress>>({});
+  const [overviewsByProject, setOverviewsByProject] = useState<Record<number, ProjectOverviewStats>>({});
+  const [isLoadingOverviews, setIsLoadingOverviews] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
@@ -469,11 +870,100 @@ const Projects = () => {
     }
   }, [wid]);
 
+  const loadWorkspaceOverviews = useCallback(async () => {
+    if (!wid || Number.isNaN(wid)) return;
+    setIsLoadingOverviews(true);
+    try {
+      const list = await projectApi.getWorkspaceOverviews(wid);
+      const map: Record<number, ProjectOverviewStats> = {};
+      for (const item of list) {
+        map[item.projectId] = item;
+      }
+      setOverviewsByProject(map);
+    } catch {
+      try {
+        const projects = await projectApi.getProjects(wid);
+        const overviews = await Promise.allSettled(
+          projects.map((p) => projectApi.getOverview(wid, p.projectId))
+        );
+        const map: Record<number, ProjectOverviewStats> = {};
+        for (const res of overviews) {
+          if (res.status === 'fulfilled') {
+            map[res.value.projectId] = res.value;
+          }
+        }
+        setOverviewsByProject(map);
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setIsLoadingOverviews(false);
+    }
+  }, [wid]);
+
   useEffect(() => {
     loadProjects();
     loadScrapeOrders();
     loadAiProgress();
-  }, [loadProjects, loadScrapeOrders, loadAiProgress]);
+    loadWorkspaceOverviews();
+  }, [loadProjects, loadScrapeOrders, loadAiProgress, loadWorkspaceOverviews]);
+
+  const nsrAnalytics = useMemo<NsrAnalyticsData>(() => {
+    const items = projectList
+      .map((p) => ({
+        project: p,
+        overview: overviewsByProject[p.projectId],
+      }))
+      .filter(
+        (x): x is { project: Project; overview: ProjectOverviewStats } =>
+          Boolean(x.overview) && x.overview.analyzedCount > 0
+      );
+
+    if (items.length === 0) {
+      return {
+        hasData: false,
+        totalAnalyzedProjects: 0,
+        lowest: null,
+        highest: null,
+        avgNsr: 0,
+        goodCount: 0,
+        neutralCount: 0,
+        badCount: 0,
+        rankedList: [],
+      };
+    }
+
+    const sorted = [...items].sort((a, b) => b.overview.nsrScore - a.overview.nsrScore);
+    const highest = sorted[0];
+    const lowest = sorted[sorted.length - 1];
+
+    const totalNsr = sorted.reduce((sum, item) => sum + item.overview.nsrScore, 0);
+    const avgNsr = Math.round((totalNsr / sorted.length) * 10) / 10;
+
+    let goodCount = 0;
+    let neutralCount = 0;
+    let badCount = 0;
+
+    for (const item of sorted) {
+      const s = item.overview.nsrScore;
+      if (s >= 20) goodCount++;
+      else if (s <= -20) badCount++;
+      else neutralCount++;
+    }
+
+    return {
+      hasData: true,
+      totalAnalyzedProjects: sorted.length,
+      lowest,
+      highest,
+      avgNsr,
+      goodCount,
+      neutralCount,
+      badCount,
+      rankedList: sorted,
+    };
+  }, [projectList, overviewsByProject]);
+
 
   const hasActiveOrders = useMemo(
     () => Object.values(orderByProject).some(isActiveOrder),
@@ -825,6 +1315,14 @@ const Projects = () => {
       )}
 
       {!isLoading && projectList.length > 0 && (
+        <NsrWorkspaceWidget
+          analytics={nsrAnalytics}
+          isLoading={isLoadingOverviews}
+          onNavigateProject={enterProject}
+        />
+      )}
+
+      {!isLoading && projectList.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -859,7 +1357,7 @@ const Projects = () => {
             </div>
             <h3 className="text-2xl sm:text-3xl font-bold text-white mb-3">Chưa có dự án nào</h3>
             <p className="text-gray-400 mb-8 max-w-lg mx-auto leading-relaxed">
-              Tạo dự án đầu tiên để cào mentions từ Facebook, YouTube, TikTok và chạy phân tích AI sentiment.
+              Tạo dự án đầu tiên để cào mentions từ Facebook, YouTube, TikTok, Threads và chạy phân tích AI sentiment.
             </p>
             <Link
               to={`/create-project?wid=${workspaceId}&onboarding=1`}
@@ -878,7 +1376,9 @@ const Projects = () => {
               <ProjectCard
                 key={project.projectId}
                 project={project}
+                overview={overviewsByProject[project.projectId]}
                 activeOrder={orderByProject[project.projectId]}
+
                 workspaceId={workspaceId}
                 compareMode={compareMode}
                 isCompareSelected={selectedCompareIds.includes(project.projectId)}

@@ -247,7 +247,7 @@ const ScrapePackageManagement = () => {
     <AdminLayout>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Scrape Packages</h2>
+        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Quản lý Gói Cào</h2>
           <p className="text-[#6b7280] text-sm mt-1">
             Cấu hình các gói cào dữ liệu (SCRAPE_PACKAGES) — {activeCount} đang bán / {packages.length} tổng
           </p>

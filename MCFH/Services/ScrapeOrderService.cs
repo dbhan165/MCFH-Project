@@ -145,8 +145,15 @@ public class ScrapeOrderService
     {
         var order = await _context.ScrapeOrders
             .FirstOrDefaultAsync(o => o.OrderId == orderId && o.UserId == userId);
-        if (order == null || order.Status is not ("quoted" or "pending_payment"))
+        if (order == null)
             return null;
+
+        // Allow retry if paid but job failed to start
+        if (order.Status is not ("quoted" or "pending_payment") &&
+            !(order.Status == "paid" && string.IsNullOrEmpty(order.ScrapeJobId)))
+        {
+            return null;
+        }
 
         // Dev hardcode: bỏ qua PayOS — đánh dấu đã trả + khởi động scrape ngay.
         if (_payOsOptions.Bypass)

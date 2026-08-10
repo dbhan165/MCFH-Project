@@ -34,6 +34,7 @@ function normalizeProject(data: Record<string, unknown>): Project {
     enableFacebook: Boolean(pickField(data, 'enableFacebook', 'EnableFacebook')),
     enableYoutube: Boolean(pickField(data, 'enableYoutube', 'EnableYoutube')),
     enableTiktok: Boolean(pickField(data, 'enableTiktok', 'EnableTiktok')),
+    enableThreads: Boolean(pickField(data, 'enableThreads', 'EnableThreads')),
     enableMaps: Boolean(pickField(data, 'enableMaps', 'EnableMaps')),
     enableNews: Boolean(pickField(data, 'enableNews', 'EnableNews')),
     createdAt: pickNullableString(data, 'createdAt', 'CreatedAt'),
@@ -52,6 +53,33 @@ function normalizeAnalyzeResult(data: Record<string, unknown>): AnalyzeProjectRe
 }
 
 export const projectApi = {
+  list: (workspaceId: number) =>
+    axiosClient.get<Project[]>(`/api/workspaces/${workspaceId}/projects`).then((res) => res.data),
+
+  getDataSources: (workspaceId: number, projectId: number) =>
+    axiosClient.get<any[]>(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources`).then((res) => res.data),
+
+  addDataSource: (workspaceId: number, projectId: number, data: any) =>
+    axiosClient.post<any>(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources`, data).then((res) => res.data),
+
+  toggleDataSource: (workspaceId: number, projectId: number, sourceId: number) =>
+    axiosClient.put(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources/${sourceId}/toggle`).then((res) => res.data),
+
+  deleteDataSource: (workspaceId: number, projectId: number, sourceId: number) =>
+    axiosClient.delete(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources/${sourceId}`).then((res) => res.data),
+
+  getImportFiles: (workspaceId: number, projectId: number) =>
+    axiosClient.get<any[]>(`/api/workspaces/${workspaceId}/projects/${projectId}/imports`).then((res) => res.data),
+
+  deleteImportFile: (workspaceId: number, projectId: number, fileId: number) => {
+    return axiosClient.delete(`/api/workspaces/${workspaceId}/projects/${projectId}/imports/${fileId}`);
+  },
+
+  importFile: (workspaceId: number, projectId: number, formData: FormData) =>
+    axiosClient.post<any>(`/api/workspaces/${workspaceId}/projects/${projectId}/imports`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then((res) => res.data),
+
   getProjects: async (workspaceId: number): Promise<Project[]> => {
     const response = await axiosClient.get<unknown[]>(
       `/api/workspaces/${workspaceId}/projects/extended`
@@ -71,6 +99,7 @@ export const projectApi = {
       payload.enableFacebook != null ||
       payload.enableYoutube != null ||
       payload.enableTiktok != null ||
+      payload.enableThreads != null ||
       payload.enableMaps != null ||
       (payload.dataSources?.length ?? 0) > 0;
 
@@ -86,6 +115,7 @@ export const projectApi = {
           enableFacebook: payload.enableFacebook ?? false,
           enableYoutube: payload.enableYoutube ?? false,
           enableTiktok: payload.enableTiktok ?? false,
+          enableThreads: payload.enableThreads ?? false,
           enableMaps: payload.enableMaps ?? false,
           dataSources: (payload.dataSources ?? []).map((s) => ({
             platform: s.platform,
@@ -112,6 +142,7 @@ export const projectApi = {
       enableFacebook?: boolean;
       enableYoutube?: boolean;
       enableTiktok?: boolean;
+      enableThreads?: boolean;
       enableMaps?: boolean;
     }
   ): Promise<Project> => {
@@ -124,6 +155,7 @@ export const projectApi = {
         enableFacebook: payload.enableFacebook,
         enableYoutube: payload.enableYoutube,
         enableTiktok: payload.enableTiktok,
+        enableThreads: payload.enableThreads,
         enableMaps: payload.enableMaps,
       }
     );
@@ -172,6 +204,29 @@ export const projectApi = {
       platformBreakdown: (pickField<Record<string, number>>(d, 'platformBreakdown', 'PlatformBreakdown') ?? {}),
     };
   },
+
+  getWorkspaceOverviews: async (workspaceId: number): Promise<ProjectOverviewStats[]> => {
+    const response = await axiosClient.get<unknown[]>(
+      `/api/workspaces/${workspaceId}/projects/analytics/overviews`
+    );
+    return (response.data ?? []).map((item) => {
+      const d = item as Record<string, unknown>;
+      return {
+        projectId: pickNumber(d, 'projectId', 'ProjectId'),
+        projectName: pickString(d, 'projectName', 'ProjectName'),
+        totalMentions: pickNumber(d, 'totalMentions', 'TotalMentions'),
+        totalComments: pickNumber(d, 'totalComments', 'TotalComments'),
+        analyzedCount: pickNumber(d, 'analyzedCount', 'AnalyzedCount'),
+        pendingAnalysisCount: pickNumber(d, 'pendingAnalysisCount', 'PendingAnalysisCount'),
+        nsrScore: Number(pickField(d, 'nsrScore', 'NsrScore') ?? 0),
+        positiveCount: pickNumber(d, 'positiveCount', 'PositiveCount'),
+        negativeCount: pickNumber(d, 'negativeCount', 'NegativeCount'),
+        neutralCount: pickNumber(d, 'neutralCount', 'NeutralCount'),
+        platformBreakdown: (pickField<Record<string, number>>(d, 'platformBreakdown', 'PlatformBreakdown') ?? {}),
+      };
+    });
+  },
+
 
   getMentions: async (
     workspaceId: number,
@@ -577,6 +632,7 @@ export const projectApi = {
           search: pickNullableString(config, 'search', 'Search'),
           dateFrom: pickNullableString(config, 'dateFrom', 'DateFrom'),
           dateTo: pickNullableString(config, 'dateTo', 'DateTo'),
+          isCrisisAlert: pickField(config, 'isCrisisAlert', 'IsCrisisAlert') === true,
         },
         createdAt: pickNullableString(d, 'createdAt', 'CreatedAt'),
       };
@@ -651,6 +707,30 @@ export const projectApi = {
     };
   },
 
+  updateMentionTag: async (
+    workspaceId: number,
+    projectId: number,
+    tagId: number,
+    payload: { name: string; color?: string }
+  ): Promise<MentionTag> => {
+    const response = await axiosClient.put<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-tags/${tagId}`,
+      payload
+    );
+    const t = response.data;
+    return {
+      tagId: pickNumber(t, 'tagId', 'TagId'),
+      name: pickString(t, 'name', 'Name'),
+      color: pickNullableString(t, 'color', 'Color'),
+    };
+  },
+
+  deleteMentionTag: async (workspaceId: number, projectId: number, tagId: number) => {
+    await axiosClient.delete(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-tags/${tagId}`
+    );
+  },
+
   assignMentionTags: async (
     workspaceId: number,
     projectId: number,
@@ -660,6 +740,16 @@ export const projectApi = {
     await axiosClient.put(
       `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/mentions/${feedbackId}/tags`,
       { tagIds }
+    );
+  },
+
+  togglePinForReport: async (
+    workspaceId: number,
+    projectId: number,
+    feedbackId: number
+  ): Promise<void> => {
+    await axiosClient.put(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/mentions/${feedbackId}/pin`
     );
   },
 

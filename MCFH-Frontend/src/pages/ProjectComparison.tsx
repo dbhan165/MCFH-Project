@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  Activity,
   BarChart2,
-  GitCompare,
-  FileText,
   Search,
   Bell,
   Calendar,
@@ -35,7 +31,6 @@ import {
   Tooltip,
   LabelList,
 } from 'recharts';
-import McfhLogo from '../components/brand/McfhLogo';
 import { projectApi } from '../api/projectApi';
 import type { Project, ProjectMention, ProjectOverviewStats, SentimentSummary } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
@@ -54,7 +49,8 @@ const ENTITY_B_COLOR = '#4FD1C5';
 const PLATFORM_COLORS: Record<string, string> = {
   facebook: '#1877F2',
   youtube: '#FF0000',
-  tiktok: '#FE2C55',
+  tiktok: '#00F2FE',
+  threads: '#FAFAFA',
   news: '#F59E0B',
   maps: '#34A853',
 };
@@ -340,76 +336,20 @@ function buildComparisonTrend(
     }));
 }
 
-function ComparisonSidebar({ workspaceId, projectId }: { workspaceId: number; projectId: number }) {
-  const base = `/workspace/${workspaceId}/project/${projectId}`;
-  const navItems = [
-    { path: base, icon: LayoutDashboard, label: 'Overview', exact: true },
-    { path: `${base}/mentions`, icon: Activity, label: 'Data Stream' },
-    { path: `${base}/aspect`, icon: BarChart2, label: 'Aspect Analysis' },
-    { path: `${base}/comparison`, icon: GitCompare, label: 'Comparison', active: true },
-    { path: `${base}/reports`, icon: FileText, label: 'B2B Reports' },
-  ];
-
+function ComparisonHeader({ workspaceId }: { workspaceId?: number }) {
   return (
-    <aside className="hidden lg:flex w-64 xl:w-72 bg-[#0A101D] border-r border-white/5 flex-col shrink-0 h-full">
-      <div className="h-20 flex items-center px-6 border-b border-white/5 shrink-0">
-        <McfhLogo
-          linkTo="/workspaces"
-          size={34}
-          subtitle="Kinetic Enterprise"
-          textClassName="text-white text-lg"
-          subtitleClassName="text-[10px] text-gray-500 font-semibold tracking-[0.22em] uppercase"
-        />
-      </div>
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.label}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all border ${
-                item.active
-                  ? 'bg-white/[0.06] text-white border-white/10'
-                  : 'text-gray-400 border-transparent hover:text-white hover:bg-white/[0.03]'
-              }`}
-            >
-              <Icon size={18} className={item.active ? 'text-[#FF7575]' : undefined} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="p-4 border-t border-white/5 space-y-3 shrink-0">
+    <header className="h-16 lg:h-20 bg-[#0A101D]/80 backdrop-blur-md border-b border-white/5 px-4 lg:px-8 flex items-center justify-between gap-4 shrink-0 z-20">
+      {workspaceId && !Number.isNaN(workspaceId) ? (
         <Link
-          to={`/create-project?workspaceId=${workspaceId}`}
-          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-[#FF7575] hover:bg-[#ff6262] text-white text-sm font-bold transition-colors"
+          to={`/workspace/${workspaceId}/projects`}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 text-gray-300 hover:text-white text-xs font-semibold transition-all"
         >
-          New Analysis
+          <ArrowLeft size={16} className="text-[#FF7575]" />
+          <span>Quay lại danh sách dự án</span>
         </Link>
-      </div>
-    </aside>
-  );
-}
+      ) : <div />}
 
-function ComparisonHeader() {
-  return (
-    <header className="h-16 lg:h-20 bg-[#0A101D]/80 backdrop-blur-md border-b border-white/5 px-4 lg:px-8 flex items-center gap-4 shrink-0 z-20">
-      <div className="flex-1 max-w-xl mx-auto hidden md:block">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="search"
-            placeholder="Global search..."
-            className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-white/20"
-          />
-        </div>
-      </div>
       <div className="flex items-center gap-2 lg:gap-4 ml-auto">
-        <button type="button" className="p-2 text-gray-400 hover:text-white relative">
-          <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF7575] rounded-full" />
-        </button>
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FF7575] to-[#00B4D8] ring-2 ring-white/10" />
       </div>
     </header>
@@ -488,7 +428,7 @@ function NsrScoreCard({ model }: { model: CompareViewModel }) {
 
   return (
     <div className="rounded-2xl border border-white/5 bg-[#151B2B] p-5 sm:p-6 flex flex-col">
-      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.18em] mb-4">NSR Score Index</p>
+      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.18em] mb-4">Chỉ số điểm NSR</p>
       <DualValue
         left={formatNsr(model.entityA.nsrScore)}
         right={formatNsr(model.entityB.nsrScore)}
@@ -515,7 +455,7 @@ function TotalVolumeCard({ model }: { model: CompareViewModel }) {
 
   return (
     <div className="rounded-2xl border border-white/5 bg-[#151B2B] p-5 sm:p-6 flex flex-col">
-      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.18em] mb-4">Total Volume</p>
+      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.18em] mb-4">Tổng lượng thảo luận</p>
       <DualValue
         left={formatNumber(model.entityA.totalVolume)}
         right={formatNumber(model.entityB.totalVolume)}
@@ -528,11 +468,11 @@ function TotalVolumeCard({ model }: { model: CompareViewModel }) {
           }`}
         >
           {model.volumeDifferential > 0 ? '+' : ''}
-          {model.volumeDifferential}% differential
+          {model.volumeDifferential}% chênh lệch
         </span>
         {isUnderperforming && (
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#FF7575]/80 bg-[#FF7575]/10 px-2 py-0.5 rounded">
-            Underperforming
+            Thấp hơn đối thủ
           </span>
         )}
       </div>
@@ -1428,10 +1368,6 @@ const ProjectComparison = () => {
 
   return (
     <div className="h-screen w-full bg-[#050A15] text-white font-sans flex overflow-hidden selection:bg-[#FF7575] selection:text-white">
-      {!Number.isNaN(wid) && !Number.isNaN(currentProjectId) ? (
-        <ComparisonSidebar workspaceId={wid} projectId={currentProjectId} />
-      ) : null}
-
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         <div
           className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none"
@@ -1441,18 +1377,10 @@ const ProjectComparison = () => {
           }}
         />
 
-        <ComparisonHeader />
+        <ComparisonHeader workspaceId={wid} />
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 relative z-10">
           <div className="max-w-7xl mx-auto space-y-6 pb-24">
-            <Link
-              to={`/workspace/${wid}/projects`}
-              className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              <ArrowLeft size={16} />
-              Quay lại danh sách dự án
-            </Link>
-
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white">So sánh Đối thủ Cạnh tranh</h1>
               <p className="text-sm text-gray-500 mt-1">Competitor Benchmarking Intelligence — dữ liệu thực từ DB</p>

@@ -146,6 +146,17 @@ export interface UpsertFbSource {
   enabled: boolean;
 }
 
+export interface SystemProxy {
+  proxyId: number;
+  ipAddress: string;
+  port: number;
+  authUser?: string | null;
+  status?: string | null;
+  failCount: number;
+  lastUsedAt?: string | null;
+  enabled: boolean;
+}
+
 export interface ScrapePackage {
   packageId: number;
   code: string;
@@ -191,6 +202,7 @@ export interface PlatformCookie {
   fileExists: boolean;
   fileMissing: boolean;
   isExpiringSoon: boolean;
+  isExpired: boolean;
   backupFilePath?: string | null;
   backupExists: boolean;
   requiredCookiesPresent?: Record<string, boolean> | null;
@@ -278,6 +290,30 @@ export interface AdminAuditLog {
   severity: 'info' | 'success' | 'warning' | string;
   timestamp: string;
 }
+
+const mapPlatformCookie = (s: Record<string, unknown>): PlatformCookie => {
+  const required = pickField<Record<string, unknown>>(s, 'requiredCookiesPresent', 'RequiredCookiesPresent');
+  return {
+    platformCookieId: pickNumber(s, 'platformCookieId', 'PlatformCookieId'),
+    platform: pickString(s, 'platform', 'Platform'),
+    filePath: pickString(s, 'filePath', 'FilePath'),
+    status: pickString(s, 'status', 'Status'),
+    note: pickNullableString(s, 'note', 'Note'),
+    cookieCount: pickNumber(s, 'cookieCount', 'CookieCount'),
+    expiresAt: pickNullableString(s, 'expiresAt', 'ExpiresAt'),
+    uploadedAt: pickNullableString(s, 'uploadedAt', 'UploadedAt'),
+    lastUsedAt: pickNullableString(s, 'lastUsedAt', 'LastUsedAt'),
+    fileExists: pickField(s, 'fileExists', 'FileExists') === true,
+    fileMissing: pickField(s, 'fileMissing', 'FileMissing') === true,
+    isExpiringSoon: pickField(s, 'isExpiringSoon', 'IsExpiringSoon') === true,
+    isExpired: pickField(s, 'isExpired', 'IsExpired') === true,
+    backupFilePath: pickNullableString(s, 'backupFilePath', 'BackupFilePath'),
+    backupExists: pickField(s, 'backupExists', 'BackupExists') === true,
+    requiredCookiesPresent: required
+      ? Object.fromEntries(Object.entries(required).map(([k, v]) => [k, v === true]))
+      : null,
+  };
+};
 
 export const adminApi = {
   getAuditLogs: async (limit = 50): Promise<AdminAuditLog[]> => {
@@ -516,7 +552,7 @@ export const adminApi = {
     return res.data;
   },
 
-  getProxies: async () => {
+  getProxies: async (): Promise<SystemProxy[]> => {
     const res = await axiosClient.get<unknown[]>('/api/admin/proxies');
     return (res.data ?? []).map((item) => {
       const p = item as Record<string, unknown>;
@@ -680,56 +716,12 @@ export const adminApi = {
 
   getPlatformCookies: async (): Promise<PlatformCookie[]> => {
     const res = await axiosClient.get<unknown[]>('/api/admin/platform-cookies');
-    return (res.data ?? []).map((item) => {
-      const s = item as Record<string, unknown>;
-      const required = pickField<Record<string, unknown>>(s, 'requiredCookiesPresent', 'RequiredCookiesPresent');
-      return {
-        platformCookieId: pickNumber(s, 'platformCookieId', 'PlatformCookieId'),
-        platform: pickString(s, 'platform', 'Platform'),
-        filePath: pickString(s, 'filePath', 'FilePath'),
-        status: pickString(s, 'status', 'Status'),
-        note: pickNullableString(s, 'note', 'Note'),
-        cookieCount: pickNumber(s, 'cookieCount', 'CookieCount'),
-        expiresAt: pickNullableString(s, 'expiresAt', 'ExpiresAt'),
-        uploadedAt: pickNullableString(s, 'uploadedAt', 'UploadedAt'),
-        lastUsedAt: pickNullableString(s, 'lastUsedAt', 'LastUsedAt'),
-        fileExists: pickField(s, 'fileExists', 'FileExists') === true,
-        fileMissing: pickField(s, 'fileMissing', 'FileMissing') === true,
-        isExpiringSoon: pickField(s, 'isExpiringSoon', 'IsExpiringSoon') === true,
-        backupFilePath: pickNullableString(s, 'backupFilePath', 'BackupFilePath'),
-        backupExists: pickField(s, 'backupExists', 'BackupExists') === true,
-        requiredCookiesPresent: required
-          ? Object.fromEntries(
-              Object.entries(required).map(([k, v]) => [k, v === true])
-            )
-          : null,
-      };
-    });
+    return (res.data ?? []).map((item) => mapPlatformCookie(item as Record<string, unknown>));
   },
 
   getPlatformCookie: async (platform: string): Promise<PlatformCookie> => {
     const res = await axiosClient.get<Record<string, unknown>>(`/api/admin/platform-cookies/${platform}`);
-    const s = res.data;
-    const required = pickField<Record<string, unknown>>(s, 'requiredCookiesPresent', 'RequiredCookiesPresent');
-    return {
-      platformCookieId: pickNumber(s, 'platformCookieId', 'PlatformCookieId'),
-      platform: pickString(s, 'platform', 'Platform'),
-      filePath: pickString(s, 'filePath', 'FilePath'),
-      status: pickString(s, 'status', 'Status'),
-      note: pickNullableString(s, 'note', 'Note'),
-      cookieCount: pickNumber(s, 'cookieCount', 'CookieCount'),
-      expiresAt: pickNullableString(s, 'expiresAt', 'ExpiresAt'),
-      uploadedAt: pickNullableString(s, 'uploadedAt', 'UploadedAt'),
-      lastUsedAt: pickNullableString(s, 'lastUsedAt', 'LastUsedAt'),
-      fileExists: pickField(s, 'fileExists', 'FileExists') === true,
-      fileMissing: pickField(s, 'fileMissing', 'FileMissing') === true,
-      isExpiringSoon: pickField(s, 'isExpiringSoon', 'IsExpiringSoon') === true,
-      backupFilePath: pickNullableString(s, 'backupFilePath', 'BackupFilePath'),
-      backupExists: pickField(s, 'backupExists', 'BackupExists') === true,
-      requiredCookiesPresent: required
-        ? Object.fromEntries(Object.entries(required).map(([k, v]) => [k, v === true]))
-        : null,
-    };
+    return mapPlatformCookie(res.data);
   },
 
   updatePlatformCookieMeta: async (platform: string, payload: UpdatePlatformCookieMeta) => {
@@ -759,6 +751,20 @@ export const adminApi = {
 
   clearPlatformCookieContent: async (platform: string) => {
     await axiosClient.delete(`/api/admin/platform-cookies/${platform}/content`);
+  },
+
+  createPlatformCookie: async (payload: {
+    platform: string;
+    filePath: string;
+    status?: string;
+    note?: string;
+    cookiesJson?: string;
+  }): Promise<PlatformCookie> => {
+    const res = await axiosClient.post<Record<string, unknown>>(
+      '/api/admin/platform-cookies',
+      payload
+    );
+    return mapPlatformCookie(res.data);
   },
 
   getSettings: async () => {

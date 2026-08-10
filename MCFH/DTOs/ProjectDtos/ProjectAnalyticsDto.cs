@@ -1,4 +1,4 @@
-﻿namespace MCFH.DTOs.ProjectDtos
+namespace MCFH.DTOs.ProjectDtos
 {
     public class ProjectOverviewDto
     {
@@ -34,6 +34,7 @@
         public List<MentionTagDto> Tags { get; set; } = new();
         public bool IsSentimentOverridden { get; set; }
         public bool IsCrisisAlert { get; set; }
+        public bool PinnedForReport { get; set; }
     }
 
     public class SentimentSummaryDto

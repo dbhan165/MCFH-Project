@@ -129,6 +129,7 @@ public class BespokeReportService
             EnableFacebook = true,
             EnableYoutube = true,
             EnableTiktok = true,
+            EnableMaps = true, // Maps is aliased to Threads
             IsDeleted = false,
             CreatedAt = DateTime.Now
         };

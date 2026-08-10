@@ -20,14 +20,14 @@ import { loadProfileFromStorage, clearAuthSession, getAvatarFallback } from '../
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
-  { label: 'User Management', icon: Users, href: '/admin/users' },
-  { label: 'Subscription Plans', icon: CreditCard, href: '/admin/subscriptions' },
-  { label: 'Proxy Management', icon: Server, href: '/admin/proxies' },
-  { label: 'Facebook Sources', icon: Globe, href: '/admin/fb-sources' },
-  { label: 'Scrape Packages', icon: Package, href: '/admin/scrape-packages' },
-  { label: 'Platform Cookies', icon: Cookie, href: '/admin/cookies' },
-  { label: 'Audit Logs', icon: Clock, href: '/admin/audit-logs' },
-  { label: 'System Settings', icon: Settings, href: '/admin/settings' },
+  { label: 'Quản lý người dùng', icon: Users, href: '/admin/users' },
+  { label: 'Gói đăng ký', icon: CreditCard, href: '/admin/subscriptions' },
+  { label: 'Quản lý Proxy', icon: Server, href: '/admin/proxies' },
+  { label: 'Nguồn Facebook', icon: Globe, href: '/admin/fb-sources' },
+  { label: 'Gói Cào', icon: Package, href: '/admin/scrape-packages' },
+  { label: 'Cookie Nền tảng', icon: Cookie, href: '/admin/cookies' },
+  { label: 'Nhật ký hệ thống', icon: Clock, href: '/admin/audit-logs' },
+  { label: 'Cài đặt hệ thống', icon: Settings, href: '/admin/settings' },
 ];
 
 interface AdminLayoutProps {
@@ -35,12 +35,19 @@ interface AdminLayoutProps {
   searchPlaceholder?: string;
   adminName?: string;
   adminRole?: string;
+  /**
+   * Nếu true (mặc định), <main> là scroll container cho page con (hành vi cũ).
+   * Nếu false, <main> overflow-hidden — page con tự quản lý scroll bên trong
+   * (dùng cho layout 2 cột có sticky sidebar như SystemSettings).
+   */
+  disableMainScroll?: boolean;
 }
 
 const AdminLayout = ({
   children,
   adminName,
   adminRole,
+  disableMainScroll = false,
 }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,7 +57,7 @@ const AdminLayout = ({
   const cachedProfile = loadProfileFromStorage();
   const displayName = adminName || cachedProfile?.fullName || 'Trường Học';
   const displayEmail = cachedProfile?.email || 'admin@mcfh.com';
-  const displayRole = adminRole || cachedProfile?.role || 'System Administrator';
+  const displayRole = adminRole || cachedProfile?.role || 'Quản trị viên hệ thống';
   const avatarSrc = cachedProfile?.avatarUrl || getAvatarFallback(displayName);
 
   useEffect(() => {
@@ -104,7 +111,7 @@ const AdminLayout = ({
               }`}
           >
             <User className="w-5 h-5" />
-            Profile
+            Hồ sơ cá nhân
           </Link>
           <button
             onClick={handleSignOut}
@@ -112,7 +119,7 @@ const AdminLayout = ({
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#6b7280] hover:bg-gray-50 hover:text-[#111827] transition-colors text-left cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
-            Sign Out
+            Đăng xuất
           </button>
         </div>
       </aside>
@@ -212,7 +219,7 @@ const AdminLayout = ({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
+        <main className={`flex-1 min-h-0 p-6 lg:p-8 ${disableMainScroll ? 'overflow-hidden' : 'overflow-y-auto'}`}>{children}</main>
       </div>
     </div>
   );

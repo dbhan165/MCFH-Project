@@ -52,10 +52,6 @@ public static class CommentTextHelper
         @"\btrên TikTok\b|\bon TikTok\b|^Log in to comment|^Đăng nhập để bình luận|^See translation$|^Xem bản dịch$|^View \d+ repl|^Xem \d+ phản hồi|^\d{1,2}-\d{1,2}$|^\d{4}-\d{1,2}-\d{1,2}$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly Regex YouTubeMetaLabel = new(
-        @"^(Reply|Phản hồi|\d+ replies?|\d+ phản hồi|Pinned by|Được ghim bởi|Show more replies|Hiển thị thêm phản hồi|Read more|Đọc thêm)$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     public static List<string> FilterTikTok(
         IEnumerable<string>? texts,
         int max = 100,
@@ -74,6 +70,14 @@ public static class CommentTextHelper
             .Take(max)
             .ToList();
     }
+
+    private static readonly Regex YouTubeMetaLabel = new(
+        @"^(Reply|Phản hồi|\d+ replies?|\d+ phản hồi|Pinned by|Được ghim bởi|Show more replies|Hiển thị thêm phản hồi|Read more|Đọc thêm)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ThreadsMetaLabel = new(
+        @"^@\d+\s+lượt xem$|^© \d+$|^Replying to|^Đang trả lời|^View replies$|^Xem phản hồi$|^Hàng đầu$|^Xem hoạt động$|^Một số thread trả lời khác không hiển thị\.$|^Đánh dấu phần tiết lộ nội dung$|^Điều khoản c?ủa Threads?$|^Điều khoản$|^Điều kiện|^Chính sách|^Quyền riêng tư|^Terms of|^Privacy|^Cookie Policy|^Trợ giúp$|^Help$|^Báo cáo$|^Đã ghim$|^Pinned$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static List<string> FilterYouTube(
         IEnumerable<string>? texts,
@@ -94,6 +98,25 @@ public static class CommentTextHelper
             .ToList();
     }
 
+    public static List<string> FilterThreads(
+        IEnumerable<string>? texts,
+        int max = 100,
+        string? postTitle = null,
+        string? author = null)
+    {
+        var normalized = Normalize(texts, max * 3);
+        var titleKey = NormalizeKey(postTitle);
+        var authorKey = NormalizeKey(author);
+
+        return normalized
+            .Where(t => !ThreadsMetaLabel.IsMatch(t))
+            .Where(t => !MatchesContextKey(t, titleKey, authorKey))
+            .Where(t => !LooksLikeUiChrome(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(max)
+            .ToList();
+    }
+
     public static List<string> FromScraped(
         IEnumerable<ScrapedComment> comments,
         int max = 100,
@@ -105,6 +128,7 @@ public static class CommentTextHelper
             "tiktok" => FilterTikTok(comments.Select(c => c.Text), max, contextTitle, contextAuthor),
             "youtube" => FilterYouTube(comments.Select(c => c.Text), max, contextTitle, contextAuthor),
             "facebook" => FilterFacebook(comments.Select(c => c.Text), max),
+            "threads" => FilterThreads(comments.Select(c => c.Text), max, contextTitle, contextAuthor),
             _ => Normalize(comments.Select(c => c.Text), max)
         };
 

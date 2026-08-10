@@ -125,4 +125,34 @@ public class AdminPlatformCookieController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreatePlatformCookieDto dto)
+    {
+        if (GetUserId() <= 0)
+            return Unauthorized();
+
+        try
+        {
+            var result = await _cookieAdmin.CreateAsync(GetUserId(), dto);
+            return CreatedAtAction(nameof(Get), new { platform = result.Platform }, result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "POST /api/admin/platform-cookies thất bại");
+            return StatusCode(500, new
+            {
+                message = "Không thể tạo platform cookie.",
+                detail = ex.Message
+            });
+        }
+    }
 }

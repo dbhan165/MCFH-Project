@@ -1,16 +1,17 @@
 import { useEffect, useState, type ElementType } from 'react';
 import {
   Plug,
-  CreditCard,
-  Bell,
-  Gauge,
+  Mail,
+  Wallet,
   Eye,
   EyeOff,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, aiModelApi } from '../../api/portalApi';
+import BrevoKeyPanel from './settings/BrevoKeyPanel';
+import PayOsKeyPanel from './settings/PayOsKeyPanel';
 
-type SettingsTab = 'api' | 'payment' | 'notifications' | 'thresholds';
+type SettingsTab = 'api' | 'brevo' | 'payos';
 
 interface SettingsCategory {
   id: SettingsTab;
@@ -19,10 +20,9 @@ interface SettingsCategory {
 }
 
 const settingsCategories: SettingsCategory[] = [
-  { id: 'api', label: 'API Integrations', icon: Plug },
-  { id: 'payment', label: 'Payment Gateways', icon: CreditCard },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'thresholds', label: 'Global Thresholds', icon: Gauge },
+  { id: 'api', label: 'Tích hợp API & AI', icon: Plug },
+  { id: 'brevo', label: 'Brevo Email Key', icon: Mail },
+  { id: 'payos', label: 'PayOS Key', icon: Wallet },
 ];
 
 const defaultModelValue = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
@@ -91,51 +91,53 @@ const SystemSettings = () => {
 
   return (
     <AdminLayout
-      searchPlaceholder="Search settings..."
+      searchPlaceholder="Tìm kiếm cài đặt..."
       adminName="Admin User"
-      adminRole="SUPER ADMIN"
+      adminRole="QUẢN TRỊ VIÊN"
+      disableMainScroll
     >
-      <div className="mb-8">
-        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">System Settings</h2>
-        <p className="text-[#6b7280] text-sm mt-1">
-          Configure global integrations, API thresholds, and system behaviors.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-        <div className="space-y-2">
-          {settingsCategories.map((category) => {
-            const isActive = activeTab === category.id;
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => setActiveTab(category.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-colors border ${
-                  isActive
-                    ? 'bg-red-50 text-[#ef4444] border-red-100'
-                    : 'bg-white text-[#6b7280] border-gray-200 hover:bg-gray-50 hover:text-[#111827]'
-                }`}
-              >
-                <category.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#ef4444]' : ''}`} />
-                {category.label}
-              </button>
-            );
-          })}
+      <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">
+        <div className="shrink-0 mb-2">
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Cài đặt hệ thống</h2>
+          <p className="text-[#6b7280] text-sm mt-1">
+            Cấu hình các tích hợp toàn hệ thống, tham số API và hành vi của hệ thống.
+          </p>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6 lg:p-8 shadow-sm">
-          {activeTab === 'api' && (
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+          <div className="space-y-2 overflow-y-auto pr-1">
+            {settingsCategories.map((category) => {
+              const isActive = activeTab === category.id;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setActiveTab(category.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-colors border ${
+                    isActive
+                      ? 'bg-red-50 text-[#ef4444] border-red-100'
+                      : 'bg-white text-[#6b7280] border-gray-200 hover:bg-gray-50 hover:text-[#111827]'
+                  }`}
+                >
+                  <category.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#ef4444]' : ''}`} />
+                  {category.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-6 lg:p-8 shadow-sm overflow-y-auto">
+            {activeTab === 'api' && (
             <>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
                 <div>
-                  <h3 className="text-lg font-semibold text-[#111827]">AI Model Settings</h3>
+                  <h3 className="text-lg font-semibold text-[#111827]">Cấu hình AI Model & TokenRouter</h3>
                   <p className="text-sm text-[#6b7280] mt-1">
-                    Configure Large Language Model integration via TokenRouter.
+                    Cấu hình mô hình ngôn ngữ lớn (LLM) tích hợp qua TokenRouter.
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-blue-50 text-blue-600 shrink-0">
-                  Active
+                  Hoạt động
                 </span>
               </div>
 
@@ -170,28 +172,28 @@ const SystemSettings = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
-                      Base URL
+                      Base URL (Đường dẫn API)
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         value={baseUrl}
                         onChange={(e) => setBaseUrl(e.target.value)}
-                        placeholder="e.g. https://api.groq.com/openai/v1"
+                        placeholder="VD: https://api.groq.com/openai/v1"
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-2">
-                      Default Model
+                      Tên Model mặc định
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         value={defaultModel}
                         onChange={(e) => setDefaultModel(e.target.value)}
-                        placeholder="e.g. nvidia/nemotron-3..."
+                        placeholder="VD: nvidia/nemotron-3..."
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                       />
                     </div>
@@ -203,16 +205,16 @@ const SystemSettings = () => {
                     type="button"
                     onClick={handleTestAiModel}
                     disabled={isTestingAiModel}
-                    className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors"
+                    className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-[#111827] rounded-lg text-sm font-semibold transition-colors cursor-pointer"
                   >
-                    {isTestingAiModel ? 'Đang test AI...' : 'Test AI Model'}
+                    {isTestingAiModel ? 'Đang test AI...' : 'Kiểm tra AI Model'}
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-6 py-3 bg-[#ef4444] hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                    className="px-6 py-3 bg-[#ef4444] hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm cursor-pointer"
                   >
-                    {isSaving ? 'Đang lưu...' : 'Save API Configuration'}
+                    {isSaving ? 'Đang lưu...' : 'Lưu cấu hình API'}
                   </button>
                 </div>
               </form>
@@ -225,44 +227,14 @@ const SystemSettings = () => {
             </>
           )}
 
-          {activeTab === 'payment' && (
-            <SettingsPlaceholder
-              title="Payment Gateways"
-              description="Configure Stripe, PayPal, and other payment provider credentials."
-            />
-          )}
+          {activeTab === 'brevo' && <BrevoKeyPanel />}
 
-          {activeTab === 'notifications' && (
-            <SettingsPlaceholder
-              title="Notification Settings"
-              description="Manage email alerts, webhook endpoints, and system notification rules."
-            />
-          )}
-
-          {activeTab === 'thresholds' && (
-            <SettingsPlaceholder
-              title="Global Thresholds"
-              description="Set system-wide limits for scraping rate, API usage, and resource allocation."
-            />
-          )}
+          {activeTab === 'payos' && <PayOsKeyPanel />}
+          </div>
         </div>
       </div>
     </AdminLayout>
   );
 };
-
-const SettingsPlaceholder = ({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) => (
-  <div className="py-12 text-center">
-    <h3 className="text-lg font-semibold text-[#111827] mb-2">{title}</h3>
-    <p className="text-sm text-[#6b7280] max-w-md mx-auto">{description}</p>
-    <p className="text-xs text-gray-400 mt-4">Coming soon in next release.</p>
-  </div>
-);
 
 export default SystemSettings;

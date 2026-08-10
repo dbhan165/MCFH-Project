@@ -1,6 +1,7 @@
 using Hangfire;
 using MCFH.Configuration;
 using MCFH.Models;
+using MCFH.Models.Scraping;
 using MCFH.Services;
 using MCFH.Services.Scraping;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -141,6 +142,8 @@ namespace MCFH
             builder.Services.AddSingleton<ScrapePackageCatalog>();
             builder.Services.AddSingleton<IPlatformCookiePathProvider, PlatformCookiePathProvider>();
             builder.Services.AddScoped<PlatformCookieAdminService>();
+            builder.Services.AddScoped<ProviderKeyAdminService>();
+            builder.Services.AddSingleton<IProviderCredentialResolver, ProviderCredentialResolver>();
             builder.Services.AddSingleton<ScrapeJobStore>();
             builder.Services.AddSingleton<ScrapeJobRunner>();
             builder.Services.AddScoped<ScrapeOrderService>();
@@ -153,8 +156,24 @@ namespace MCFH
                 .UseSqlServerStorage(builder.Configuration.GetConnectionString("MyCnn")));
             builder.Services.AddHangfireServer();
             builder.Services.AddScoped<ScrapingJobService>();
+            builder.Services.AddScoped<ProjectDataSourceService>();
 
             var app = builder.Build();
+
+            // CLI: dotnet run -- --seed-provider-keys
+            // Chuyển 1 lần từ appsettings (Smtp:*, PayOS:*) vào DB (BREVO_KEYS / PAYOS_KEYS).
+            if (args.Any(a => a.Equals("--seed-provider-keys", StringComparison.OrdinalIgnoreCase)))
+            {
+                builder.Services.AddScoped<MCFH.Scripts.ProviderKeysSeeder>();
+                using var scope = app.Services.CreateScope();
+                var logger = scope.ServiceProvider
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("ProviderKeysSeeder");
+                var seeder = scope.ServiceProvider.GetRequiredService<MCFH.Scripts.ProviderKeysSeeder>();
+                var added = seeder.RunAsync().GetAwaiter().GetResult();
+                logger.LogInformation("--seed-provider-keys hoàn tất: {Count} key(s) đã thêm.", added);
+                return; // thoát sau khi seed
+            }
 
             PlatformCookieRuntime.Initialize(app.Services.GetRequiredService<IPlatformCookiePathProvider>());
 
@@ -188,7 +207,6 @@ namespace MCFH
                 service => service.RecoverStuckOrdersAsync(),
                 "*/5 * * * *"
             );
-
             // Recovery: bespoke kẹt gathering_data (watcher mất khi restart / job treo).
             RecurringJob.AddOrUpdate<BespokeReportService>(
                 "recover-stuck-bespoke-requests",

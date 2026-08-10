@@ -21,6 +21,9 @@ import {
   VolumeX,
   AlertTriangle,
   BrainCircuit,
+  Pin,
+  Edit2,
+  Check,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { AiAnalysisProgress, ProjectMention, MentionTag } from '../types/project';
@@ -106,6 +109,7 @@ function MentionCard({
   onManageTags,
   onMuteAuthor,
   onMutePlatform,
+  onPin,
 }: {
   item: ProjectMention;
   isMenuOpen: boolean;
@@ -124,6 +128,7 @@ function MentionCard({
   onManageTags: () => void;
   onMuteAuthor: () => void;
   onMutePlatform: () => void;
+  onPin: () => void;
 }) {
   const hasComments = item.comments.length > 0;
   const hasSentiment = item.sentiment != null && item.sentiment !== '';
@@ -142,7 +147,7 @@ function MentionCard({
 
   return (
     <article
-      className="group relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#141A28] to-[#101622] transition-all duration-200 hover:border-white/10 hover:shadow-lg hover:shadow-black/20"
+      className="group relative rounded-2xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#141A28] to-[#101622] transition-all duration-200 hover:border-white/10 hover:shadow-lg hover:shadow-black/20"
       style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
     >
       <div className="p-5 sm:p-6">
@@ -194,6 +199,20 @@ function MentionCard({
                 ? ` · ${Math.round(item.confidenceScore * 100)}%`
                 : ''}
             </span>
+
+            <button
+              type="button"
+              onClick={onPin}
+              disabled={isBusy}
+              className={`p-2 rounded-xl transition-all disabled:opacity-40 mr-1 ${
+                item.pinnedForReport 
+                  ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20' 
+                  : 'text-gray-500 hover:text-white hover:bg-white/10'
+              }`}
+              title={item.pinnedForReport ? 'Bỏ ghim khỏi báo cáo' : 'Ghim vào báo cáo PDF'}
+            >
+              <Pin size={18} className={item.pinnedForReport ? 'fill-current' : ''} />
+            </button>
 
             <div className="relative" ref={isMenuOpen ? menuRef : undefined}>
               <button
@@ -426,7 +445,7 @@ const ProjectMentions = () => {
   const [activeSentiment, setActiveSentiment] = useState<MentionSentimentFilter>('all');
   const [searchText, setSearchText] = useState('');
   const [showCrisisOnly, setShowCrisisOnly] = useState(false);
-  const [savedFilters, setSavedFilters] = useState<{ filterId: number; name: string }[]>([]);
+  const [savedFilters, setSavedFilters] = useState<{ filterId: number; name: string; config?: any }[]>([]);
   const [filterName, setFilterName] = useState('');
   const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
   const [expandedContent, setExpandedContent] = useState<Record<number, boolean>>({});
@@ -442,8 +461,11 @@ const ProjectMentions = () => {
   const [tagModalMention, setTagModalMention] = useState<ProjectMention | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [newTagName, setNewTagName] = useState('');
+  const [editingTagId, setEditingTagId] = useState<number | null>(null);
+  const [editingTagName, setEditingTagName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const loadMentionsRef = useRef<() => void>(() => {});
+  const fetchIdRef = useRef(0);
   const { confirm, alert } = useAppModal();
 
   const loadProjectTags = useCallback(async () => {
@@ -459,6 +481,8 @@ const ProjectMentions = () => {
   const loadMentions = useCallback(async () => {
     if (!wid || !projectId || Number.isNaN(wid) || Number.isNaN(projectId)) return;
 
+    const currentFetchId = ++fetchIdRef.current;
+
     setIsLoading(true);
     setErrorMessage('');
     try {
@@ -466,6 +490,9 @@ const ProjectMentions = () => {
         search: searchText.trim() || undefined,
         isCrisisAlert: showCrisisOnly || undefined,
       });
+
+      if (currentFetchId !== fetchIdRef.current) return;
+
       setMentions(data);
 
       const defaultExpanded: Record<number, boolean> = {};
@@ -474,9 +501,12 @@ const ProjectMentions = () => {
       }
       setExpandedComments(defaultExpanded);
     } catch (error) {
+      if (currentFetchId !== fetchIdRef.current) return;
       setErrorMessage(extractApiError(error, 'Không thể tải danh sách mentions.'));
     } finally {
-      setIsLoading(false);
+      if (currentFetchId === fetchIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [wid, projectId, searchText, showCrisisOnly]);
 
@@ -515,7 +545,7 @@ const ProjectMentions = () => {
     if (!wid || !projectId) return;
     try {
       const filters = await projectApi.getMentionFilters(wid, projectId);
-      setSavedFilters(filters.map((f) => ({ filterId: f.filterId, name: f.name })));
+      setSavedFilters(filters.map((f) => ({ filterId: f.filterId, name: f.name, config: f.config })));
     } catch {
       setSavedFilters([]);
     }
@@ -537,6 +567,16 @@ const ProjectMentions = () => {
 
   const saveCurrentFilter = async () => {
     if (!wid || !projectId || !filterName.trim()) return;
+
+    if (!searchText.trim() && activePlatform === 'all' && activeSentiment === 'all' && !showCrisisOnly) {
+      await alert({
+        title: 'Cảnh báo',
+        message: 'Vui lòng thiết lập ít nhất một điều kiện lọc (nhập từ khóa tìm kiếm, chọn nền tảng hoặc cảm xúc) trước khi lưu!',
+        type: 'warning'
+      });
+      return;
+    }
+
     try {
       await projectApi.saveMentionFilter(wid, projectId, {
         name: filterName.trim(),
@@ -551,6 +591,24 @@ const ProjectMentions = () => {
       await loadSavedFilters();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể lưu bộ lọc.'));
+    }
+  };
+
+  const handleDeleteFilter = async (filterId: number) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Xóa bộ lọc',
+      message: 'Bạn có chắc muốn xóa bộ lọc này không?',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      type: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await projectApi.deleteMentionFilter(wid, projectId, filterId);
+      await loadSavedFilters();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể xóa bộ lọc.'));
     }
   };
 
@@ -580,6 +638,7 @@ const ProjectMentions = () => {
       youtube: 0,
       tiktok: 0,
       facebook: 0,
+      threads: 0,
       news: 0,
     };
     for (const item of mentions) {
@@ -783,6 +842,38 @@ const ProjectMentions = () => {
     }
   };
 
+  const handleUpdateTag = async (tagId: number) => {
+    if (!wid || !projectId || !editingTagName.trim()) return;
+    try {
+      const updatedTag = await projectApi.updateMentionTag(wid, projectId, tagId, { name: editingTagName.trim() });
+      setProjectTags((prev) => prev.map(t => t.tagId === tagId ? updatedTag : t));
+      setEditingTagId(null);
+      setEditingTagName('');
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể cập nhật tag.'));
+    }
+  };
+
+  const handleDeleteTag = async (tagId: number) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Xóa tag',
+      message: 'Bạn có chắc chắn muốn xóa tag này khỏi dự án?',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+    
+    try {
+      await projectApi.deleteMentionTag(wid, projectId, tagId);
+      setProjectTags((prev) => prev.filter(t => t.tagId !== tagId));
+      setSelectedTagIds((prev) => prev.filter(id => id !== tagId));
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể xóa tag.'));
+    }
+  };
+
   const handleMuteAuthor = async (item: ProjectMention) => {
     if (!wid || !projectId || !item.authorName) return;
     const confirmed = await confirm({
@@ -803,6 +894,24 @@ const ProjectMentions = () => {
       await loadMentions();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể mute tác giả.'));
+    } finally {
+      setActionMentionId(null);
+    }
+  };
+
+  const handleTogglePin = async (item: ProjectMention) => {
+    if (!wid || !projectId) return;
+    setActionMentionId(item.feedbackId);
+    try {
+      await projectApi.togglePinForReport(wid, projectId, item.feedbackId);
+      // Update local state to avoid full reload
+      setMentions(prev => prev.map(m => 
+        m.feedbackId === item.feedbackId 
+          ? { ...m, pinnedForReport: !m.pinnedForReport } 
+          : m
+      ));
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể ghim mention.'));
     } finally {
       setActionMentionId(null);
     }
@@ -883,40 +992,32 @@ const ProjectMentions = () => {
       </div>
 
       {aiProgress.isAnalyzing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0f1c]/80 backdrop-blur-md">
-          <div className="relative flex flex-col items-center p-8 rounded-3xl bg-[#151B2B]/80 border border-white/10 shadow-[0_0_80px_-20px_rgba(255,117,117,0.3)] overflow-hidden min-w-[320px]">
-            {/* Animated glowing background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#FF7575]/20 via-transparent to-transparent opacity-50 animate-pulse" />
-            
-            <div className="relative mb-6 mt-2">
-              <div className="absolute inset-0 bg-[#FF7575] blur-xl opacity-40 animate-pulse" />
-              <div className="relative bg-[#1a2133] p-5 rounded-2xl border border-white/10 shadow-inner">
-                <BrainCircuit className="w-12 h-12 text-[#FF7575] animate-pulse" />
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col p-5 rounded-2xl bg-[#151B2B]/95 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(255,117,117,0.15)] w-[320px]">
+          <div className="flex items-center gap-4 mb-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-[#FF7575] blur-md opacity-40 animate-pulse rounded-full" />
+              <div className="relative bg-[#1a2133] p-2.5 rounded-xl border border-white/10">
+                <BrainCircuit className="w-6 h-6 text-[#FF7575] animate-pulse" />
               </div>
             </div>
-            
-            <h3 className="text-xl font-bold text-white mb-2 tracking-wide flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[#FF7575]" />
-              AI Đang Làm Việc... {aiProgress.progressPercent}%
-            </h3>
-            
-            {/* Progress bar */}
-            <div className="w-full max-w-[280px] h-2 bg-white/10 rounded-full mt-2 mb-4 overflow-hidden relative">
-              <div 
-                className="h-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-300"
-                style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
-              />
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#FF7575]" />
+                AI đang làm việc...
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">Tổng hợp cảm xúc & lượt nhắc</p>
             </div>
-            
-            <p className="text-sm text-gray-400 text-center max-w-[280px] leading-relaxed">
-              Hệ thống đang đọc và tổng hợp cảm xúc từ các lượt nhắc. Vui lòng chờ trong giây lát.
-            </p>
-            
-            <div className="mt-8 mb-2 flex justify-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
+          </div>
+          
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
+            <div 
+              className="h-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-300"
+              style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Tiến trình</span>
+            <span className="text-xs font-bold text-[#00B4D8]">{aiProgress.progressPercent}%</span>
           </div>
         </div>
       )}
@@ -997,12 +1098,32 @@ const ProjectMentions = () => {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mr-1">Đã lưu</span>
             {savedFilters.map((f) => (
-              <span
-                key={f.filterId}
-                className="px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-xs text-gray-300"
-              >
-                {f.name}
-              </span>
+              <div key={f.filterId} className="group relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    console.log('Filter clicked:', f.name, f.config);
+                    if (f.config?.platform) setActivePlatform(f.config.platform);
+                    if (f.config?.sentiment) setActiveSentiment(f.config.sentiment);
+                    if (f.config?.search !== undefined) setSearchText(f.config.search || '');
+                    if (f.config?.isCrisisAlert !== undefined) setShowCrisisOnly(f.config.isCrisisAlert);
+                  }}
+                  className="px-3 py-1.5 pr-7 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-xs text-gray-300 transition-colors"
+                >
+                  {f.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteFilter(f.filterId);
+                  }}
+                  title="Xóa bộ lọc"
+                  className="absolute right-1 p-1 rounded-full text-gray-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -1093,7 +1214,7 @@ const ProjectMentions = () => {
           <MessageCircle className="w-14 h-14 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-300 font-medium">Chưa có mention nào</p>
           <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
-            Chạy cào dữ liệu từ trang Dự án để thu thập bài đăng từ Facebook, YouTube, TikTok và Tin tức.
+            Chạy cào dữ liệu từ trang Dự án để thu thập bài đăng từ Facebook, YouTube, TikTok, Tin tức hoặc Threads.
           </p>
         </div>
       ) : (
@@ -1125,6 +1246,7 @@ const ProjectMentions = () => {
               onManageTags={() => openTagModal(item)}
               onMuteAuthor={() => handleMuteAuthor(item)}
               onMutePlatform={() => handleMutePlatform(item)}
+              onPin={() => handleTogglePin(item)}
             />
           ))}
           {displayLimit < displayedMentions.length && (
@@ -1162,22 +1284,74 @@ const ProjectMentions = () => {
                 projectTags.map((tag) => {
                   const checked = selectedTagIds.includes(tag.tagId);
                   return (
-                    <label
-                      key={tag.tagId}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 hover:bg-white/5 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setSelectedTagIds((prev) =>
-                            checked ? prev.filter((id) => id !== tag.tagId) : [...prev, tag.tagId]
-                          )
-                        }
-                        className="rounded border-white/20"
-                      />
-                      <span className="text-sm text-white">{tag.name}</span>
-                    </label>
+                    <div key={tag.tagId} className="flex items-center gap-3 px-3 py-2 rounded-xl border border-white/5 hover:bg-white/5 group">
+                      {editingTagId === tag.tagId ? (
+                        <div className="flex flex-1 items-center gap-2">
+                          <input
+                            type="text"
+                            value={editingTagName}
+                            onChange={(e) => setEditingTagName(e.target.value)}
+                            className="flex-1 px-2 py-1 rounded bg-[#0A101D] border border-[#00B4D8]/50 text-sm text-white outline-none"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateTag(tag.tagId);
+                              if (e.key === 'Escape') setEditingTagId(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTag(tag.tagId)}
+                            className="p-1.5 rounded-lg text-green-400 hover:bg-green-400/10"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTagId(null)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:bg-white/10"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <label className="flex-1 flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setSelectedTagIds((prev) =>
+                                  checked ? prev.filter((id) => id !== tag.tagId) : [...prev, tag.tagId]
+                                )
+                              }
+                              className="rounded border-white/20"
+                            />
+                            <span className="text-sm text-white">{tag.name}</span>
+                          </label>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTagId(tag.tagId);
+                                setEditingTagName(tag.name);
+                              }}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10"
+                              title="Sửa tag"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTag(tag.tagId)}
+                              className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                              title="Xóa tag"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   );
                 })
               )}

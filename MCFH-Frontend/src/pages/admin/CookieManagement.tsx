@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Cookie, Loader2, Pencil, Trash2, Upload } from 'lucide-react';
+import { Cookie, Loader2, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import {
   adminApi,
@@ -30,9 +30,17 @@ const CookieManagement = () => {
 
   const [contentModalOpen, setContentModalOpen] = useState(false);
   const [metaModalOpen, setMetaModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [cookiesJson, setCookiesJson] = useState('');
   const [metaForm, setMetaForm] = useState<UpdatePlatformCookieMeta>({ status: 'active', note: '' });
+  const [createForm, setCreateForm] = useState({
+    platform: '',
+    filePath: 'cookies/',
+    status: 'disabled',
+    note: '',
+    cookiesJson: '',
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const loadCookies = useCallback(async () => {
@@ -58,6 +66,46 @@ const CookieManagement = () => {
     setSuccessMessage('');
     setErrorMessage('');
     setContentModalOpen(true);
+  };
+
+  const openCreateModal = () => {
+    setCreateForm({ platform: '', filePath: 'cookies/', status: 'disabled', note: '', cookiesJson: '' });
+    setSuccessMessage('');
+    setErrorMessage('');
+    setCreateModalOpen(true);
+  };
+
+  const handleCreate = async () => {
+    const platform = createForm.platform.trim().toLowerCase();
+    if (!platform) {
+      setErrorMessage('Vui lòng nhập mã platform (vd: facebook, tiktok).');
+      return;
+    }
+    const filePath = createForm.filePath.trim();
+    if (!filePath || !filePath.toLowerCase().endsWith('.json')) {
+      setErrorMessage('File path phải có đuôi .json và nằm trong thư mục cookies/.');
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      await adminApi.createPlatformCookie({
+        platform,
+        filePath,
+        status: createForm.status,
+        note: createForm.note.trim() || undefined,
+        cookiesJson: createForm.cookiesJson.trim() || undefined,
+      });
+      setCreateModalOpen(false);
+      setSuccessMessage(`Đã tạo platform ${platform}.`);
+      await loadCookies();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể tạo platform.'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const openMetaModal = (item: PlatformCookie) => {
@@ -127,14 +175,22 @@ const CookieManagement = () => {
   const activeCount = cookies.filter((c) => c.status === 'active' && c.fileExists).length;
 
   return (
-    <AdminLayout searchPlaceholder="Search platform cookies...">
+    <AdminLayout searchPlaceholder="Tìm kiếm cookie...">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Platform Cookies</h2>
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Quản lý Cookie Nền tảng</h2>
           <p className="text-[#6b7280] text-sm mt-1">
             Quản lý session cookie cho scraper — {activeCount} active / {cookies.length} platform
           </p>
         </div>
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#ef4444] text-white rounded-lg hover:bg-red-600"
+        >
+          <Plus className="w-4 h-4" />
+          Thêm Platform
+        </button>
       </div>
 
       {errorMessage && (
@@ -204,7 +260,9 @@ const CookieManagement = () => {
                       <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${statusClass(item.status)}`}>
                         {item.status}
                       </span>
-                      {item.isExpiringSoon && (
+                      {item.isExpired ? (
+                        <p className="text-xs text-red-600 mt-1 font-medium">Hết hạn</p>
+                      ) : item.isExpiringSoon && (
                         <p className="text-xs text-amber-600 mt-1">Sắp hết hạn</p>
                       )}
                     </td>
@@ -341,6 +399,97 @@ const CookieManagement = () => {
                 className="px-4 py-2 text-sm bg-[#ef4444] text-white rounded-lg hover:bg-red-600 disabled:opacity-60"
               >
                 {isSaving ? 'Đang lưu...' : 'Lưu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-1">Thêm Platform mới</h3>
+            <p className="text-sm text-[#6b7280] mb-4">
+              Tạo mới một platform trong PLATFORM_COOKIES. Có thể upload cookie luôn hoặc tạo record rỗng để dùng sau.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mã platform <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={createForm.platform}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, platform: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  placeholder="vd: instagram"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  File path <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={createForm.filePath}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, filePath: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
+                  placeholder="cookies/instagram.json"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
+                <select
+                  value={createForm.status}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, status: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                >
+                  <option value="disabled">disabled</option>
+                  <option value="active">active</option>
+                  <option value="expired">expired</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+                <input
+                  type="text"
+                  value={createForm.note}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, note: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                  placeholder="VD: Tài khoản test Instagram"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Cookie JSON (tuỳ chọn)
+              </label>
+              <p className="text-xs text-[#6b7280] mb-2">
+                Nếu dán JSON ngay, hệ thống sẽ ghi file và set status=active + tính expiresAt.
+              </p>
+              <textarea
+                value={createForm.cookiesJson}
+                onChange={(e) => setCreateForm((f) => ({ ...f, cookiesJson: e.target.value }))}
+                placeholder='[{"domain":".instagram.com","name":"sessionid",...}]'
+                rows={8}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono"
+              />
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(false)}
+                className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={isSaving}
+                className="px-4 py-2 text-sm bg-[#ef4444] text-white rounded-lg hover:bg-red-600 disabled:opacity-60"
+              >
+                {isSaving ? 'Đang tạo...' : 'Tạo platform'}
               </button>
             </div>
           </div>
