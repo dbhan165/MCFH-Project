@@ -25,7 +25,7 @@ export function getSentimentBadgeClass(sentiment: string | null | undefined) {
 }
 
 export function getPlatformLabel(platform: string) {
-  switch (platform.toLowerCase()) {
+  switch ((platform || '').trim().toLowerCase()) {
     case 'facebook':
       return 'FB';
     case 'youtube':
@@ -42,7 +42,7 @@ export function getPlatformLabel(platform: string) {
 }
 
 export function getPlatformDisplayName(platform: string) {
-  switch (platform.toLowerCase()) {
+  switch ((platform || '').trim().toLowerCase()) {
     case 'facebook':
       return 'Facebook';
     case 'youtube':
@@ -112,7 +112,7 @@ export function getSentimentFilterBadgeClass(filter: MentionSentimentFilter) {
 }
 
 export function getPlatformBadgeClass(platform: string) {
-  switch (platform.toLowerCase()) {
+  switch ((platform || '').trim().toLowerCase()) {
     case 'facebook':
       return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     case 'youtube':
@@ -166,5 +166,5 @@ export const PLATFORM_CHART_COLORS: Record<string, string> = {
 };
 
 export function getPlatformChartColor(platform: string): string {
-  return PLATFORM_CHART_COLORS[platform.toLowerCase()] ?? PLATFORM_CHART_COLORS.unknown;
+  return PLATFORM_CHART_COLORS[(platform || '').trim().toLowerCase()] ?? PLATFORM_CHART_COLORS.unknown;
 }

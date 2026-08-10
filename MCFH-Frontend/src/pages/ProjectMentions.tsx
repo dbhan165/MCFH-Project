@@ -142,7 +142,7 @@ function MentionCard({
 
   return (
     <article
-      className="group relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#141A28] to-[#101622] transition-all duration-200 hover:border-white/10 hover:shadow-lg hover:shadow-black/20"
+      className="group relative rounded-2xl border border-white/5 bg-gradient-to-br from-[#151B2B] via-[#141A28] to-[#101622] transition-all duration-200 hover:border-white/10 hover:shadow-lg hover:shadow-black/20"
       style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
     >
       <div className="p-5 sm:p-6">
@@ -921,40 +921,32 @@ const ProjectMentions = () => {
       </div>
 
       {aiProgress.isAnalyzing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0f1c]/80 backdrop-blur-md">
-          <div className="relative flex flex-col items-center p-8 rounded-3xl bg-[#151B2B]/80 border border-white/10 shadow-[0_0_80px_-20px_rgba(255,117,117,0.3)] overflow-hidden min-w-[320px]">
-            {/* Animated glowing background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#FF7575]/20 via-transparent to-transparent opacity-50 animate-pulse" />
-            
-            <div className="relative mb-6 mt-2">
-              <div className="absolute inset-0 bg-[#FF7575] blur-xl opacity-40 animate-pulse" />
-              <div className="relative bg-[#1a2133] p-5 rounded-2xl border border-white/10 shadow-inner">
-                <BrainCircuit className="w-12 h-12 text-[#FF7575] animate-pulse" />
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col p-5 rounded-2xl bg-[#151B2B]/95 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(255,117,117,0.15)] w-[320px]">
+          <div className="flex items-center gap-4 mb-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-[#FF7575] blur-md opacity-40 animate-pulse rounded-full" />
+              <div className="relative bg-[#1a2133] p-2.5 rounded-xl border border-white/10">
+                <BrainCircuit className="w-6 h-6 text-[#FF7575] animate-pulse" />
               </div>
             </div>
-            
-            <h3 className="text-xl font-bold text-white mb-2 tracking-wide flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[#FF7575]" />
-              AI Đang Làm Việc... {aiProgress.progressPercent}%
-            </h3>
-            
-            {/* Progress bar */}
-            <div className="w-full max-w-[280px] h-2 bg-white/10 rounded-full mt-2 mb-4 overflow-hidden relative">
-              <div 
-                className="h-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-300"
-                style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
-              />
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#FF7575]" />
+                AI đang làm việc...
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">Tổng hợp cảm xúc & lượt nhắc</p>
             </div>
-            
-            <p className="text-sm text-gray-400 text-center max-w-[280px] leading-relaxed">
-              Hệ thống đang đọc và tổng hợp cảm xúc từ các lượt nhắc. Vui lòng chờ trong giây lát.
-            </p>
-            
-            <div className="mt-8 mb-2 flex justify-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2.5 h-2.5 rounded-full bg-[#FF7575] animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
+          </div>
+          
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
+            <div 
+              className="h-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-300"
+              style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Tiến trình</span>
+            <span className="text-xs font-bold text-[#00B4D8]">{aiProgress.progressPercent}%</span>
           </div>
         </div>
       )}

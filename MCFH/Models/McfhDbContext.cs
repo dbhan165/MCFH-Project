@@ -693,6 +693,7 @@ public partial class McfhDbContext : DbContext
                         j.IndexerProperty<int>("TagId").HasColumnName("tag_id");
                     });
 
+            entity.Property(e => e.ImportFileId).HasColumnName("import_file_id");
             entity.Property(e => e.ProjectId).HasColumnName("project_id");
             entity.Property(e => e.Platform)
                 .HasMaxLength(50)

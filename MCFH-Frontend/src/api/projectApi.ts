@@ -53,6 +53,33 @@ function normalizeAnalyzeResult(data: Record<string, unknown>): AnalyzeProjectRe
 }
 
 export const projectApi = {
+  list: (workspaceId: number) =>
+    axiosClient.get<Project[]>(`/api/workspaces/${workspaceId}/projects`).then((res) => res.data),
+
+  getDataSources: (workspaceId: number, projectId: number) =>
+    axiosClient.get<any[]>(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources`).then((res) => res.data),
+
+  addDataSource: (workspaceId: number, projectId: number, data: any) =>
+    axiosClient.post<any>(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources`, data).then((res) => res.data),
+
+  toggleDataSource: (workspaceId: number, projectId: number, sourceId: number) =>
+    axiosClient.put(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources/${sourceId}/toggle`).then((res) => res.data),
+
+  deleteDataSource: (workspaceId: number, projectId: number, sourceId: number) =>
+    axiosClient.delete(`/api/workspaces/${workspaceId}/projects/${projectId}/data-sources/${sourceId}`).then((res) => res.data),
+
+  getImportFiles: (workspaceId: number, projectId: number) =>
+    axiosClient.get<any[]>(`/api/workspaces/${workspaceId}/projects/${projectId}/imports`).then((res) => res.data),
+
+  deleteImportFile: (workspaceId: number, projectId: number, fileId: number) => {
+    return axiosClient.delete(`/api/workspaces/${workspaceId}/projects/${projectId}/imports/${fileId}`);
+  },
+
+  importFile: (workspaceId: number, projectId: number, formData: FormData) =>
+    axiosClient.post<any>(`/api/workspaces/${workspaceId}/projects/${projectId}/imports`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then((res) => res.data),
+
   getProjects: async (workspaceId: number): Promise<Project[]> => {
     const response = await axiosClient.get<unknown[]>(
       `/api/workspaces/${workspaceId}/projects/extended`

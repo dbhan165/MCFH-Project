@@ -103,6 +103,7 @@ public class ProjectAnalyticsService
 
         await ProjectFeedbackQueryHelper.BackfillProjectIdsAsync(_context, projectId);
         var query = ProjectFeedbackQueryHelper.ForProject(_context, projectId)
+            .AsNoTracking()
             .Include(f => f.AiAnalysis)
             .Include(f => f.Tags)
             .AsQueryable();

@@ -154,6 +154,7 @@ namespace MCFH
                 .UseSqlServerStorage(builder.Configuration.GetConnectionString("MyCnn")));
             builder.Services.AddHangfireServer();
             builder.Services.AddScoped<ScrapingJobService>();
+            builder.Services.AddScoped<ProjectDataSourceService>();
 
             var app = builder.Build();
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace MCFH.Models;
@@ -39,8 +39,9 @@ public partial class ScrapedFeedback
 
     public virtual ICollection<Tag> Tags { get; set; } = new List<Tag>();
 
+    public int? ImportFileId { get; set; }
     public int? ProjectId { get; set; }
     public string? Platform { get; set; }
 
-    public virtual Project? Project { get; set; }  // Navigation property mới
+    public virtual Project? Project { get; set; }  // Navigation property m?i
 }
