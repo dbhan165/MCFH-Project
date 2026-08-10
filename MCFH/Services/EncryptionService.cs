@@ -10,6 +10,10 @@ public class EncryptionService
 {
     private readonly byte[] _key;
 
+    // Cached key cho static decryption (chỉ dùng từ SecretKeyMasker trong DTO mapping).
+    private static string? _staticKeyString;
+    private static readonly object _lock = new();
+
     public EncryptionService(IConfiguration configuration)
     {
         var keyString = configuration["Encryption:Key"];
@@ -17,9 +21,47 @@ public class EncryptionService
         {
             throw new InvalidOperationException("Encryption:Key is missing or too short. It must be at least 32 characters.");
         }
-        
+
         // Dùng 32 byte đầu tiên để chạy AES-256
         _key = Encoding.UTF8.GetBytes(keyString.Substring(0, 32));
+
+        // Cache key cho static helper
+        lock (_lock)
+        {
+            _staticKeyString ??= keyString.Substring(0, 32);
+        }
+    }
+
+    /// <summary>
+    /// Static decrypt — dùng trong SecretKeyMasker.MaskPlaintext (DTO mapping, không có DI).
+    /// Throw nếu chưa có EncryptionService được khởi tạo.
+    /// </summary>
+    public static string? StaticDecrypt(string cipherText)
+    {
+        if (string.IsNullOrEmpty(cipherText)) return cipherText;
+        var keyString = _staticKeyString;
+        if (string.IsNullOrEmpty(keyString))
+            throw new InvalidOperationException("EncryptionService chưa được khởi tạo. StaticDecrypt chỉ dùng sau app startup.");
+        var key = Encoding.UTF8.GetBytes(keyString);
+        try
+        {
+            var fullCipher = Convert.FromBase64String(cipherText);
+            using var aes = Aes.Create();
+            aes.Key = key;
+            var iv = new byte[aes.BlockSize / 8];
+            if (fullCipher.Length < iv.Length) return cipherText;
+            Array.Copy(fullCipher, iv, iv.Length);
+            aes.IV = iv;
+            using var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
+            using var ms = new MemoryStream(fullCipher, iv.Length, fullCipher.Length - iv.Length);
+            using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
+            using var sr = new StreamReader(cs);
+            return sr.ReadToEnd();
+        }
+        catch
+        {
+            return cipherText;
+        }
     }
 
     public string? Encrypt(string? plainText)

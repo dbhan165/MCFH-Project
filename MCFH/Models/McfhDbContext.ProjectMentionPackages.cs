@@ -85,5 +85,110 @@ public partial class McfhDbContext
                 .HasColumnName("created_at")
                 .HasDefaultValueSql("(getdate())");
         });
+
+        modelBuilder.Entity<BrevoKey>(entity =>
+        {
+            entity.HasKey(e => e.BrevoKeyId);
+            entity.ToTable("BREVO_KEYS");
+
+            entity.HasIndex(e => new { e.IsDefault, e.Status }, "IX_BrevoKeys_Default_Status");
+
+            entity.Property(e => e.BrevoKeyId).HasColumnName("brevo_key_id");
+            entity.Property(e => e.KeyType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("api")
+                .HasColumnName("key_type");
+            entity.Property(e => e.ApiKeyEncrypted)
+                .HasColumnName("api_key_encrypted");
+            entity.Property(e => e.SmtpLogin)
+                .HasMaxLength(255)
+                .IsUnicode(false)
+                .HasColumnName("smtp_login");
+            entity.Property(e => e.FromAddress)
+                .HasMaxLength(255)
+                .IsUnicode(false)
+                .HasColumnName("from_address");
+            entity.Property(e => e.FromName)
+                .HasMaxLength(100)
+                .HasColumnName("from_name");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("active")
+                .HasColumnName("status");
+            entity.Property(e => e.IsDefault)
+                .HasDefaultValue(false)
+                .HasColumnName("is_default");
+            entity.Property(e => e.Note)
+                .HasMaxLength(1000)
+                .HasColumnName("note");
+            entity.Property(e => e.LastUsedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("last_used_at");
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.UpdatedByNavigation).WithMany()
+                .HasForeignKey(d => d.UpdatedBy)
+                .HasConstraintName("FK_BrevoKeys_UpdatedBy")
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
+
+        modelBuilder.Entity<PayOsKey>(entity =>
+        {
+            entity.HasKey(e => e.PayOsKeyId);
+            entity.ToTable("PAYOS_KEYS");
+
+            entity.HasIndex(e => new { e.IsDefault, e.Status }, "IX_PayOsKeys_Default_Status");
+
+            entity.Property(e => e.PayOsKeyId).HasColumnName("payos_key_id");
+            entity.Property(e => e.ClientId)
+                .HasMaxLength(64)
+                .IsUnicode(false)
+                .HasColumnName("client_id");
+            entity.Property(e => e.ApiKeyEncrypted)
+                .HasColumnName("api_key_encrypted");
+            entity.Property(e => e.ChecksumKeyEncrypted)
+                .HasColumnName("checksum_key_encrypted");
+            entity.Property(e => e.Environment)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("live")
+                .HasColumnName("environment");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("active")
+                .HasColumnName("status");
+            entity.Property(e => e.IsDefault)
+                .HasDefaultValue(false)
+                .HasColumnName("is_default");
+            entity.Property(e => e.Note)
+                .HasMaxLength(1000)
+                .HasColumnName("note");
+            entity.Property(e => e.LastUsedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("last_used_at");
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.UpdatedByNavigation).WithMany()
+                .HasForeignKey(d => d.UpdatedBy)
+                .HasConstraintName("FK_PayOsKeys_UpdatedBy")
+                .OnDelete(DeleteBehavior.ClientSetNull);
+        });
     }
 }
