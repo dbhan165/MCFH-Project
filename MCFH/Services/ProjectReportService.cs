@@ -367,7 +367,8 @@ public class ProjectReportService
             ? aiInsights.ActionItems 
             : BuildActionItems(pendingCount, topRiskChannel, topInfluencer, aspects);
         var mentionHighlights = mentions
-            .OrderByDescending(m => string.Equals(m.Sentiment, "negative", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(m => m.PinnedForReport)
+            .ThenByDescending(m => string.Equals(m.Sentiment, "negative", StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(m => m.CommentsCount)
             .ThenByDescending(m => m.PostedAt ?? m.ScrapedAt ?? DateTime.MinValue)
             .Take(6)
@@ -542,7 +543,9 @@ public class ProjectReportService
                 sb.AppendLine("<article class=\"mention\">");
                 sb.AppendLine("<div class=\"mention-head\">");
                 sb.AppendLine("<div>");
-                sb.AppendLine($"<div class=\"mention-title\">{EscapeHtml(mention.AuthorName ?? "Tác giả không rõ")}</div>");
+                var titleText = EscapeHtml(mention.AuthorName ?? "Tác giả không rõ");
+                if (mention.PinnedForReport) titleText = "📌 " + titleText;
+                sb.AppendLine($"<div class=\"mention-title\">{titleText}</div>");
                 sb.AppendLine($"<div class=\"mention-meta\">{string.Join(" · ", metaParts)}</div>");
                 sb.AppendLine("</div>");
                 sb.AppendLine($"<span class=\"pill {GetSentimentCssClass(mention.Sentiment)}\">{EscapeHtml(FormatSentimentLabel(mention.Sentiment))}</span>");
