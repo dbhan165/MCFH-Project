@@ -50,6 +50,7 @@ import Invitations from "./pages/Invitations";
 import Profile from "./pages/Profile";
 import Subscription from "./pages/Subscription";
 import SubscriptionUpgrade from "./pages/SubscriptionUpgrade";
+
 import ProjectOverview from "./pages/ProjectOverview";
 import ProjectMentions from "./pages/ProjectMentions";
 import ProjectDataSources from "./pages/ProjectDataSources";
@@ -142,6 +143,7 @@ function AppRoutes() {
             path="/subscription/upgrade"
             element={<SubscriptionUpgrade />}
           />
+
           <Route
             path="/workspace/:workspaceId/project/bespoke-reports"
             element={<ProjectBespokeReports />}

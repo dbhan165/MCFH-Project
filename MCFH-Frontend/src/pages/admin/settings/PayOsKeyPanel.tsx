@@ -161,7 +161,6 @@ const PayOsKeyPanel = () => {
 
 const PayOsKeyRow = ({
   item,
-  index,
   onEdit,
   onDelete,
   onSetDefault,

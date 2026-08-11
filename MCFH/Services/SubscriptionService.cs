@@ -81,6 +81,25 @@ public class SubscriptionService
         var plan = subscription?.Plan;
         var limits = ResolveLimits(plan);
 
+        var projectPackages = await _context.ProjectMentionPackages
+            .Include(p => p.Project)
+            .Include(p => p.Payment)
+            .Where(p => p.Project.WorkspaceId == workspace.WorkspaceId && p.Project.IsDeleted != true)
+            .OrderByDescending(p => p.CreatedAt)
+            .Select(p => new ProjectPackageDto
+            {
+                PackageId = p.PackageId,
+                ProjectName = p.Project.Name,
+                PackageType = p.PackageType,
+                MentionsIncluded = p.MentionsIncluded,
+                MentionsUsed = p.MentionsUsed,
+                Amount = p.Payment != null ? p.Payment.Amount : 0,
+                PaymentStatus = p.Payment != null ? p.Payment.Status ?? "unknown" : "unknown",
+                CreatedAt = p.CreatedAt,
+                Status = p.Status
+            })
+            .ToListAsync();
+
         return new BillingSummaryDto
         {
             WorkspaceId = workspace.WorkspaceId,
@@ -99,7 +118,8 @@ public class SubscriptionService
             MemberUsed = memberCount,
             MemberLimit = limits.Members,
             AiCreditUsed = credits?.UsedCredits ?? 0,
-            AiCreditLimit = plan?.AiCreditLimit ?? limits.AiCredits
+            AiCreditLimit = plan?.AiCreditLimit ?? limits.AiCredits,
+            ProjectPackages = projectPackages
         };
     }
 

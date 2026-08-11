@@ -66,9 +66,18 @@ interface SendToReporterModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSubmit: (note: string) => Promise<void>;
+    /** Số lần sắp gửi (1..3). */
+    roundNumber?: number;
+    maxRounds?: number;
 }
 
-export const SendToReporterModal = ({ isOpen, onClose, onSubmit }: SendToReporterModalProps) => {
+export const SendToReporterModal = ({
+    isOpen,
+    onClose,
+    onSubmit,
+    roundNumber = 1,
+    maxRounds = 3,
+}: SendToReporterModalProps) => {
     const [note, setNote] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -99,7 +108,9 @@ export const SendToReporterModal = ({ isOpen, onClose, onSubmit }: SendToReporte
                     <X size={20} />
                 </button>
                 <div className="p-6 border-b border-white/5 shrink-0">
-                    <h2 className="text-xl font-bold text-white">Gửi Reporter chỉnh sửa</h2>
+                    <h2 className="text-xl font-bold text-white">
+                        Gửi lần {roundNumber}/{maxRounds}
+                    </h2>
                     <p className="text-sm text-gray-400 mt-1">
                         Mô tả phần cần sửa để Reporter biết chỉnh đúng chỗ.
                     </p>

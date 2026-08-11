@@ -121,9 +121,16 @@ const BespokeRequests = () => {
                         >
                           <div className="flex items-start justify-between gap-2 mb-3">
                             <span className="text-xs font-semibold text-[#78716c]">#{card.requestId}</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-stone-100 text-stone-600">
-                              {card.statusLabel}
-                            </span>
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              {card.reporterSendCount > 0 && (
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-rose-50 text-[#e11d48]">
+                                  Lần {card.reporterSendCount}/{card.maxReporterSends || 3}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-stone-100 text-stone-600">
+                                {card.statusLabel}
+                              </span>
+                            </div>
                           </div>
 
                           <h4 className="text-base font-bold text-[#111827] mb-3 leading-snug">{card.title}</h4>

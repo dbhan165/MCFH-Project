@@ -38,14 +38,11 @@ const Welcome = () => {
           
           <nav className="hidden md:flex items-center gap-1 bg-white/5 border border-white/10 p-1.5 rounded-full backdrop-blur-md">
             <a href="#product" onClick={(e) => handleScroll(e, 'product')} className="bg-[#00B4D8]/15 text-[#00B4D8] px-5 py-2 rounded-full text-sm font-semibold transition-all">
-              Sản phẩm
+              Tính năng
             </a>
-            <a href="#bespoke" onClick={(e) => handleScroll(e, 'bespoke')} className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
-              Báo cáo Bespoke
+            <a href="#ai-report" onClick={(e) => handleScroll(e, 'ai-report')} className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
+              Báo cáo AI
             </a>
-            <Link to="/pricing" className="text-gray-300 hover:text-white hover:bg-white/10 px-5 py-2 rounded-full text-sm font-medium transition-all">
-              Bảng giá
-            </Link>
           </nav>
 
           {/* Auth Actions */}
@@ -81,15 +78,15 @@ const Welcome = () => {
 
             {/* Description */}
             <p className="text-[#9BA1B0] text-lg max-w-lg leading-relaxed">
-              Nền tảng Social Listening kết hợp chấm điểm NSR và Báo cáo 
-              Bespoke chuyên sâu dành cho doanh nghiệp lớn. Khai phá sức mạnh 
+              Nền tảng Social Listening kết hợp đánh giá cảm xúc và xuất báo cáo 
+              AI tự động chuyên sâu dành cho doanh nghiệp. Khai phá sức mạnh 
               dữ liệu để dẫn đầu thị trường.
             </p>
 
             {/* Call to Actions (CTA) */}
             <div className="flex items-center gap-6 pt-2">
-              <Link to="/create-workspace" className="bg-gradient-to-r from-[#00B4D8] to-[#3B82F6] hover:from-[#0693B0] hover:to-[#2563EB] text-white px-8 py-4 rounded-full text-sm font-bold flex items-center gap-2 transition-all shadow-[0_8px_25px_rgba(0,180,216,0.3)] hover:shadow-[0_12px_30px_rgba(0,180,216,0.4)] hover:-translate-y-1">
-                Khởi tạo Workspace ngay <ArrowRight size={18} />
+              <Link to="/login" className="bg-gradient-to-r from-[#00B4D8] to-[#3B82F6] hover:from-[#0693B0] hover:to-[#2563EB] text-white px-8 py-4 rounded-full text-sm font-bold flex items-center gap-2 transition-all shadow-[0_8px_25px_rgba(0,180,216,0.3)] hover:shadow-[0_12px_30px_rgba(0,180,216,0.4)] hover:-translate-y-1">
+                Trải nghiệm ngay <ArrowRight size={18} />
               </Link>
               <a href="#product" className="text-gray-300 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors group">
                 <PlayCircle size={24} className="text-[#00B4D8] group-hover:text-white transition-colors" /> Khám phá tính năng
@@ -159,14 +156,14 @@ const Welcome = () => {
         </div>
       </section>
 
-      {/* Bespoke Reports Section */}
-      <section id="bespoke" className="relative z-10 border-t border-white/5 bg-gradient-to-b from-[#0A101D] to-[#050A15] py-24 scroll-mt-20">
+      {/* AI Reports Section */}
+      <section id="ai-report" className="relative z-10 border-t border-white/5 bg-gradient-to-b from-[#0A101D] to-[#050A15] py-24 scroll-mt-20">
         <div className="container mx-auto px-8 text-center">
           <div className="w-16 h-16 bg-[#3B82F6]/10 rounded-2xl flex items-center justify-center text-[#3B82F6] mx-auto mb-6"><FileText size={32} strokeWidth={1.5} /></div>
-          <h2 className="text-4xl font-extrabold mb-6 tracking-tight">Báo cáo Bespoke chuyên sâu</h2>
-          <p className="text-[#9BA1B0] max-w-2xl mx-auto leading-relaxed mb-10 text-lg">Vượt xa những biểu đồ tự động, đội ngũ chuyên gia dữ liệu của MCFH sẽ thiết kế riêng các báo cáo độc quyền, mang tính chiến lược cao dành riêng cho mô hình kinh doanh của bạn.</p>
-          <Link to="/pricing" className="inline-flex items-center gap-2 bg-white text-[#0A101D] hover:bg-gray-200 px-8 py-4 rounded-full text-sm font-bold transition-colors">
-            Khám phá gói dịch vụ <ArrowRight size={18} />
+          <h2 className="text-4xl font-extrabold mb-6 tracking-tight">Báo cáo AI chuyên sâu</h2>
+          <p className="text-[#9BA1B0] max-w-2xl mx-auto leading-relaxed mb-10 text-lg">Hệ thống AI tự động tổng hợp dữ liệu, đánh giá cảm xúc, phân tích SWOT và đưa ra các đề xuất chiến lược hoàn toàn tự động chỉ với 1 thao tác click.</p>
+          <Link to="/login" className="inline-flex items-center gap-2 bg-white text-[#0A101D] hover:bg-gray-200 px-8 py-4 rounded-full text-sm font-bold transition-colors">
+            Trải nghiệm ngay <ArrowRight size={18} />
           </Link>
         </div>
       </section>
@@ -183,9 +180,8 @@ const Welcome = () => {
             <div className="border-l border-white/10 pl-4">© {new Date().getFullYear()} MCFH. All rights reserved.</div>
           </div>
           <div className="flex gap-8 font-medium">
-            <Link to="/pricing" className="hover:text-white transition-colors">Bảng giá</Link>
             <Link to="/login" className="hover:text-white transition-colors">Đăng nhập</Link>
-            <Link to="/create-workspace" className="hover:text-white transition-colors">Dùng thử miễn phí</Link>
+            <Link to="/login" className="hover:text-white transition-colors">Dùng thử miễn phí</Link>
           </div>
         </div>
       </footer>

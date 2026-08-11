@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Database, FileUp, Loader2, Plus, AlertCircle, ToggleLeft, ToggleRight, Trash2, CheckCircle2, Download
+  Database, FileUp, Loader2, AlertCircle, ToggleLeft, ToggleRight, Trash2, Download
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import { extractApiError } from '../utils/authStorage';
@@ -31,7 +31,7 @@ const ProjectDataSources = () => {
       if (activeTab === 'sources') {
         const data = await projectApi.getDataSources(wid, projectId);
         setSources(data);
-      } else {
+      } else if (activeTab === 'imports') {
         const data = await projectApi.getImportFiles(wid, projectId);
         setImports(data);
       }
@@ -54,7 +54,7 @@ const ProjectDataSources = () => {
       message: `Bạn có chắc muốn ${action.toLowerCase()} nguồn cào này không?`,
       confirmText: action,
       cancelText: 'Hủy',
-      type: currentStatus === 'active' ? 'warning' : 'info',
+      type: 'warning',
     });
     if (!confirmed) return;
 
@@ -89,14 +89,6 @@ const ProjectDataSources = () => {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleAddSource = async () => {
-    await alert({
-      title: 'Thêm nguồn mới',
-      message: 'Tính năng này đang trong quá trình thử nghiệm và sẽ sớm ra mắt (UI coming soon). Bạn có thể thêm nguồn từ màn hình Tạo Dự án.',
-      type: 'info'
-    });
   };
 
   const handleDeleteImport = async (fileId: number) => {
@@ -279,80 +271,65 @@ const ProjectDataSources = () => {
               </div>
             )}
           </>
-        ) : (
+        ) : activeTab === 'imports' ? (
           <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <div className="bg-[#00B4D8]/10 border border-[#00B4D8]/20 rounded-lg p-3 text-sm text-[#00B4D8] max-w-2xl">
-                <p className="font-semibold mb-1 flex items-center gap-2">
-                  <AlertCircle size={16} /> Hướng dẫn định dạng file Excel
-                </p>
-                <p className="text-gray-300 text-xs leading-relaxed">
-                  Dòng 1 bắt buộc là <strong>Tiêu đề</strong>. Các dòng tiếp theo điền dữ liệu theo 4 cột: 
-                  <strong> Cột A</strong> (Tên tác giả) - 
-                  <strong> Cột B</strong> (Nội dung bình luận) - 
-                  <strong> Cột C</strong> (Thời gian) - 
-                  <strong> Cột D</strong> (Nền tảng).
-                </p>
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Lịch sử tải lên</h3>
+                <p className="text-xs text-gray-400">Các file Excel / CSV đã được nạp dữ liệu</p>
               </div>
-              <div className="shrink-0 flex items-center gap-3">
+              <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleDownloadTemplate}
-                  className="flex items-center gap-2 bg-[#151B2B] hover:bg-white/5 border border-white/10 text-gray-300 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-semibold rounded-xl border border-white/10 transition-colors"
                 >
-                  <Download size={16} />
-                  Tải file mẫu
+                  <Download size={16} /> Tải file mẫu (.xlsx)
                 </button>
+                
                 <input
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept=".xlsx,.xls,.csv"
+                  accept=".xlsx, .xls, .csv"
                   className="hidden"
                 />
+
                 <button
+                  type="button"
                   onClick={handleImportFileClick}
                   disabled={isProcessing}
-                  className="flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-4 py-2.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md disabled:opacity-50"
                 >
-                  {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
-                  Tải file Excel/CSV
+                  <FileUp size={16} /> Import file dữ liệu
                 </button>
               </div>
             </div>
+
             {isLoading ? (
               <div className="flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-[#00B4D8]" /></div>
             ) : imports.length === 0 ? (
-              <div className="text-center py-10 text-gray-500 text-sm">Chưa có file nào được tải lên.</div>
+              <div className="text-center py-10 text-gray-500 text-sm">Chưa có file nào được nạp vào dự án này.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-gray-300">
                   <thead className="bg-[#151B2B] text-gray-400 font-semibold">
                     <tr>
                       <th className="px-4 py-3 rounded-l-lg">ID</th>
-                      <th className="px-4 py-3">Tên file</th>
-                      <th className="px-4 py-3">Ngày nhập</th>
-                      <th className="px-4 py-3">Người nhập</th>
-                      <th className="px-4 py-3">Dung lượng</th>
-                      <th className="px-4 py-3">Trạng thái</th>
-                      <th className="px-4 py-3 rounded-r-lg">Hành động</th>
+                      <th className="px-4 py-3">Tên File</th>
+                      <th className="px-4 py-3">Số lượng tin</th>
+                      <th className="px-4 py-3">Thời gian import</th>
+                      <th className="px-4 py-3 rounded-r-lg text-right">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {imports.map(f => (
                       <tr key={f.fileId} className="hover:bg-white/[0.02]">
                         <td className="px-4 py-4 font-mono text-xs">{f.fileId}</td>
-                        <td className="px-4 py-4 font-medium text-white">{f.fileName}</td>
-                        <td className="px-4 py-4 text-xs text-gray-400">{f.importedAt ? formatWorkspaceDateTime(f.importedAt) : '-'}</td>
-                        <td className="px-4 py-4">{f.uploadedByName}</td>
-                        <td className="px-4 py-4 font-mono text-xs">{f.importedRows?.toLocaleString()} / {f.totalRows?.toLocaleString()} rows</td>
-                        <td className="px-4 py-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            f.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          }`}>
-                            <CheckCircle2 size={12} /> {f.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-4 font-semibold text-white">{f.fileName}</td>
+                        <td className="px-4 py-4 text-xs text-gray-400">{f.recordCount || '-'} dòng</td>
+                        <td className="px-4 py-4 text-xs text-gray-400">{f.uploadedAt ? formatWorkspaceDateTime(f.uploadedAt) : '-'}</td>
+                        <td className="px-4 py-4 text-right">
                           <button
                             onClick={() => handleDeleteImport(f.fileId)}
                             className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-white/10 rounded-md transition-colors"
@@ -368,7 +345,7 @@ const ProjectDataSources = () => {
               </div>
             )}
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -54,6 +54,15 @@ export default function RequestDetail() {
     }
   };
 
+  const handleDownloadVersion = async (reportId: number) => {
+    if (!requestId) return;
+    try {
+      await reporterApi.downloadReportVersion(requestId, reportId);
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể tải bản báo cáo này.'));
+    }
+  };
+
   const handleUpload = async () => {
     if (!requestId || !file) {
       setErrorMessage('Vui lòng chọn file báo cáo đã chỉnh sửa.');
@@ -108,6 +117,16 @@ export default function RequestDetail() {
     request.status === 'revision_requested';
   const priceLabel =
     request.agreedPrice != null ? `${request.agreedPrice.toLocaleString('vi-VN')} VND` : null;
+  const currentRound = request.reporterSendCount || 0;
+  const maxRounds = request.maxReporterSends || 3;
+  const rounds = request.revisionRounds ?? [];
+
+  const formatTime = (value: string | null | undefined) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString('vi-VN');
+  };
 
   return (
     <ReporterLayout activeTopNav="reports">
@@ -121,9 +140,16 @@ export default function RequestDetail() {
             <span className="text-stone-600 font-semibold">Yêu cầu #{request.requestId}</span>
           </div>
           <h1 className="text-2xl font-bold text-[#111827] mt-2 tracking-tight">{request.title}</h1>
-          <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-[#e11d48] text-[11px] font-medium rounded-full">
-            <span className="w-1.5 h-1.5 bg-[#e11d48] rounded-full" />
-            {request.statusLabel}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-[#e11d48] text-[11px] font-medium rounded-full">
+              <span className="w-1.5 h-1.5 bg-[#e11d48] rounded-full" />
+              {request.statusLabel}
+            </div>
+            {currentRound > 0 && (
+              <div className="inline-flex items-center px-2.5 py-1 bg-stone-100 text-stone-700 text-[11px] font-semibold rounded-full">
+                Yêu cầu lần {currentRound}/{maxRounds}
+              </div>
+            )}
           </div>
         </div>
 
@@ -153,7 +179,10 @@ export default function RequestDetail() {
 
                 {request.revisionFeedback && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                    <p className="text-xs font-bold text-[#e11d48] mb-1">Chi tiết cần chỉnh sửa</p>
+                    <p className="text-xs font-bold text-[#e11d48] mb-1">
+                      Chi tiết cần chỉnh sửa
+                      {currentRound > 0 ? ` (lần ${currentRound})` : ''}
+                    </p>
                     <p className="text-sm text-rose-900 whitespace-pre-wrap">{request.revisionFeedback}</p>
                   </div>
                 )}
@@ -188,6 +217,40 @@ export default function RequestDetail() {
                 )}
               </div>
             </div>
+
+            {rounds.length > 0 && (
+              <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+                <h2 className="text-md font-bold text-[#111827] mb-4">Lịch sử các lần gửi</h2>
+                <ol className="space-y-4">
+                  {rounds.map((round) => (
+                    <li key={round.roundNumber} className="border-l-2 border-stone-200 pl-4">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold text-[#111827]">Lần {round.roundNumber}</span>
+                        <span className="text-xs text-stone-500">{formatTime(round.sentAt)}</span>
+                        <span className="text-xs text-stone-500">
+                          {round.reporterDeliveredAt
+                            ? `· Đã nộp ${formatTime(round.reporterDeliveredAt)}`
+                            : '· Chờ nộp'}
+                        </span>
+                      </div>
+                      {round.note && (
+                        <p className="mt-1 text-sm text-stone-600 whitespace-pre-wrap">{round.note}</p>
+                      )}
+                      {round.deliverableReportId != null && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadVersion(round.deliverableReportId!)}
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#e11d48] hover:underline"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Tải bản đã nộp{round.version ? ` (${round.version})` : ''}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-5 space-y-6">

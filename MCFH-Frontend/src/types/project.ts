@@ -185,6 +185,16 @@ export interface ReportCenter {
   reports: ReportFile[];
 }
 
+export interface BespokeRevisionRound {
+  roundNumber: number;
+  sentAt: string;
+  note: string;
+  clientUserId: number | null;
+  reporterDeliveredAt: string | null;
+  deliverableReportId: number | null;
+  version: string | null;
+}
+
 export interface BespokeRequestItem {
   requestId: number;
   /** Project riêng tạo kèm đơn bespoke — dùng cho pay/download/assign. */
@@ -209,6 +219,11 @@ export interface BespokeRequestItem {
   agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
+  revisionFeedback?: string | null;
+  reporterSendCount: number;
+  maxReporterSends: number;
+  canSendToReporter: boolean;
+  revisionRounds: BespokeRevisionRound[];
 }
 
 export interface ReporterOption {

@@ -39,6 +39,18 @@ public class AssignBespokeReporterDto
     public int ReporterId { get; set; }
 }
 
+/// <summary>Một vòng Client gửi Reporter (tối đa 3).</summary>
+public class BespokeRevisionRoundDto
+{
+    public int RoundNumber { get; set; }
+    public DateTime SentAt { get; set; }
+    public string Note { get; set; } = "";
+    public int? ClientUserId { get; set; }
+    public DateTime? ReporterDeliveredAt { get; set; }
+    public int? DeliverableReportId { get; set; }
+    public string? Version { get; set; }
+}
+
 public class BespokeRequestItemDto
 {
     public int RequestId { get; set; }
@@ -64,6 +76,12 @@ public class BespokeRequestItemDto
     public decimal? AgreedPrice { get; set; }
     public bool HasDeliverable { get; set; }
     public int? DeliverableReportId { get; set; }
+    /// <summary>Note lần gửi Reporter hiện tại (round mới nhất).</summary>
+    public string? RevisionFeedback { get; set; }
+    public int ReporterSendCount { get; set; }
+    public int MaxReporterSends { get; set; } = 3;
+    public bool CanSendToReporter { get; set; }
+    public List<BespokeRevisionRoundDto> RevisionRounds { get; set; } = new();
 }
 
 public class ReporterOptionDto

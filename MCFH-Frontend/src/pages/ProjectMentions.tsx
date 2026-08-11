@@ -21,12 +21,13 @@ import {
   VolumeX,
   AlertTriangle,
   BrainCircuit,
+  Pencil,
   Pin,
   Edit2,
   Check,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { AiAnalysisProgress, ProjectMention, MentionTag } from '../types/project';
+import type { AiAnalysisProgress, ProjectMention, MentionTag, MuteEntity } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
 import { useAppModal } from '../contexts/AppModalContext';
@@ -78,11 +79,10 @@ function MetricCard({
     <Tag
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`rounded-2xl border p-4 text-left transition-all duration-200 ${
-        active
-          ? 'border-white/20 bg-white/[0.06] ring-1 ring-white/10'
-          : 'border-white/5 bg-[#151B2B]/80 hover:border-white/10'
-      } ${onClick ? 'cursor-pointer' : ''}`}
+      className={`rounded-2xl border p-4 text-left transition-all duration-200 ${active
+        ? 'border-white/20 bg-white/[0.06] ring-1 ring-white/10'
+        : 'border-white/5 bg-[#151B2B]/80 hover:border-white/10'
+        } ${onClick ? 'cursor-pointer' : ''}`}
     >
       <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">{label}</p>
       <p className={`text-2xl font-black tabular-nums mt-1 ${accentClass}`}>{value}</p>
@@ -204,11 +204,10 @@ function MentionCard({
               type="button"
               onClick={onPin}
               disabled={isBusy}
-              className={`p-2 rounded-xl transition-all disabled:opacity-40 mr-1 ${
-                item.pinnedForReport 
-                  ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20' 
-                  : 'text-gray-500 hover:text-white hover:bg-white/10'
-              }`}
+              className={`p-2 rounded-xl transition-all disabled:opacity-40 mr-1 ${item.pinnedForReport
+                ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20'
+                : 'text-gray-500 hover:text-white hover:bg-white/10'
+                }`}
               title={item.pinnedForReport ? 'Bỏ ghim khỏi báo cáo' : 'Ghim vào báo cáo PDF'}
             >
               <Pin size={18} className={item.pinnedForReport ? 'fill-current' : ''} />
@@ -447,6 +446,23 @@ const ProjectMentions = () => {
   const [showCrisisOnly, setShowCrisisOnly] = useState(false);
   const [savedFilters, setSavedFilters] = useState<{ filterId: number; name: string; config?: any }[]>([]);
   const [filterName, setFilterName] = useState('');
+  const [editFilterModal, setEditFilterModal] = useState<{
+    filterId: number;
+    name: string;
+    platform: MentionPlatformFilter;
+    sentiment: MentionSentimentFilter;
+    search: string;
+    isCrisisAlert: boolean;
+  } | null>(null);
+  const [isSavingEditFilter, setIsSavingEditFilter] = useState(false);
+  const [showMuteModal, setShowMuteModal] = useState(false);
+  const [mutedEntities, setMutedEntities] = useState<MuteEntity[]>([]);
+  const [isLoadingMuted, setIsLoadingMuted] = useState(false);
+  const [muteTab, setMuteTab] = useState<'all' | 'author' | 'platform'>('all');
+  const [muteSearch, setMuteSearch] = useState('');
+  const [manualMuteValue, setManualMuteValue] = useState('');
+  const [manualMuteType, setManualMuteType] = useState<'author' | 'platform'>('author');
+  const [isSubmittingMute, setIsSubmittingMute] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
   const [expandedContent, setExpandedContent] = useState<Record<number, boolean>>({});
   const [displayLimit, setDisplayLimit] = useState(50);
@@ -464,7 +480,7 @@ const ProjectMentions = () => {
   const [editingTagId, setEditingTagId] = useState<number | null>(null);
   const [editingTagName, setEditingTagName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
-  const loadMentionsRef = useRef<() => void>(() => {});
+  const loadMentionsRef = useRef<() => void>(() => { });
   const fetchIdRef = useRef(0);
   const { confirm, alert } = useAppModal();
 
@@ -551,9 +567,23 @@ const ProjectMentions = () => {
     }
   }, [wid, projectId]);
 
+  const loadMutedEntities = useCallback(async () => {
+    if (!wid || !projectId) return;
+    setIsLoadingMuted(true);
+    try {
+      const list = await projectApi.listMutedSources(wid, projectId);
+      setMutedEntities(list);
+    } catch {
+      setMutedEntities([]);
+    } finally {
+      setIsLoadingMuted(false);
+    }
+  }, [wid, projectId]);
+
   useEffect(() => {
     loadSavedFilters();
-  }, [loadSavedFilters]);
+    loadMutedEntities();
+  }, [loadSavedFilters, loadMutedEntities]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -591,6 +621,73 @@ const ProjectMentions = () => {
       await loadSavedFilters();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể lưu bộ lọc.'));
+    }
+  };
+
+  const openEditFilterModal = (f: { filterId: number; name: string; config?: any }) => {
+    setEditFilterModal({
+      filterId: f.filterId,
+      name: f.name,
+      platform: (f.config?.platform as MentionPlatformFilter) || 'all',
+      sentiment: (f.config?.sentiment as MentionSentimentFilter) || 'all',
+      search: f.config?.search || '',
+      isCrisisAlert: Boolean(f.config?.isCrisisAlert),
+    });
+  };
+
+  const copyCurrentFiltersToEditModal = () => {
+    if (!editFilterModal) return;
+    setEditFilterModal((prev) =>
+      prev
+        ? {
+          ...prev,
+          platform: activePlatform,
+          sentiment: activeSentiment,
+          search: searchText,
+          isCrisisAlert: showCrisisOnly,
+        }
+        : null
+    );
+  };
+
+  const handleUpdateFilter = async () => {
+    if (!wid || !projectId || !editFilterModal) return;
+    if (!editFilterModal.name.trim()) {
+      await alert({
+        title: 'Cảnh báo',
+        message: 'Tên bộ lọc không được để trống!',
+        type: 'warning',
+      });
+      return;
+    }
+    setIsSavingEditFilter(true);
+    try {
+      await projectApi.updateMentionFilter(wid, projectId, editFilterModal.filterId, {
+        name: editFilterModal.name.trim(),
+        config: {
+          platform: editFilterModal.platform,
+          sentiment: editFilterModal.sentiment,
+          search: editFilterModal.search.trim() || null,
+          isCrisisAlert: editFilterModal.isCrisisAlert || undefined,
+        } as any,
+      });
+
+      setActivePlatform(editFilterModal.platform);
+      setActiveSentiment(editFilterModal.sentiment);
+      setSearchText(editFilterModal.search);
+      setShowCrisisOnly(editFilterModal.isCrisisAlert);
+
+      setEditFilterModal(null);
+      await loadSavedFilters();
+      await alert({
+        title: 'Thành công',
+        message: 'Đã cập nhật bộ lọc thành công!',
+        type: 'success',
+      });
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể cập nhật bộ lọc.'));
+    } finally {
+      setIsSavingEditFilter(false);
     }
   };
 
@@ -694,12 +791,12 @@ const ProjectMentions = () => {
     [displayedMentions]
   );
 
-  const analyzedCount = useMemo(() => 
+  const analyzedCount = useMemo(() =>
     displayedMentions.filter(m => {
       const s = m.sentiment?.toLowerCase();
       return s === 'positive' || s === 'negative' || s === 'neutral';
     }).length,
-  [displayedMentions]);
+    [displayedMentions]);
 
   const coveragePercent = displayedMentions.length > 0 ? Math.round((analyzedCount / displayedMentions.length) * 100) : 0;
 
@@ -864,7 +961,7 @@ const ProjectMentions = () => {
       type: 'warning',
     });
     if (!confirmed) return;
-    
+
     try {
       await projectApi.deleteMentionTag(wid, projectId, tagId);
       setProjectTags((prev) => prev.filter(t => t.tagId !== tagId));
@@ -892,6 +989,7 @@ const ProjectMentions = () => {
         entityValue: item.authorName,
       });
       await loadMentions();
+      await loadMutedEntities();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể mute tác giả.'));
     } finally {
@@ -905,9 +1003,9 @@ const ProjectMentions = () => {
     try {
       await projectApi.togglePinForReport(wid, projectId, item.feedbackId);
       // Update local state to avoid full reload
-      setMentions(prev => prev.map(m => 
-        m.feedbackId === item.feedbackId 
-          ? { ...m, pinnedForReport: !m.pinnedForReport } 
+      setMentions(prev => prev.map(m =>
+        m.feedbackId === item.feedbackId
+          ? { ...m, pinnedForReport: !m.pinnedForReport }
           : m
       ));
     } catch (error) {
@@ -935,12 +1033,62 @@ const ProjectMentions = () => {
         entityValue: item.platform,
       });
       await loadMentions();
+      await loadMutedEntities();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể mute nền tảng.'));
     } finally {
       setActionMentionId(null);
     }
   };
+
+  const handleUnmute = async (item: MuteEntity) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Bỏ mute',
+      message: `Bạn có chắc muốn bỏ mute ${item.entityType.toLowerCase() === 'author' ? 'tác giả' : 'nền tảng'} «${item.entityValue}»?`,
+      confirmText: 'Bỏ mute',
+      cancelText: 'Hủy',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+
+    try {
+      await projectApi.unmuteMentionSource(wid, projectId, item.muteId);
+      setMutedEntities((prev) => prev.filter((m) => m.muteId !== item.muteId));
+      await loadMentions();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể bỏ mute.'));
+    }
+  };
+
+  const handleAddManualMute = async () => {
+    if (!wid || !projectId || !manualMuteValue.trim()) return;
+    setIsSubmittingMute(true);
+    try {
+      await projectApi.muteMentionSource(wid, projectId, {
+        entityType: manualMuteType,
+        entityValue: manualMuteValue.trim(),
+      });
+      setManualMuteValue('');
+      await loadMutedEntities();
+      await loadMentions();
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể mute nguồn này.'));
+    } finally {
+      setIsSubmittingMute(false);
+    }
+  };
+
+  const filteredMutedEntities = useMemo(() => {
+    return mutedEntities.filter((m) => {
+      if (muteTab !== 'all' && m.entityType.toLowerCase() !== muteTab) return false;
+      if (muteSearch.trim()) {
+        const query = muteSearch.trim().toLowerCase();
+        return m.entityValue.toLowerCase().includes(query);
+      }
+      return true;
+    });
+  }, [mutedEntities, muteTab, muteSearch]);
 
   return (
     <div className="animate-in fade-in duration-500 max-w-7xl mx-auto space-y-8 pb-10">
@@ -962,6 +1110,23 @@ const ProjectMentions = () => {
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
+              onClick={() => {
+                setShowMuteModal(true);
+                loadMutedEntities();
+              }}
+              className="inline-flex items-center gap-2 px-3 lg:px-4 py-2 rounded-xl text-sm font-semibold border border-white/10 bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all"
+              title="Xem danh sách nguồn tác giả/nền tảng đã bị ẩn"
+            >
+              <VolumeX className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Nguồn đã ẩn</span>
+              {mutedEntities.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-bold">
+                  {mutedEntities.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => loadMentions()}
               disabled={isLoading}
               className="p-3 rounded-xl border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
@@ -977,10 +1142,9 @@ const ProjectMentions = () => {
               }}
               disabled={aiProgress.isAnalyzing || isLoading || mentions.length === 0}
               className={`inline-flex items-center gap-2 px-3 lg:px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm
-                ${
-                  aiProgress.isAnalyzing || isLoading || mentions.length === 0
-                    ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/5'
-                    : 'bg-gradient-to-r from-[#FF7575] to-[#ff5252] hover:from-[#ff6262] hover:to-[#ff4242] text-white hover:shadow-[#FF7575]/25 hover:-translate-y-0.5'
+                ${aiProgress.isAnalyzing || isLoading || mentions.length === 0
+                  ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/5'
+                  : 'bg-gradient-to-r from-[#FF7575] to-[#ff5252] hover:from-[#ff6262] hover:to-[#ff4242] text-white hover:shadow-[#FF7575]/25 hover:-translate-y-0.5'
                 }`}
             >
               {aiProgress.isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -1008,9 +1172,9 @@ const ProjectMentions = () => {
               <p className="text-xs text-gray-400 mt-0.5">Tổng hợp cảm xúc & lượt nhắc</p>
             </div>
           </div>
-          
+
           <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-[#FF7575] to-[#00B4D8] transition-all duration-300"
               style={{ width: `${Math.max(5, aiProgress.progressPercent)}%` }}
             />
@@ -1108,21 +1272,34 @@ const ProjectMentions = () => {
                     if (f.config?.search !== undefined) setSearchText(f.config.search || '');
                     if (f.config?.isCrisisAlert !== undefined) setShowCrisisOnly(f.config.isCrisisAlert);
                   }}
-                  className="px-3 py-1.5 pr-7 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-xs text-gray-300 transition-colors"
+                  className="px-3 py-1.5 pr-14 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-xs text-gray-300 transition-colors"
                 >
                   {f.name}
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteFilter(f.filterId);
-                  }}
-                  title="Xóa bộ lọc"
-                  className="absolute right-1 p-1 rounded-full text-gray-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                <div className="absolute right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditFilterModal(f);
+                    }}
+                    title="Chỉnh sửa bộ lọc"
+                    className="p-1 rounded-full text-gray-400 hover:text-[#00B4D8] hover:bg-[#00B4D8]/10 transition-all"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFilter(f.filterId);
+                    }}
+                    title="Xóa bộ lọc"
+                    className="p-1 rounded-full text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1151,13 +1328,12 @@ const ProjectMentions = () => {
                 key={filter}
                 type="button"
                 onClick={() => setActiveSentiment(filter)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-                  activeSentiment === filter
-                    ? filter === 'all'
-                      ? 'bg-white/10 text-white border border-white/15'
-                      : `${getSentimentFilterBadgeClass(filter)} border`
-                    : 'text-gray-500 hover:text-gray-300 bg-white/[0.03] border border-white/5 hover:border-white/10'
-                }`}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${activeSentiment === filter
+                  ? filter === 'all'
+                    ? 'bg-white/10 text-white border border-white/15'
+                    : `${getSentimentFilterBadgeClass(filter)} border`
+                  : 'text-gray-500 hover:text-gray-300 bg-white/[0.03] border border-white/5 hover:border-white/10'
+                  }`}
               >
                 {sentimentTabLabel(filter)}
               </button>
@@ -1165,11 +1341,10 @@ const ProjectMentions = () => {
 
             <button
               onClick={() => setShowCrisisOnly(prev => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ml-auto ${
-                showCrisisOnly
-                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                  : 'border-white/5 bg-white/[0.03] text-gray-500 hover:text-amber-400/80 hover:border-amber-500/20'
-              }`}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ml-auto ${showCrisisOnly
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                : 'border-white/5 bg-white/[0.03] text-gray-500 hover:text-amber-400/80 hover:border-amber-500/20'
+                }`}
               title="Chỉ hiển thị các bài viết có cảnh báo khủng hoảng truyền thông"
             >
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -1186,13 +1361,12 @@ const ProjectMentions = () => {
                 key={platform}
                 type="button"
                 onClick={() => setActivePlatform(platform)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-                  activePlatform === platform
-                    ? platform === 'all'
-                      ? 'bg-[#FF7575]/20 text-[#FF7575] border border-[#FF7575]/30'
-                      : `${getPlatformBadgeClass(platform)} border`
-                    : 'text-gray-500 hover:text-gray-300 bg-white/[0.03] border border-white/5 hover:border-white/10'
-                }`}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${activePlatform === platform
+                  ? platform === 'all'
+                    ? 'bg-[#FF7575]/20 text-[#FF7575] border border-[#FF7575]/30'
+                    : `${getPlatformBadgeClass(platform)} border`
+                  : 'text-gray-500 hover:text-gray-300 bg-white/[0.03] border border-white/5 hover:border-white/10'
+                  }`}
               >
                 {platformTabLabel(platform)}
               </button>
@@ -1387,6 +1561,268 @@ const ProjectMentions = () => {
                 className="px-4 py-2 rounded-xl bg-[#FF7575] text-white text-sm font-semibold hover:bg-[#ff9090]"
               >
                 Lưu tag
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editFilterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-3xl border border-white/10 bg-[#151B2B] p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-[#00B4D8]" />
+                Chỉnh sửa bộ lọc tùy chỉnh
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditFilterModal(null)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                  Tên bộ lọc <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFilterModal.name}
+                  onChange={(e) => setEditFilterModal({ ...editFilterModal, name: e.target.value })}
+                  placeholder="Nhập tên bộ lọc..."
+                  className="w-full px-4 py-2.5 bg-[#0A101D] border border-white/10 rounded-xl text-white text-sm focus:border-[#00B4D8] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                  Từ khóa tìm kiếm
+                </label>
+                <input
+                  type="text"
+                  value={editFilterModal.search}
+                  onChange={(e) => setEditFilterModal({ ...editFilterModal, search: e.target.value })}
+                  placeholder="Từ khóa (nếu có)..."
+                  className="w-full px-4 py-2.5 bg-[#0A101D] border border-white/10 rounded-xl text-white text-sm focus:border-[#00B4D8] focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Nền tảng
+                  </label>
+                  <select
+                    value={editFilterModal.platform}
+                    onChange={(e) =>
+                      setEditFilterModal({ ...editFilterModal, platform: e.target.value as MentionPlatformFilter })
+                    }
+                    className="w-full px-3 py-2.5 bg-[#0A101D] border border-white/10 rounded-xl text-white text-sm focus:border-[#00B4D8] focus:outline-none"
+                  >
+                    {MENTION_PLATFORMS.map((p) => (
+                      <option key={p} value={p} className="bg-[#151B2B] text-white">
+                        {p === 'all' ? 'Tất cả nền tảng' : getPlatformDisplayName(p)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Cảm xúc (Sentiment)
+                  </label>
+                  <select
+                    value={editFilterModal.sentiment}
+                    onChange={(e) =>
+                      setEditFilterModal({ ...editFilterModal, sentiment: e.target.value as MentionSentimentFilter })
+                    }
+                    className="w-full px-3 py-2.5 bg-[#0A101D] border border-white/10 rounded-xl text-white text-sm focus:border-[#00B4D8] focus:outline-none"
+                  >
+                    {MENTION_SENTIMENTS.map((s) => (
+                      <option key={s} value={s} className="bg-[#151B2B] text-white">
+                        {s === 'all' ? 'Tất cả cảm xúc' : getSentimentFilterLabel(s)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editFilterModal.isCrisisAlert}
+                    onChange={(e) => setEditFilterModal({ ...editFilterModal, isCrisisAlert: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/20 bg-[#0A101D] text-[#00B4D8] focus:ring-0 focus:ring-offset-0"
+                  />
+                  Chỉ hiện tin khủng hoảng
+                </label>
+
+                <button
+                  type="button"
+                  onClick={copyCurrentFiltersToEditModal}
+                  className="text-xs text-[#00B4D8] hover:underline font-medium"
+                >
+                  Lấy bộ lọc đang dùng trên trang
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-white/5 pt-4">
+              <button
+                type="button"
+                onClick={() => setEditFilterModal(null)}
+                className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-300 hover:bg-white/5 text-sm font-semibold transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdateFilter}
+                disabled={isSavingEditFilter || !editFilterModal.name.trim()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#00B4D8] to-[#0096c7] hover:from-[#00c2e8] hover:to-[#00a3d4] text-white text-sm font-semibold transition-all disabled:opacity-50"
+              >
+                {isSavingEditFilter ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Cập nhật
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMuteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl rounded-3xl border border-white/10 bg-[#151B2B] p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <VolumeX className="w-5 h-5 text-amber-400" />
+                Danh sách Nguồn đã Ẩn (Muted List)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowMuteModal(false)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 bg-[#0A101D] p-1 rounded-xl border border-white/10">
+                {(['all', 'author', 'platform'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setMuteTab(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${muteTab === tab
+                      ? 'bg-white/10 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-white'
+                      }`}
+                  >
+                    {tab === 'all' ? 'Tất cả' : tab === 'author' ? 'Tác giả' : 'Nền tảng'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative flex-1 sm:max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  value={muteSearch}
+                  onChange={(e) => setMuteSearch(e.target.value)}
+                  placeholder="Tìm tác giả hoặc nền tảng..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-[#0A101D] border border-white/10 rounded-xl text-white text-xs focus:border-amber-500/50 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+              {isLoadingMuted ? (
+                <div className="py-12 flex items-center justify-center text-gray-400 text-sm gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                  Đang tải danh sách muted...
+                </div>
+              ) : filteredMutedEntities.length === 0 ? (
+                <div className="py-12 text-center text-gray-500 text-sm">
+                  Chưa có nguồn nào bị ẩn theo điều kiện tìm kiếm.
+                </div>
+              ) : (
+                filteredMutedEntities.map((item) => (
+                  <div
+                    key={item.muteId}
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-white/5 bg-[#0A101D]/70 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${item.entityType.toLowerCase() === 'author'
+                          ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
+                          : 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+                          }`}
+                      >
+                        {item.entityType.toLowerCase() === 'author' ? 'Tác giả' : 'Nền tảng'}
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{item.entityValue}</p>
+                        {item.createdAt && (
+                          <p className="text-[11px] text-gray-500">
+                            Đã ẩn ngày {formatWorkspaceDateTime(item.createdAt)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleUnmute(item)}
+                      className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 text-xs font-semibold text-gray-300 hover:text-emerald-300 transition-all"
+                    >
+                      Bỏ mute
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="border-t border-white/5 pt-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Thêm nguồn cần ẩn</p>
+              <div className="flex gap-2">
+                <select
+                  value={manualMuteType}
+                  onChange={(e) => setManualMuteType(e.target.value as 'author' | 'platform')}
+                  className="px-3 py-2 bg-[#0A101D] border border-white/10 rounded-xl text-white text-xs focus:outline-none"
+                >
+                  <option value="author">Tác giả</option>
+                  <option value="platform">Nền tảng</option>
+                </select>
+                <input
+                  type="text"
+                  value={manualMuteValue}
+                  onChange={(e) => setManualMuteValue(e.target.value)}
+                  placeholder={manualMuteType === 'author' ? 'Nhập tên tác giả...' : 'Nhập tên nền tảng...'}
+                  className="flex-1 px-3 py-2 bg-[#0A101D] border border-white/10 rounded-xl text-white text-xs focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddManualMute}
+                  disabled={isSubmittingMute || !manualMuteValue.trim()}
+                  className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold hover:bg-amber-500/30 transition-all disabled:opacity-40"
+                >
+                  {isSubmittingMute ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Mute ngay'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-white/5 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowMuteModal(false)}
+                className="px-4 py-2 rounded-xl border border-white/10 text-gray-300 hover:bg-white/5 text-sm font-semibold transition-colors"
+              >
+                Đóng
               </button>
             </div>
           </div>
