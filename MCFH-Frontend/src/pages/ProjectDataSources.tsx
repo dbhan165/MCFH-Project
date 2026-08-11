@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Database, FileUp, Loader2, AlertCircle, ToggleLeft, ToggleRight, Trash2, Download, VolumeX
+  Database, FileUp, Loader2, AlertCircle, ToggleLeft, ToggleRight, Trash2, Download
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
-import type { MuteEntity } from '../types/project';
 import { extractApiError } from '../utils/authStorage';
 import { useAppModal } from '../contexts/AppModalContext';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
@@ -14,10 +13,9 @@ const ProjectDataSources = () => {
   const wid = Number(workspaceId);
   const projectId = Number(id);
 
-  const [activeTab, setActiveTab] = useState<'sources' | 'imports' | 'muted'>('sources');
+  const [activeTab, setActiveTab] = useState<'sources' | 'imports'>('sources');
   const [sources, setSources] = useState<any[]>([]);
   const [imports, setImports] = useState<any[]>([]);
-  const [mutedEntities, setMutedEntities] = useState<MuteEntity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -36,9 +34,6 @@ const ProjectDataSources = () => {
       } else if (activeTab === 'imports') {
         const data = await projectApi.getImportFiles(wid, projectId);
         setImports(data);
-      } else {
-        const data = await projectApi.listMutedSources(wid, projectId);
-        setMutedEntities(data);
       }
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể tải dữ liệu.'));
@@ -91,28 +86,6 @@ const ProjectDataSources = () => {
       await loadData();
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể xóa nguồn.'));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleUnmute = async (item: MuteEntity) => {
-    if (!wid || !projectId) return;
-    const confirmed = await confirm({
-      title: 'Bỏ mute',
-      message: `Bạn có chắc muốn bỏ mute ${item.entityType.toLowerCase() === 'author' ? 'tác giả' : 'nền tảng'} «${item.entityValue}»?`,
-      confirmText: 'Bỏ mute',
-      cancelText: 'Hủy',
-      type: 'warning',
-    });
-    if (!confirmed) return;
-
-    setIsProcessing(true);
-    try {
-      await projectApi.unmuteMentionSource(wid, projectId, item.muteId);
-      setMutedEntities((prev) => prev.filter((x) => x.muteId !== item.muteId));
-    } catch (error) {
-      setErrorMessage(extractApiError(error, 'Không thể bỏ mute.'));
     } finally {
       setIsProcessing(false);
     }
@@ -230,15 +203,6 @@ const ProjectDataSources = () => {
           }`}
         >
           Dữ liệu tải lên (Import)
-        </button>
-        <button
-          onClick={() => setActiveTab('muted')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 flex items-center gap-1.5 transition-colors ${
-            activeTab === 'muted' ? 'border-amber-400 text-amber-400' : 'border-transparent text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          <VolumeX className="w-4 h-4" />
-          Nguồn đã ẩn (Mute)
         </button>
       </div>
 
@@ -381,68 +345,7 @@ const ProjectDataSources = () => {
               </div>
             )}
           </>
-        ) : (
-          <>
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <VolumeX className="w-5 h-5 text-amber-400" />
-                  Danh sách Nguồn đã ẩn (Muted List)
-                </h3>
-                <p className="text-xs text-gray-400">Tất cả các tác giả hoặc nền tảng đã bị ẩn khỏi danh sách Lượt nhắc của dự án</p>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className="flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-amber-400" /></div>
-            ) : mutedEntities.length === 0 ? (
-              <div className="text-center py-10 text-gray-500 text-sm">Chưa có tác giả hoặc nền tảng nào bị ẩn trong dự án này.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-gray-300">
-                  <thead className="bg-[#151B2B] text-gray-400 font-semibold">
-                    <tr>
-                      <th className="px-4 py-3 rounded-l-lg">ID</th>
-                      <th className="px-4 py-3">Loại nguồn</th>
-                      <th className="px-4 py-3">Tên tác giả / Nền tảng</th>
-                      <th className="px-4 py-3">Thời gian mute</th>
-                      <th className="px-4 py-3 rounded-r-lg text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {mutedEntities.map(m => (
-                      <tr key={m.muteId} className="hover:bg-white/[0.02]">
-                        <td className="px-4 py-4 font-mono text-xs">{m.muteId}</td>
-                        <td className="px-4 py-4">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
-                            m.entityType.toLowerCase() === 'author'
-                              ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
-                              : 'border-purple-500/30 bg-purple-500/10 text-purple-300'
-                          }`}>
-                            {m.entityType.toLowerCase() === 'author' ? 'Tác giả' : 'Nền tảng'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-white">{m.entityValue}</td>
-                        <td className="px-4 py-4 text-xs text-gray-400">
-                          {m.createdAt ? formatWorkspaceDateTime(m.createdAt) : '-'}
-                        </td>
-                        <td className="px-4 py-4 text-right">
-                          <button
-                            onClick={() => handleUnmute(m)}
-                            disabled={isProcessing}
-                            className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 text-xs font-semibold text-gray-300 hover:text-emerald-300 transition-all"
-                          >
-                            Bỏ mute
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
+        ) : null}
       </div>
     </div>
   );
