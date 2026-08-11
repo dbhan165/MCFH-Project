@@ -1048,7 +1048,7 @@ const ProjectMentions = () => {
       message: `Bạn có chắc muốn bỏ mute ${item.entityType.toLowerCase() === 'author' ? 'tác giả' : 'nền tảng'} «${item.entityValue}»?`,
       confirmText: 'Bỏ mute',
       cancelText: 'Hủy',
-      type: 'info',
+      type: 'warning',
     });
     if (!confirmed) return;
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Database, FileUp, Loader2, Plus, AlertCircle, ToggleLeft, ToggleRight, Trash2, CheckCircle2, Download, VolumeX
+  Database, FileUp, Loader2, AlertCircle, ToggleLeft, ToggleRight, Trash2, Download, VolumeX
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { MuteEntity } from '../types/project';
@@ -59,7 +59,7 @@ const ProjectDataSources = () => {
       message: `Bạn có chắc muốn ${action.toLowerCase()} nguồn cào này không?`,
       confirmText: action,
       cancelText: 'Hủy',
-      type: currentStatus === 'active' ? 'warning' : 'info',
+      type: 'warning',
     });
     if (!confirmed) return;
 
@@ -96,12 +96,26 @@ const ProjectDataSources = () => {
     }
   };
 
-  const handleAddSource = async () => {
-    await alert({
-      title: 'Thêm nguồn mới',
-      message: 'Tính năng này đang trong quá trình thử nghiệm và sẽ sớm ra mắt (UI coming soon). Bạn có thể thêm nguồn từ màn hình Tạo Dự án.',
-      type: 'info'
+  const handleUnmute = async (item: MuteEntity) => {
+    if (!wid || !projectId) return;
+    const confirmed = await confirm({
+      title: 'Bỏ mute',
+      message: `Bạn có chắc muốn bỏ mute ${item.entityType.toLowerCase() === 'author' ? 'tác giả' : 'nền tảng'} «${item.entityValue}»?`,
+      confirmText: 'Bỏ mute',
+      cancelText: 'Hủy',
+      type: 'warning',
     });
+    if (!confirmed) return;
+
+    setIsProcessing(true);
+    try {
+      await projectApi.unmuteMentionSource(wid, projectId, item.muteId);
+      setMutedEntities((prev) => prev.filter((x) => x.muteId !== item.muteId));
+    } catch (error) {
+      setErrorMessage(extractApiError(error, 'Không thể bỏ mute.'));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDeleteImport = async (fileId: number) => {

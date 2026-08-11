@@ -159,7 +159,6 @@ const BrevoKeyPanel = () => {
 
 const BrevoKeyRow = ({
   item,
-  index,
   onEdit,
   onDelete,
   onSetDefault,

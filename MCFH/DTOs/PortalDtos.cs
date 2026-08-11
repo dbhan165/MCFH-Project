@@ -205,6 +205,10 @@ public class PortalBespokeRequestDto
     public string? RevisionFeedback { get; set; }
     public string? Keyword { get; set; }
     public string? PackageType { get; set; }
+    public int ReporterSendCount { get; set; }
+    public int MaxReporterSends { get; set; } = 3;
+    public bool CanSendToReporter { get; set; }
+    public List<MCFH.DTOs.ProjectDtos.BespokeRevisionRoundDto> RevisionRounds { get; set; } = new();
 }
 
 public class ReporterKanbanDto

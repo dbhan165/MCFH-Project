@@ -16,18 +16,26 @@ namespace MCFH
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Local: browsers trong .playwright (playwright.ps1 install).
-            // Docker: giữ path mặc định của image mcr.microsoft.com/playwright/dotnet (đã có Chromium).
+            // Local: ưu tiên .playwright (playwright.ps1 install).
+            // Nếu IDE/sandbox đã set PLAYWRIGHT_BROWSERS_PATH nhưng thư mục trống (không có chrome.exe),
+            // ghi đè bằng .playwright — tránh lỗi "Chromium chưa được cài" dù đã install local.
+            // Docker: giữ path mặc định của image mcr.microsoft.com/playwright/dotnet.
             var runningInContainer = string.Equals(
                 Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
                 "true",
                 StringComparison.OrdinalIgnoreCase);
-            if (!runningInContainer &&
-                string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH")))
+            if (!runningInContainer)
             {
                 var playwrightBrowsers = Path.Combine(builder.Environment.ContentRootPath, ".playwright");
-                Directory.CreateDirectory(playwrightBrowsers);
-                Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", playwrightBrowsers);
+                var configuredPath = Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH");
+                var configuredHasChrome = !string.IsNullOrWhiteSpace(configuredPath)
+                    && Directory.Exists(configuredPath)
+                    && Directory.EnumerateFiles(configuredPath, "chrome.exe", SearchOption.AllDirectories).Any();
+                if (!configuredHasChrome)
+                {
+                    Directory.CreateDirectory(playwrightBrowsers);
+                    Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", playwrightBrowsers);
+                }
             }
 
             ScrapeCookiePaths.Initialize(builder.Environment.ContentRootPath);

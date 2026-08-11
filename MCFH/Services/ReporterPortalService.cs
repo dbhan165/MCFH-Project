@@ -53,6 +53,10 @@ public class ReporterPortalService
     public async Task<(byte[] Content, string FileName)?> DownloadAsync(int userId, int requestId) =>
         await _bespoke.DownloadByRequestIdAsync(userId, requestId);
 
+    public async Task<(byte[] Content, string FileName)?> DownloadReportVersionAsync(
+        int userId, int requestId, int reportId) =>
+        await _bespoke.DownloadReportVersionByRequestIdAsync(userId, requestId, reportId);
+
     public async Task<BespokeRequestItemDto?> UploadRevisionAsync(
         int userId, int requestId, Stream fileStream, string fileName) =>
         await _bespoke.UploadRevisionByRequestIdAsync(userId, requestId, fileStream, fileName);

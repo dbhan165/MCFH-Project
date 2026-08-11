@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import {
   BarChart2,
-  Search,
-  Bell,
   Calendar,
   ChevronDown,
   Zap,
