@@ -42,15 +42,22 @@ public class PlatformCookiePathProvider : IPlatformCookiePathProvider
             return cached.Path;
 
         string? fullPath = null;
-        await using (var scope = _scopeFactory.CreateAsyncScope())
+        try
         {
-            var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
-            var row = await db.PlatformCookies
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Platform == platform, ct);
+            await using (var scope = _scopeFactory.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
+                var row = await db.PlatformCookies
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.Platform == platform, ct);
 
-            if (row != null && row.Status == "active" && IsRelativePathAllowed(row.FilePath))
-                fullPath = ToFullPath(row.FilePath);
+                if (row != null && row.Status == "active" && IsRelativePathAllowed(row.FilePath))
+                    fullPath = ToFullPath(row.FilePath);
+            }
+        }
+        catch (Exception)
+        {
+            // DB chưa có bảng PLATFORM_COOKIES / lỗi đọc — fallback file cookies mặc định.
         }
 
         fullPath ??= GetDefaultFullPath(platform);
@@ -61,14 +68,21 @@ public class PlatformCookiePathProvider : IPlatformCookiePathProvider
     public async Task TouchLastUsedAsync(string platform, CancellationToken ct = default)
     {
         platform = NormalizePlatform(platform);
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
-        var row = await db.PlatformCookies.FirstOrDefaultAsync(p => p.Platform == platform, ct);
-        if (row == null)
-            return;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
+            var row = await db.PlatformCookies.FirstOrDefaultAsync(p => p.Platform == platform, ct);
+            if (row == null)
+                return;
 
-        row.LastUsedAt = DateTime.Now;
-        await db.SaveChangesAsync(ct);
+            row.LastUsedAt = DateTime.Now;
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception)
+        {
+            // Bảng cookie chưa sẵn — bỏ qua, không chặn scrape.
+        }
     }
 
     public void InvalidateCache() => _cache.Clear();

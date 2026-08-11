@@ -1003,11 +1003,12 @@ public class BespokeReportService
         var meta = ParseMeta(request.CustomMetrics);
         var displayName = $"{request.Title} ({meta.Keyword})";
 
-        // Lọc report theo từ khoá + mốc bắt đầu cào của đơn bespoke NÀY — tránh trộn mentions cũ
-        // của các lượt cào/scrape trước đó vào cùng project (đồng đội không cho soft-delete feedback cũ).
+        // Chỉ lọc theo mốc bắt đầu cào của đơn này — tránh trộn feedback cũ trên cùng project.
+        // KHÔNG dùng Search=keyword: GetMentionsAsync lọc Content/AuthorName chứa substring,
+        // trong khi scrape lưu post theo kết quả tìm kiếm (title/URL) — nhiều post hợp lệ
+        // không chứa exact keyword trong content → PDF bị 0 mentions giả.
         var filter = new MentionQueryDto
         {
-            Search = meta.Keyword,
             DateFrom = meta.ScrapeStartedAt,
             ExcludeMuted = true
         };
