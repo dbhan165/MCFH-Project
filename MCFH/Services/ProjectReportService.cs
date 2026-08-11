@@ -593,6 +593,43 @@ public class ProjectReportService
             sb.AppendLine("</div></div>");
         }
 
+        // THANK YOU SLIDE
+        sb.AppendLine(@"<div class=""slide"" style=""display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; position: relative; overflow: hidden; background: linear-gradient(135deg, #f4f8fc 0%, #ffffff 100%);"">
+            <div style=""position: absolute; width: 1200px; height: 1200px; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,0.04) 0%, rgba(255,255,255,0) 70%); top: -100px; left: -200px; z-index: 0;""></div>
+            <div style=""position: absolute; width: 1600px; height: 1600px; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,0.03) 0%, rgba(255,255,255,0) 70%); top: -300px; right: -600px; z-index: 0;""></div>
+            <div style=""z-index: 1;"">
+                <div style=""font-size: 65px; font-weight: 600; color: #475569; margin-bottom: 25px; display: flex; align-items: center; justify-content: center; gap: 15px;"">
+                    <svg width=""70"" height=""70"" viewBox=""0 0 100 100"" fill=""none"" xmlns=""http://www.w3.org/2000/svg"">
+                        <circle cx=""50"" cy=""50"" r=""25"" stroke=""#3b82f6"" stroke-width=""6""/>
+                        <circle cx=""50"" cy=""50"" r=""12"" fill=""#3b82f6""/>
+                        <circle cx=""20"" cy=""50"" r=""6"" fill=""#0ea5e9""/>
+                        <circle cx=""80"" cy=""50"" r=""6"" fill=""#0ea5e9""/>
+                        <circle cx=""50"" cy=""20"" r=""6"" fill=""#0ea5e9""/>
+                        <circle cx=""50"" cy=""80"" r=""6"" fill=""#0ea5e9""/>
+                        <circle cx=""29"" cy=""29"" r=""5"" fill=""#0ea5e9""/>
+                        <circle cx=""71"" cy=""29"" r=""5"" fill=""#0ea5e9""/>
+                        <circle cx=""29"" cy=""71"" r=""5"" fill=""#0ea5e9""/>
+                        <circle cx=""71"" cy=""71"" r=""5"" fill=""#0ea5e9""/>
+                    </svg>
+                    MCFH
+                </div>
+                <div style=""font-size: 110px; font-weight: 800; color: #1d4ed8; margin-bottom: 45px;"">Xin cảm ơn!</div>
+                <div style=""font-size: 24px; color: #1e40af; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 15px;"">
+                    <div style=""width: 10px; height: 10px; background: #93c5fd; border-radius: 50%;""></div>
+                    Tăng trưởng Thương hiệu bền vững cùng MCFH
+                </div>
+                <div style=""font-size: 24px; color: #1e40af; margin-bottom: 80px; display: flex; align-items: center; justify-content: center; gap: 15px;"">
+                    <div style=""width: 10px; height: 10px; background: #93c5fd; border-radius: 50%;""></div>
+                    Phát hiện sớm cơ hội - Ứng phó kịp thời rủi ro - Tối ưu hiệu quả truyền thông
+                </div>
+                <div style=""font-size: 22px; color: #1e40af; display: flex; justify-content: center; gap: 60px; font-weight: 500;"">
+                    <span><span style=""color: #3b82f6; font-style: italic;"">(Website)</span> mcfh.vn</span>
+                    <span><span style=""color: #3b82f6; font-style: italic;"">(Email)</span> info@mcfh.vn</span>
+                    <span><span style=""color: #3b82f6; font-style: italic;"">(Phone)</span> 098.130.6460 (Kinh doanh MCFH)</span>
+                </div>
+            </div>
+        </div>");
+
         sb.AppendLine("</body></html>");
         
         return (sb.ToString(), "html", totalMentions);
