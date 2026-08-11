@@ -731,7 +731,9 @@ public class BespokeReportService
         }
     }
 
-    /// <summary>Khách gửi báo cáo hệ thống (report_ready) cho Reporter chỉnh tay, kèm ghi chú cần sửa.</summary>
+    public const int MaxReporterSends = 3;
+
+    /// <summary>Khách gửi báo cáo cho Reporter chỉnh tay (tối đa 3 vòng). Từ report_ready hoặc completed.</summary>
     public async Task<BespokeRequestItemDto?> SendToReporterAsync(
         int workspaceId, int projectId, int userId, int requestId, SendBespokeToReporterDto dto)
     {
@@ -740,18 +742,33 @@ public class BespokeReportService
 
         var request = await GetProjectRequestAsync(projectId, requestId);
         if (request == null || request.ClientId != userId) return null;
-        if (!string.Equals(request.Status, "report_ready", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var status = request.Status?.ToLowerInvariant();
+        if (status is not ("report_ready" or "completed")) return null;
         if (request.BespokeReports.Count == 0) return null;
         if (string.IsNullOrWhiteSpace(dto.Note)) return null;
 
         var meta = ParseMeta(request.CustomMetrics);
-        meta.RevisionFeedback = dto.Note.Trim();
+        meta.RevisionRounds ??= new List<BespokeRevisionRoundMeta>();
+        if (meta.ReporterSendCount >= MaxReporterSends) return null;
+
+        var note = dto.Note.Trim();
+        meta.ReporterSendCount += 1;
+        meta.RevisionFeedback = note;
+        meta.RevisionRounds.Add(new BespokeRevisionRoundMeta
+        {
+            RoundNumber = meta.ReporterSendCount,
+            SentAt = DateTime.Now,
+            Note = note,
+            ClientUserId = userId
+        });
+
         request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
         request.Status = "awaiting_reporter";
         request.ReporterId = null;
         await _context.SaveChangesAsync();
 
-        await NotifyReportersAwaitingAsync(request, meta.ProjectId, dto.Note.Trim());
+        await NotifyReportersAwaitingAsync(request, meta.ProjectId, note, meta.ReporterSendCount);
 
         await LoadRequestNavigationsAsync(request);
         return MapRequest(request, user);
@@ -824,6 +841,11 @@ public class BespokeReportService
         request.Status = "completed";
         request.SubmittedAt = DateTime.Now;
         await _context.SaveChangesAsync();
+
+        await _context.Entry(request).Collection(r => r.BespokeReports).LoadAsync();
+        var delivered = request.BespokeReports.OrderByDescending(b => b.UploadedAt).FirstOrDefault();
+        if (delivered != null)
+            await AttachDeliverableToCurrentRoundAsync(request, delivered);
 
         await LoadRequestNavigationsAsync(request);
         return MapRequest(request, user);
@@ -926,17 +948,20 @@ public class BespokeReportService
         var relativePath = Path.Combine("StorageData", "bespoke", requestId.ToString(), storedName);
         var version = $"v{(request.BespokeReports.Count + 1):D2}";
 
-        _context.BespokeReports.Add(new BespokeReport
+        var report = new BespokeReport
         {
             RequestId = requestId,
             FileUrl = relativePath,
             Version = version,
             UploadedAt = DateTime.Now
-        });
+        };
+        _context.BespokeReports.Add(report);
 
         request.Status = "completed";
         request.SubmittedAt = DateTime.Now;
         await _context.SaveChangesAsync();
+
+        await AttachDeliverableToCurrentRoundAsync(request, report);
 
         await LoadRequestNavigationsAsync(request);
         await NotifyClientReportReadyAsync(request, projectId);
@@ -1012,7 +1037,9 @@ public class BespokeReportService
             DateFrom = meta.ScrapeStartedAt,
             ExcludeMuted = true
         };
-        var rendered = await _reportService.RenderAnalyticsPdfAsync(workspaceId, projectId, userId, displayName, filter);
+        var rendered = await _reportService.RenderBespokeSlidePdfAsync(
+            workspaceId, projectId, userId, displayName, filter,
+            meta.Keyword, meta.DateFrom, meta.DateTo);
         if (rendered == null) return false;
 
         var folder = GetBespokeFolder(requestId);
@@ -1077,7 +1104,7 @@ public class BespokeReportService
     }
 
     /// <summary>Khách gửi yêu cầu chỉnh sửa → báo tất cả Reporter.</summary>
-    private async Task NotifyReportersAwaitingAsync(BespokeRequest request, int projectId, string note)
+    private async Task NotifyReportersAwaitingAsync(BespokeRequest request, int projectId, string note, int roundNumber)
     {
         try
         {
@@ -1089,8 +1116,8 @@ public class BespokeReportService
             if (recipientIds.Count == 0) return;
 
             var notePreview = note.Length > 120 ? note[..120] + "…" : note;
-            var title = "Khách gửi báo cáo cần chỉnh sửa";
-            var body = $"«{request.Title}»: {notePreview}";
+            var title = $"Yêu cầu chỉnh sửa lần {roundNumber}/{MaxReporterSends}";
+            var body = $"«{request.Title}» (lần {roundNumber}): {notePreview}";
             var notify = new NotificationService(_context);
 
             foreach (var userId in recipientIds)
@@ -1164,6 +1191,12 @@ public class BespokeReportService
     {
         var meta = ParseMeta(r.CustomMetrics);
         var latestReport = r.BespokeReports.OrderByDescending(b => b.UploadedAt).FirstOrDefault();
+        var status = r.Status ?? "pending";
+        var canSend = (status.Equals("report_ready", StringComparison.OrdinalIgnoreCase)
+                       || status.Equals("completed", StringComparison.OrdinalIgnoreCase))
+                      && meta.ReporterSendCount < MaxReporterSends
+                      && r.BespokeReports.Count > 0
+                      && !IsAdmin(currentUser) && !IsReporter(currentUser);
 
         return new BespokeRequestItemDto
         {
@@ -1171,7 +1204,7 @@ public class BespokeReportService
             ProjectId = meta.ProjectId,
             Title = r.Title,
             Requirements = r.Requirements,
-            Status = r.Status ?? "pending",
+            Status = status,
             StatusLabel = StatusLabel(r.Status),
             Deadline = r.Deadline,
             SubmittedAt = r.SubmittedAt,
@@ -1188,7 +1221,12 @@ public class BespokeReportService
             PackagePrice = meta.PackagePrice,
             AgreedPrice = r.AgreedPrice,
             HasDeliverable = latestReport != null,
-            DeliverableReportId = latestReport?.ReportId
+            DeliverableReportId = latestReport?.ReportId,
+            RevisionFeedback = meta.RevisionFeedback,
+            ReporterSendCount = meta.ReporterSendCount,
+            MaxReporterSends = MaxReporterSends,
+            CanSendToReporter = canSend,
+            RevisionRounds = MapRevisionRounds(meta)
         };
     }
 
@@ -1605,8 +1643,78 @@ public class BespokeReportService
             DeliverableReportId = latestReport?.ReportId,
             RevisionFeedback = meta.RevisionFeedback,
             Keyword = meta.Keyword,
-            PackageType = meta.PackageType
+            PackageType = meta.PackageType,
+            ReporterSendCount = meta.ReporterSendCount,
+            MaxReporterSends = MaxReporterSends,
+            CanSendToReporter = false,
+            RevisionRounds = MapRevisionRounds(meta)
         };
+    }
+
+    private static List<BespokeRevisionRoundDto> MapRevisionRounds(BespokeMeta meta) =>
+        (meta.RevisionRounds ?? new List<BespokeRevisionRoundMeta>())
+            .OrderBy(x => x.RoundNumber)
+            .Select(x => new BespokeRevisionRoundDto
+            {
+                RoundNumber = x.RoundNumber,
+                SentAt = x.SentAt,
+                Note = x.Note ?? "",
+                ClientUserId = x.ClientUserId,
+                ReporterDeliveredAt = x.ReporterDeliveredAt,
+                DeliverableReportId = x.DeliverableReportId,
+                Version = x.Version
+            })
+            .ToList();
+
+    private async Task AttachDeliverableToCurrentRoundAsync(BespokeRequest request, BespokeReport report)
+    {
+        var meta = ParseMeta(request.CustomMetrics);
+        meta.RevisionRounds ??= new List<BespokeRevisionRoundMeta>();
+        var round = meta.RevisionRounds
+            .OrderByDescending(x => x.RoundNumber)
+            .FirstOrDefault(x => x.RoundNumber == meta.ReporterSendCount)
+            ?? meta.RevisionRounds.OrderByDescending(x => x.RoundNumber).FirstOrDefault();
+        if (round == null) return;
+
+        round.DeliverableReportId = report.ReportId;
+        round.Version = report.Version;
+        round.ReporterDeliveredAt = report.UploadedAt == default ? DateTime.Now : report.UploadedAt;
+        request.CustomMetrics = JsonSerializer.Serialize(meta, JsonOptions);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <summary>Tải một bản BESPOKE_REPORTS theo reportId (lịch sử vòng gửi).</summary>
+    public async Task<(byte[] Content, string FileName)?> DownloadReportVersionAsync(
+        int workspaceId, int projectId, int userId, int requestId, int reportId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null) return null;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null) return null;
+
+        if (!IsAdmin(user) && !(IsReporter(user) && (request.ReporterId == userId || request.ReporterId == null)))
+        {
+            var member = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+            if (member == null) return null;
+        }
+
+        var report = request.BespokeReports.FirstOrDefault(r => r.ReportId == reportId);
+        if (report == null || string.IsNullOrWhiteSpace(report.FileUrl)) return null;
+        var path = ResolveFilePath(report.FileUrl);
+        if (!File.Exists(path)) return null;
+
+        var bytes = await File.ReadAllBytesAsync(path);
+        return (bytes, Path.GetFileName(path));
+    }
+
+    public async Task<(byte[] Content, string FileName)?> DownloadReportVersionByRequestIdAsync(
+        int userId, int requestId, int reportId)
+    {
+        var meta = await ResolveRequestContextAsync(requestId);
+        if (meta == null) return null;
+        return await DownloadReportVersionAsync(
+            meta.Value.WorkspaceId, meta.Value.ProjectId, userId, requestId, reportId);
     }
 
     private sealed class BespokeMeta
@@ -1624,6 +1732,19 @@ public class BespokeReportService
         public string? ScrapeJobId { get; set; }
         public string? PreviousSearchQuery { get; set; }
         public DateTime? ScrapeStartedAt { get; set; }
+        public int ReporterSendCount { get; set; }
+        public List<BespokeRevisionRoundMeta>? RevisionRounds { get; set; }
+    }
+
+    private sealed class BespokeRevisionRoundMeta
+    {
+        public int RoundNumber { get; set; }
+        public DateTime SentAt { get; set; }
+        public string Note { get; set; } = "";
+        public int? ClientUserId { get; set; }
+        public DateTime? ReporterDeliveredAt { get; set; }
+        public int? DeliverableReportId { get; set; }
+        public string? Version { get; set; }
     }
 
     private static string NormalizePackageType(string? packageType) =>

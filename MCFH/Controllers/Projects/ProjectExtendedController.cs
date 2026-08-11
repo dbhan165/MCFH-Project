@@ -350,7 +350,8 @@ public class ProjectExtendedController : ControllerBase
             return BadRequest(new { message = "Vui lòng nhập nội dung cần Reporter chỉnh sửa." });
 
         var result = await _bespokeService.SendToReporterAsync(workspaceId, projectId, GetUserId(), requestId, dto);
-        if (result == null) return BadRequest(new { message = "Không thể gửi Reporter. Cần báo cáo đã sẵn sàng." });
+        if (result == null)
+            return BadRequest(new { message = "Không thể gửi Reporter. Cần báo cáo sẵn sàng/đã nhận, còn lượt gửi (tối đa 3), và ghi chú hợp lệ." });
         return Ok(result);
     }
 
@@ -392,6 +393,17 @@ public class ProjectExtendedController : ControllerBase
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
         }
+    }
+
+    [HttpGet("{projectId}/bespoke/{requestId}/reports/{reportId}/download")]
+    public async Task<IActionResult> DownloadBespokeReportVersion(
+        int workspaceId, int projectId, int requestId, int reportId)
+    {
+        var file = await _bespokeService.DownloadReportVersionAsync(
+            workspaceId, projectId, GetUserId(), requestId, reportId);
+        if (file == null) return NotFound(new { message = "Không tìm thấy bản báo cáo này." });
+        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+        return File(file.Value.Content, contentType, file.Value.FileName);
     }
 
     [HttpPost("{projectId}/bespoke/{requestId}/accept-quote")]

@@ -74,6 +74,15 @@ public class ReporterController : ControllerBase
         return File(file.Value.Content, contentType, file.Value.FileName);
     }
 
+    [HttpGet("requests/{requestId}/reports/{reportId}/download")]
+    public async Task<IActionResult> DownloadVersion(int requestId, int reportId)
+    {
+        var file = await _reporter.DownloadReportVersionAsync(GetUserId(), requestId, reportId);
+        if (file == null) return NotFound(new { message = "Không tìm thấy bản báo cáo này." });
+        var contentType = BespokeReportService.GetDeliverableContentType(file.Value.FileName);
+        return File(file.Value.Content, contentType, file.Value.FileName);
+    }
+
     [HttpPost("requests/{requestId}/upload-revision")]
     public async Task<IActionResult> UploadRevision(int requestId, IFormFile file)
     {

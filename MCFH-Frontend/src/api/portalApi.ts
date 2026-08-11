@@ -223,6 +223,16 @@ export interface PlatformCookieContentResult {
   backupCreated: boolean;
 }
 
+export interface PortalRevisionRound {
+  roundNumber: number;
+  sentAt: string;
+  note: string;
+  clientUserId: number | null;
+  reporterDeliveredAt: string | null;
+  deliverableReportId: number | null;
+  version: string | null;
+}
+
 export interface PortalBespokeRequest {
   requestId: number;
   title: string;
@@ -248,9 +258,29 @@ export interface PortalBespokeRequest {
   revisionFeedback: string | null;
   keyword: string | null;
   packageType: string | null;
+  reporterSendCount: number;
+  maxReporterSends: number;
+  canSendToReporter: boolean;
+  revisionRounds: PortalRevisionRound[];
+}
+
+function mapPortalRevisionRound(r: Record<string, unknown>): PortalRevisionRound {
+  return {
+    roundNumber: pickNumber(r, 'roundNumber', 'RoundNumber'),
+    sentAt: pickString(r, 'sentAt', 'SentAt'),
+    note: pickString(r, 'note', 'Note'),
+    clientUserId: pickField<number>(r, 'clientUserId', 'ClientUserId') ?? null,
+    reporterDeliveredAt: pickNullableString(r, 'reporterDeliveredAt', 'ReporterDeliveredAt'),
+    deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,
+    version: pickNullableString(r, 'version', 'Version'),
+  };
 }
 
 function mapPortalRequest(r: Record<string, unknown>): PortalBespokeRequest {
+  const roundsRaw = (pickField<unknown[]>(r, 'revisionRounds', 'RevisionRounds') ?? []) as Record<
+    string,
+    unknown
+  >[];
   return {
     requestId: pickNumber(r, 'requestId', 'RequestId'),
     title: pickString(r, 'title', 'Title'),
@@ -276,6 +306,10 @@ function mapPortalRequest(r: Record<string, unknown>): PortalBespokeRequest {
     revisionFeedback: pickNullableString(r, 'revisionFeedback', 'RevisionFeedback'),
     keyword: pickNullableString(r, 'keyword', 'Keyword'),
     packageType: pickNullableString(r, 'packageType', 'PackageType'),
+    reporterSendCount: pickNumber(r, 'reporterSendCount', 'ReporterSendCount'),
+    maxReporterSends: pickNumber(r, 'maxReporterSends', 'MaxReporterSends') || 3,
+    canSendToReporter: pickField(r, 'canSendToReporter', 'CanSendToReporter') === true,
+    revisionRounds: roundsRaw.map(mapPortalRevisionRound),
   };
 }
 
@@ -849,6 +883,25 @@ export const reporterApi = {
     const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
     const rawName = match?.[1]?.replace(/['"]/g, '');
     const fileName = rawName || `bespoke-report-${requestId}.pdf`;
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadReportVersion: async (requestId: number, reportId: number) => {
+    const res = await axiosClient.get(
+      `/api/reporter/requests/${requestId}/reports/${reportId}/download`,
+      { responseType: 'blob' }
+    );
+    const disposition = res.headers['content-disposition'] as string | undefined;
+    const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+    const rawName = match?.[1]?.replace(/['"]/g, '');
+    const fileName = rawName || `bespoke-report-${requestId}-v${reportId}.pdf`;
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
