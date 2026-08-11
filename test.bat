@@ -1,0 +1,2 @@
+curl.exe -s -X POST -H "Content-Type: application/json" -d "{\"email\":\"admin@gmail.com\",\"password\":\"123\"}" http://localhost:5254/api/auth/login > token.json
+powershell -Command "$t = (Get-Content token.json | ConvertFrom-Json).token; curl.exe -s -X POST -H \"Content-Type: application/json\" -H \"Authorization: Bearer $t\" -d '{\"mentionsPackage\":\"FULL_UNLIMITED\"}' http://localhost:5254/api/scrape-orders/quote"
