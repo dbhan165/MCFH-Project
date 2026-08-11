@@ -60,6 +60,13 @@ export interface MentionTag {
   color: string | null;
 }
 
+export interface MuteEntity {
+  muteId: number;
+  entityType: 'author' | 'platform' | string;
+  entityValue: string;
+  createdAt?: string | null;
+}
+
 export interface ProjectMention {
   feedbackId: number;
   authorName: string | null;
