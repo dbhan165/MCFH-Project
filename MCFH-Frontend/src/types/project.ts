@@ -14,6 +14,13 @@ export interface Project {
   createdAt: string | null;
 }
 
+export interface MuteEntity {
+  muteId: number;
+  entityType: string;
+  entityValue: string;
+  createdAt: string;
+}
+
 export interface CreateProjectPayload {
   name: string;
   description?: string;

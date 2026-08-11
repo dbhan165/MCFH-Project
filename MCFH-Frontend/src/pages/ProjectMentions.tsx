@@ -662,7 +662,7 @@ const ProjectMentions = () => {
     }
     setIsSavingEditFilter(true);
     try {
-      await projectApi.updateMentionFilter(wid, projectId, editFilterModal.filterId, {
+      await projectApi.saveMentionFilter(wid, projectId, editFilterModal.filterId, {
         name: editFilterModal.name.trim(),
         config: {
           platform: editFilterModal.platform,

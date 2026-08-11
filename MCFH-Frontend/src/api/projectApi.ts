@@ -800,6 +800,19 @@ export const projectApi = {
       payload
     );
   },
+
+  listMutedSources: async (workspaceId: number, projectId: number): Promise<any[]> => {
+    const response = await axiosClient.get(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources`
+    );
+    return response.data;
+  },
+
+  unmuteMentionSource: async (workspaceId: number, projectId: number, muteId: number): Promise<void> => {
+    await axiosClient.delete(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources/${muteId}`
+    );
+  },
 };
 
 function mapRevisionRound(r: Record<string, unknown>) {
