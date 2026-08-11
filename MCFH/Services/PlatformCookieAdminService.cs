@@ -49,7 +49,7 @@ public class PlatformCookieAdminService
                     PlatformCookieId = row.PlatformCookieId,
                     Platform = row.Platform,
                     FilePath = row.FilePath,
-                    Status = row.Status,
+                    Status = ComputeEffectiveStatus(row),
                     Note = row.Note,
                     CookieCount = row.CookieCount,
                     ExpiresAt = row.ExpiresAt,
@@ -58,6 +58,7 @@ public class PlatformCookieAdminService
                     FileExists = false,
                     FileMissing = true,
                     IsExpiringSoon = PlatformCookieFileHelper.IsExpiringSoon(row.ExpiresAt),
+                    IsExpired = PlatformCookieFileHelper.IsExpired(row.ExpiresAt),
                     RequiredCookiesPresent = null
                 });
             }
@@ -192,6 +193,76 @@ public class PlatformCookieAdminService
         return true;
     }
 
+    public async Task<PlatformCookieDto> CreateAsync(int adminUserId, CreatePlatformCookieDto dto)
+    {
+        if (!await IsAdminAsync(adminUserId))
+            throw new UnauthorizedAccessException("Chỉ Admin được tạo platform cookie.");
+
+        // Validate platform key: lowercase letters/digits/underscore, length 2..50.
+        var platform = (dto.Platform ?? string.Empty).Trim().ToLowerInvariant();
+        if (platform.Length is < 2 or > 50 || !platform.All(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-'))
+            throw new ArgumentException("platform phải là chữ thường/chữ số/dấu gạch, dài 2-50 ký tự.");
+
+        if (await _context.PlatformCookies.AnyAsync(p => p.Platform == platform))
+            throw new ArgumentException($"Platform '{platform}' đã tồn tại.");
+
+        // Validate file_path tương đối.
+        var filePath = (dto.FilePath ?? string.Empty).Replace('\\', '/').Trim();
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("file_path là bắt buộc.");
+        if (!_pathProvider.IsRelativePathAllowed(filePath))
+            throw new ArgumentException("file_path phải nằm trong thư mục cookies/.");
+
+        var status = (dto.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(status))
+            status = "disabled";
+        if (status is not ("active" or "disabled" or "expired"))
+            throw new ArgumentException("status phải là active, disabled hoặc expired.");
+
+        var note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim();
+
+        // Tạo record với status=disabled trước; nếu có cookie hợp lệ thì cập nhật sau.
+        var now = DateTime.Now;
+        var row = new PlatformCookie
+        {
+            Platform = platform,
+            FilePath = filePath,
+            Status = status,
+            Note = note,
+            CookieCount = 0,
+            CreatedAt = now
+        };
+
+        _context.PlatformCookies.Add(row);
+        await _context.SaveChangesAsync();
+
+        // Nếu có CookiesJson thì parse + ghi file + cập nhật expires/count.
+        if (!string.IsNullOrWhiteSpace(dto.CookiesJson))
+        {
+            var entries = PlatformCookieFileHelper.ParseCookies(new UpdatePlatformCookieContentDto
+            {
+                CookiesJson = dto.CookiesJson
+            });
+            PlatformCookieFileHelper.ValidateRequiredCookies(platform, entries);
+
+            var fullPath = _pathProvider.ToFullPath(filePath);
+            await PlatformCookieFileHelper.WriteCookieFileAsync(fullPath, entries);
+
+            row.CookieCount = entries.Count;
+            row.ExpiresAt = PlatformCookieFileHelper.ComputeExpiresAt(entries);
+            row.UploadedAt = now;
+            row.Status = "active";
+            await _context.SaveChangesAsync();
+        }
+
+        _pathProvider.InvalidateCache();
+        _logger.LogInformation(
+            "Admin {UserId} tạo PLATFORM_COOKIES platform={Platform} filePath={FilePath} status={Status}",
+            adminUserId, platform, filePath, row.Status);
+
+        return await MapDtoAsync(row, includeRequired: true);
+    }
+
     private async Task<PlatformCookieDto> MapDtoAsync(PlatformCookie row, bool includeRequired)
     {
         var fullPath = _pathProvider.IsRelativePathAllowed(row.FilePath)
@@ -211,7 +282,7 @@ public class PlatformCookieAdminService
             PlatformCookieId = row.PlatformCookieId,
             Platform = row.Platform,
             FilePath = row.FilePath,
-            Status = row.Status,
+            Status = ComputeEffectiveStatus(row),
             Note = row.Note,
             CookieCount = fileExists ? (entries?.Count ?? row.CookieCount) : row.CookieCount,
             ExpiresAt = row.ExpiresAt,
@@ -220,12 +291,27 @@ public class PlatformCookieAdminService
             FileExists = fileExists,
             FileMissing = !fileExists,
             IsExpiringSoon = PlatformCookieFileHelper.IsExpiringSoon(row.ExpiresAt),
+            IsExpired = PlatformCookieFileHelper.IsExpired(row.ExpiresAt),
             BackupFilePath = backupRelative,
             BackupExists = File.Exists(backupFull),
             RequiredCookiesPresent = includeRequired
                 ? PlatformCookieFileHelper.GetRequiredPresence(row.Platform, entries)
                 : null
         };
+    }
+
+    private static string ComputeEffectiveStatus(PlatformCookie row)
+    {
+        // Nếu status thủ công là disabled thì giữ nguyên.
+        var manual = (row.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (manual == "disabled")
+            return "disabled";
+
+        // Đã hết hạn thật sự (expiresAt < now) → hiển thị expired dù DB đang active.
+        if (row.ExpiresAt.HasValue && row.ExpiresAt.Value < DateTime.Now)
+            return "expired";
+
+        return string.IsNullOrWhiteSpace(manual) ? "active" : manual;
     }
 
     private async Task<bool> IsAdminAsync(int userId)

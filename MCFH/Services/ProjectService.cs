@@ -1,4 +1,4 @@
-﻿using MCFH.DTOs.ProjectDtos;
+using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
 

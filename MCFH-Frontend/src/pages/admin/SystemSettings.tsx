@@ -1,16 +1,17 @@
 import { useEffect, useState, type ElementType } from 'react';
 import {
   Plug,
-  CreditCard,
-  Bell,
-  Gauge,
+  Mail,
+  Wallet,
   Eye,
   EyeOff,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, aiModelApi } from '../../api/portalApi';
+import BrevoKeyPanel from './settings/BrevoKeyPanel';
+import PayOsKeyPanel from './settings/PayOsKeyPanel';
 
-type SettingsTab = 'api' | 'payment' | 'notifications' | 'thresholds';
+type SettingsTab = 'api' | 'brevo' | 'payos';
 
 interface SettingsCategory {
   id: SettingsTab;
@@ -20,9 +21,8 @@ interface SettingsCategory {
 
 const settingsCategories: SettingsCategory[] = [
   { id: 'api', label: 'Tích hợp API & AI', icon: Plug },
-  { id: 'payment', label: 'Cổng thanh toán', icon: CreditCard },
-  { id: 'notifications', label: 'Thông báo hệ thống', icon: Bell },
-  { id: 'thresholds', label: 'Ngưỡng giới hạn toàn cục', icon: Gauge },
+  { id: 'brevo', label: 'Brevo Email Key', icon: Mail },
+  { id: 'payos', label: 'PayOS Key', icon: Wallet },
 ];
 
 const defaultModelValue = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
@@ -94,38 +94,40 @@ const SystemSettings = () => {
       searchPlaceholder="Tìm kiếm cài đặt..."
       adminName="Admin User"
       adminRole="QUẢN TRỊ VIÊN"
+      disableMainScroll
     >
-      <div className="mb-8">
-        <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Cài đặt hệ thống</h2>
-        <p className="text-[#6b7280] text-sm mt-1">
-          Cấu hình các tích hợp toàn hệ thống, tham số API và hành vi của hệ thống.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-        <div className="space-y-2">
-          {settingsCategories.map((category) => {
-            const isActive = activeTab === category.id;
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => setActiveTab(category.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-colors border ${
-                  isActive
-                    ? 'bg-red-50 text-[#ef4444] border-red-100'
-                    : 'bg-white text-[#6b7280] border-gray-200 hover:bg-gray-50 hover:text-[#111827]'
-                }`}
-              >
-                <category.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#ef4444]' : ''}`} />
-                {category.label}
-              </button>
-            );
-          })}
+      <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">
+        <div className="shrink-0 mb-2">
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Cài đặt hệ thống</h2>
+          <p className="text-[#6b7280] text-sm mt-1">
+            Cấu hình các tích hợp toàn hệ thống, tham số API và hành vi của hệ thống.
+          </p>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6 lg:p-8 shadow-sm">
-          {activeTab === 'api' && (
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+          <div className="space-y-2 overflow-y-auto pr-1">
+            {settingsCategories.map((category) => {
+              const isActive = activeTab === category.id;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setActiveTab(category.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-colors border ${
+                    isActive
+                      ? 'bg-red-50 text-[#ef4444] border-red-100'
+                      : 'bg-white text-[#6b7280] border-gray-200 hover:bg-gray-50 hover:text-[#111827]'
+                  }`}
+                >
+                  <category.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#ef4444]' : ''}`} />
+                  {category.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-6 lg:p-8 shadow-sm overflow-y-auto">
+            {activeTab === 'api' && (
             <>
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
                 <div>
@@ -225,44 +227,14 @@ const SystemSettings = () => {
             </>
           )}
 
-          {activeTab === 'payment' && (
-            <SettingsPlaceholder
-              title="Cổng thanh toán"
-              description="Cấu hình thông tin tích hợp cổng thanh toán PayOS và các dịch vụ khác."
-            />
-          )}
+          {activeTab === 'brevo' && <BrevoKeyPanel />}
 
-          {activeTab === 'notifications' && (
-            <SettingsPlaceholder
-              title="Thông báo hệ thống"
-              description="Quản lý cảnh báo email, webhook và quy tắc thông báo hệ thống."
-            />
-          )}
-
-          {activeTab === 'thresholds' && (
-            <SettingsPlaceholder
-              title="Ngưỡng giới hạn toàn cục"
-              description="Thiết lập giới hạn tốc độ cào, hạn mức API và phân bổ tài nguyên hệ thống."
-            />
-          )}
+          {activeTab === 'payos' && <PayOsKeyPanel />}
+          </div>
         </div>
       </div>
     </AdminLayout>
   );
 };
-
-const SettingsPlaceholder = ({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) => (
-  <div className="py-12 text-center">
-    <h3 className="text-lg font-semibold text-[#111827] mb-2">{title}</h3>
-    <p className="text-sm text-[#6b7280] max-w-md mx-auto">{description}</p>
-    <p className="text-xs text-gray-400 mt-4">Tính năng đang được phát triển trong phiên bản tiếp theo.</p>
-  </div>
-);
 
 export default SystemSettings;

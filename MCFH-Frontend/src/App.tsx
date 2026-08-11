@@ -52,6 +52,7 @@ import Subscription from "./pages/Subscription";
 import SubscriptionUpgrade from "./pages/SubscriptionUpgrade";
 import ProjectOverview from "./pages/ProjectOverview";
 import ProjectMentions from "./pages/ProjectMentions";
+import ProjectDataSources from "./pages/ProjectDataSources";
 import ProjectSentiment from "./pages/ProjectSentiment";
 import ProjectInfluencers from "./pages/ProjectInfluencers";
 import ProjectChannel from "./pages/ProjectChannel";
@@ -170,6 +171,7 @@ function AppRoutes() {
         >
           <Route index element={<ProjectOverview />} />
           <Route path="mentions" element={<ProjectMentions />} />
+          <Route path="sources" element={<ProjectDataSources />} />
           <Route path="sentiment" element={<ProjectSentiment />} />
           <Route path="influencers" element={<ProjectInfluencers />} />
           <Route path="channel" element={<ProjectChannel />} />

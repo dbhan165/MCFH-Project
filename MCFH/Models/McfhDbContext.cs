@@ -693,6 +693,7 @@ public partial class McfhDbContext : DbContext
                         j.IndexerProperty<int>("TagId").HasColumnName("tag_id");
                     });
 
+            entity.Property(e => e.ImportFileId).HasColumnName("import_file_id");
             entity.Property(e => e.ProjectId).HasColumnName("project_id");
             entity.Property(e => e.Platform)
                 .HasMaxLength(50)
@@ -889,9 +890,9 @@ public partial class McfhDbContext : DbContext
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
-                .HasColumnName("updated_at");
+                .HasColumnName("updated_at")
+                .IsRequired(false);
             entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
 
             entity.HasOne(d => d.UpdatedByNavigation).WithMany()
@@ -951,9 +952,9 @@ public partial class McfhDbContext : DbContext
                 .HasColumnName("setting_key");
             entity.Property(e => e.SettingValue).HasColumnName("setting_value");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
-                .HasColumnName("updated_at");
+                .HasColumnName("updated_at")
+                .IsRequired(false);
             entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
 
             entity.HasOne(d => d.UpdatedByNavigation).WithMany(p => p.SystemSettings)

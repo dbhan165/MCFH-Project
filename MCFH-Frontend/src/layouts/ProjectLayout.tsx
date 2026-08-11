@@ -3,7 +3,7 @@ import { Link, Outlet, useParams, useLocation } from 'react-router-dom';
 import { 
   BarChart2, PieChart, LayoutDashboard, Share2, MessageCircle, 
   Download, FileText,
-  ArrowLeft, Users, Loader2
+  ArrowLeft, Users, Loader2, Database
 } from 'lucide-react';
 import McfhLogo from '../components/brand/McfhLogo';
 import NotificationBell from '../components/notifications/NotificationBell';
@@ -52,11 +52,13 @@ const ProjectLayout = () => {
   const menuItems = [
     { path: '', icon: <LayoutDashboard size={20} />, label: 'Tổng quan', exact: true },
     { path: 'mentions', icon: <MessageCircle size={20} />, label: 'Lượt nhắc' },
+    { path: 'sources', icon: <Database size={20} />, label: 'Nguồn dữ liệu' },
     { path: 'sentiment', icon: <PieChart size={20} />, label: 'Cảm xúc' },
     { path: 'influencers', icon: <Users size={20} />, label: 'KOL & Người ảnh hưởng' },
     { path: 'channel', icon: <Share2 size={20} />, label: 'So sánh kênh' },
     { path: 'aspect', icon: <BarChart2 size={20} />, label: 'Khía cạnh' },
     { path: 'reports', icon: <FileText size={20} />, label: 'Báo cáo' },
+
   ];
 
   const activePage = menuItems.find((item) =>
