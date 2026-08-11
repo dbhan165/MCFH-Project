@@ -6,7 +6,6 @@ import type {
   CreateProjectPayload,
   InfluencerAnalytics,
   MentionTag,
-  MuteEntity,
   Project,
   ProjectMention,
   AiAnalysisProgress,
@@ -652,19 +651,6 @@ export const projectApi = {
     return response.data;
   },
 
-  updateMentionFilter: async (
-    workspaceId: number,
-    projectId: number,
-    filterId: number,
-    payload: { name: string; config: Record<string, string | null | undefined> }
-  ) => {
-    const response = await axiosClient.put(
-      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-filters/${filterId}`,
-      payload
-    );
-    return response.data;
-  },
-
   deleteMentionFilter: async (workspaceId: number, projectId: number, filterId: number) => {
     await axiosClient.delete(
       `/api/workspaces/${workspaceId}/projects/${projectId}/mention-filters/${filterId}`
@@ -779,21 +765,6 @@ export const projectApi = {
     );
   },
 
-  listMutedSources: async (workspaceId: number, projectId: number): Promise<MuteEntity[]> => {
-    const response = await axiosClient.get<unknown[]>(
-      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources`
-    );
-    return (response.data ?? []).map((item) => {
-      const m = item as Record<string, unknown>;
-      return {
-        muteId: pickNumber(m, 'muteId', 'MuteId'),
-        entityType: pickString(m, 'entityType', 'EntityType'),
-        entityValue: pickString(m, 'entityValue', 'EntityValue'),
-        createdAt: pickNullableString(m, 'createdAt', 'CreatedAt'),
-      };
-    });
-  },
-
   muteMentionSource: async (
     workspaceId: number,
     projectId: number,
@@ -802,12 +773,6 @@ export const projectApi = {
     await axiosClient.post(
       `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources`,
       payload
-    );
-  },
-
-  unmuteMentionSource: async (workspaceId: number, projectId: number, muteId: number): Promise<void> => {
-    await axiosClient.delete(
-      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources/${muteId}`
     );
   },
 };
