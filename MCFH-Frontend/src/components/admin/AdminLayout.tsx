@@ -24,7 +24,7 @@ const navItems = [
   { label: 'Gói đăng ký', icon: CreditCard, href: '/admin/subscriptions' },
   { label: 'Quản lý Proxy', icon: Server, href: '/admin/proxies' },
   { label: 'Nguồn Facebook', icon: Globe, href: '/admin/fb-sources' },
-  { label: 'Gói Scraping', icon: Package, href: '/admin/scrape-packages' },
+  { label: 'Gói Cào', icon: Package, href: '/admin/scrape-packages' },
   { label: 'Cookie Nền tảng', icon: Cookie, href: '/admin/cookies' },
   { label: 'Nhật ký hệ thống', icon: Clock, href: '/admin/audit-logs' },
   { label: 'Cài đặt hệ thống', icon: Settings, href: '/admin/settings' },
@@ -35,12 +35,19 @@ interface AdminLayoutProps {
   searchPlaceholder?: string;
   adminName?: string;
   adminRole?: string;
+  /**
+   * Nếu true (mặc định), <main> là scroll container cho page con (hành vi cũ).
+   * Nếu false, <main> overflow-hidden — page con tự quản lý scroll bên trong
+   * (dùng cho layout 2 cột có sticky sidebar như SystemSettings).
+   */
+  disableMainScroll?: boolean;
 }
 
 const AdminLayout = ({
   children,
   adminName,
   adminRole,
+  disableMainScroll = false,
 }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -212,7 +219,7 @@ const AdminLayout = ({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
+        <main className={`flex-1 min-h-0 p-6 lg:p-8 ${disableMainScroll ? 'overflow-hidden' : 'overflow-y-auto'}`}>{children}</main>
       </div>
     </div>
   );

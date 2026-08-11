@@ -721,6 +721,30 @@ export const projectApi = {
     };
   },
 
+  updateMentionTag: async (
+    workspaceId: number,
+    projectId: number,
+    tagId: number,
+    payload: { name: string; color?: string }
+  ): Promise<MentionTag> => {
+    const response = await axiosClient.put<Record<string, unknown>>(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-tags/${tagId}`,
+      payload
+    );
+    const t = response.data;
+    return {
+      tagId: pickNumber(t, 'tagId', 'TagId'),
+      name: pickString(t, 'name', 'Name'),
+      color: pickNullableString(t, 'color', 'Color'),
+    };
+  },
+
+  deleteMentionTag: async (workspaceId: number, projectId: number, tagId: number) => {
+    await axiosClient.delete(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-tags/${tagId}`
+    );
+  },
+
   assignMentionTags: async (
     workspaceId: number,
     projectId: number,
@@ -730,6 +754,16 @@ export const projectApi = {
     await axiosClient.put(
       `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/mentions/${feedbackId}/tags`,
       { tagIds }
+    );
+  },
+
+  togglePinForReport: async (
+    workspaceId: number,
+    projectId: number,
+    feedbackId: number
+  ): Promise<void> => {
+    await axiosClient.put(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/analytics/mentions/${feedbackId}/pin`
     );
   },
 

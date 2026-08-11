@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Headers;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using MailKit.Net.Smtp;
@@ -22,41 +22,54 @@ public class EmailService : IEmailService
     private readonly IConfiguration _config;
     private readonly ILogger<EmailService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IProviderCredentialResolver _resolver;
 
     public EmailService(
         IConfiguration config,
         ILogger<EmailService> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IProviderCredentialResolver resolver)
     {
         _config = config;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _resolver = resolver;
     }
 
     public async Task SendEmailAsync(string toEmail, string subject, string htmlMessage)
     {
-        var fromAddress = _config["Smtp:FromAddress"];
-        var fromName = _config["Smtp:FromName"] ?? "MCFH System Hub";
-        var apiKey = _config["Smtp:ApiKey"];
-
-        if (string.IsNullOrWhiteSpace(fromAddress)
-            || fromAddress.StartsWith("REPLACE_", StringComparison.Ordinal))
+        // Ưu tiên BrevoKey default trong DB (admin đã cấu hình).
+        // Nếu DB không có → fallback appsettings.json (giữ behavior cho dev).
+        var resolved = await _resolver.ResolveBrevoDefaultAsync();
+        if (resolved == null)
         {
             throw new InvalidOperationException(
-                "Smtp:FromAddress chưa cấu hình. Dùng email sender đã verified trên Brevo.");
+                "Chưa cấu hình Brevo key. Thêm key mặc định qua Admin → Cài đặt hệ thống → Brevo Email Key, " +
+                "hoặc điền Smtp:FromAddress/Smtp:ApiKey vào appsettings.json.");
         }
 
-        // Nếu có ApiKey (dạng xkeysib-...) thì dùng Brevo HTTP API.
-        // SMTP key (xsmtpsib-...) phải để ở Password + Username = login @smtp-brevo.com
-        if (!string.IsNullOrWhiteSpace(apiKey)
-            && !apiKey.StartsWith("REPLACE_", StringComparison.Ordinal)
-            && !apiKey.StartsWith("xsmtpsib-", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(resolved.FromAddress))
         {
-            await SendViaBrevoApiAsync(toEmail, subject, htmlMessage, fromAddress, fromName, apiKey);
-            return;
+            throw new InvalidOperationException(
+                "Brevo key không có FromAddress. Hãy cấu hình FromAddress đã verified trên Brevo.");
         }
 
-        await SendViaSmtpAsync(toEmail, subject, htmlMessage, fromAddress, fromName);
+        if (string.Equals(resolved.KeyType, "api", StringComparison.OrdinalIgnoreCase))
+        {
+            await SendViaBrevoApiAsync(
+                toEmail, subject, htmlMessage,
+                resolved.FromAddress, resolved.FromName, resolved.ApiKey);
+        }
+        else
+        {
+            await SendViaSmtpAsync(
+                toEmail, subject, htmlMessage,
+                resolved.FromAddress, resolved.FromName,
+                resolved.SmtpLogin ?? resolved.ApiKey, // username
+                resolved.ApiKey,                       // password
+                resolved.SmtpHost ?? "smtp-relay.brevo.com",
+                resolved.SmtpPort ?? 587);
+        }
     }
 
     private async Task SendViaBrevoApiAsync(
@@ -99,25 +112,16 @@ public class EmailService : IEmailService
         string subject,
         string htmlMessage,
         string fromAddress,
-        string fromName)
+        string fromName,
+        string username,
+        string password,
+        string smtpHost,
+        int smtpPort)
     {
-        var smtpHost = _config["Smtp:Host"] ?? "smtp-relay.brevo.com";
-        var smtpPortText = _config["Smtp:Port"] ?? "587";
-        var username = _config["Smtp:Username"];
-        var password = _config["Smtp:Password"];
-
-        if (string.IsNullOrWhiteSpace(username)
-            || string.IsNullOrWhiteSpace(password)
-            || username.StartsWith("REPLACE_", StringComparison.Ordinal)
-            || password.StartsWith("REPLACE_", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
         {
             throw new InvalidOperationException(
-                "Chưa có Smtp:ApiKey hoặc SMTP Username/Password. Thêm ApiKey Brevo vào appsettings.Development.json.");
-        }
-
-        if (!int.TryParse(smtpPortText, out var smtpPort))
-        {
-            throw new InvalidOperationException("Smtp:Port không hợp lệ.");
+                "Brevo key loại SMTP thiếu username hoặc password.");
         }
 
         var message = new MimeMessage();
@@ -138,7 +142,7 @@ public class EmailService : IEmailService
         {
             _logger.LogError(ex, "Gửi email SMTP tới {ToEmail} thất bại", toEmail);
             throw new InvalidOperationException(
-                "Không thể gửi email SMTP. Dùng Smtp:ApiKey (khuyến nghị) hoặc kiểm tra SMTP Login/Key trên Brevo.", ex);
+                "Không thể gửi email SMTP. Kiểm tra SMTP Login/Key trên Brevo và FromAddress đã verified.", ex);
         }
         finally
         {
@@ -149,3 +153,4 @@ public class EmailService : IEmailService
         }
     }
 }
+
