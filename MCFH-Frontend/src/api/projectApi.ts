@@ -676,6 +676,19 @@ export const projectApi = {
     return response.data;
   },
 
+  updateMentionFilter: async (
+    workspaceId: number,
+    projectId: number,
+    filterId: number,
+    payload: { name: string; config: Record<string, string | null | undefined> }
+  ) => {
+    const response = await axiosClient.put(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/mention-filters/${filterId}`,
+      payload
+    );
+    return response.data;
+  },
+
   deleteMentionFilter: async (workspaceId: number, projectId: number, filterId: number) => {
     await axiosClient.delete(
       `/api/workspaces/${workspaceId}/projects/${projectId}/mention-filters/${filterId}`
