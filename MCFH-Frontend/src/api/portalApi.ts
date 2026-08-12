@@ -767,6 +767,22 @@ export const adminApi = {
     return mapPlatformCookie(res.data);
   },
 
+  getNsrConfig: async (): Promise<NsrConfigResult> => {
+    const res = await axiosClient.get<Record<string, unknown>>('/api/admin/nsr-config');
+    const d = res.data;
+    const rules = (pickField<unknown[]>(d, 'rules', 'Rules') ?? []) as Record<string, unknown>[];
+    return {
+      formula: pickString(d, 'formula', 'Formula'),
+      description: pickString(d, 'description', 'Description'),
+      status: pickString(d, 'status', 'Status'),
+      rules: rules.map((r) => ({
+        name: pickString(r, 'name', 'Name'),
+        weight: pickString(r, 'weight', 'Weight'),
+        description: pickString(r, 'description', 'Description'),
+      })),
+    };
+  },
+
   getSettings: async () => {
     const res = await axiosClient.get<unknown[]>('/api/admin/settings');
     return (res.data ?? []).map((item) => {
@@ -785,6 +801,19 @@ export const adminApi = {
     return res.data;
   },
 };
+
+export interface NsrConfigRule {
+  name: string;
+  weight: string;
+  description: string;
+}
+
+export interface NsrConfigResult {
+  formula: string;
+  description: string;
+  status: string;
+  rules: NsrConfigRule[];
+}
 
 export interface AiModelTestResult {
   configured: boolean;
