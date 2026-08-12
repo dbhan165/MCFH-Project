@@ -54,14 +54,27 @@ public class YouTubeScraper
                 browser = await playwright.Chromium.LaunchAsync(launchOpts);
             }
 
-            var page = await browser.NewPageAsync();
-            try
+            // YouTube hay tự điều hướng (consent/redirect/autoplay) làm chết execution context
+            // giữa chừng — retry với page mới thay vì bỏ luôn video.
+            const int maxAttempts = 2;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                await ScrapeCommentsOnPageAsync(page, videoUrl, maxComments, result);
-            }
-            finally
-            {
-                await page.CloseAsync();
+                var page = await browser.NewPageAsync();
+                try
+                {
+                    await ScrapeCommentsOnPageAsync(page, videoUrl, maxComments, result);
+                    break;
+                }
+                catch (Exception ex) when (attempt < maxAttempts && IsTransientNavigationError(ex))
+                {
+                    _logger.LogWarning("[YouTube] Context bị hủy do trang điều hướng — thử lại lần {Next}: {Url}",
+                        attempt + 1, videoUrl);
+                    await Task.Delay(1500);
+                }
+                finally
+                {
+                    await page.CloseAsync();
+                }
             }
         }
         catch (Exception ex)
@@ -80,13 +93,27 @@ public class YouTubeScraper
         return result;
     }
 
+    private static bool IsTransientNavigationError(Exception ex)
+    {
+        var msg = ex.Message ?? "";
+        return msg.Contains("Execution context was destroyed", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("Cannot find context", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("Navigation interrupted", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("frame was detached", StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task ScrapeCommentsOnPageAsync(IPage page, string videoUrl, int maxComments, ScrapeResult result)
     {
         var cleanUrl = NormalizeVideoUrl(videoUrl);
         var originalVideoId = GetVideoId(cleanUrl);
+        var initialLoadDone = false;
 
+        // Chỉ can thiệp khi MAIN frame nhảy sang video khác SAU khi trang đã load xong.
+        // Bản cũ bắn GotoAsync cho mọi frame kể cả lúc đang load → navigation chạy đua
+        // với các lệnh Evaluate và gây "Execution context was destroyed".
         page.FrameNavigated += (_, e) =>
         {
+            if (!initialLoadDone || e.ParentFrame != null) return;
             if (e.Url.Contains("youtube.com/watch", StringComparison.OrdinalIgnoreCase)
                 && GetVideoId(e.Url) != originalVideoId)
             {
@@ -101,6 +128,12 @@ public class YouTubeScraper
             Timeout = 45000
         });
 
+        // Chờ trang ổn định (YouTube có thể redirect thêm 1 nhịp sau DOMContentLoaded)
+        try { await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions { Timeout = 15000 }); }
+        catch { }
+        await page.WaitForTimeoutAsync(1000);
+        initialLoadDone = true;
+
         await DismissConsentAsync(page);
         await SkipAdsAsync(page);
         await page.WaitForTimeoutAsync(1500);
@@ -109,10 +142,14 @@ public class YouTubeScraper
         result.Author = await TryGetChannelNameAsync(page);
         result.PostedAt = await TryGetPublishDateAsync(page);
 
-        await page.EvaluateAsync(@"() => {
-            const v = document.querySelector('video');
-            if (v) { v.pause(); v.autoplay = false; }
-        }");
+        try
+        {
+            await page.EvaluateAsync(@"() => {
+                const v = document.querySelector('video');
+                if (v) { v.pause(); v.autoplay = false; }
+            }");
+        }
+        catch { }
 
         await OpenCommentsSectionAsync(page);
 
@@ -203,15 +240,21 @@ public class YouTubeScraper
     {
         for (var i = 0; i < 10; i++)
         {
-            var isAdShowing = await page.EvalOnSelectorAsync<bool>(
-                ".html5-video-player",
-                "el => el.classList.contains('ad-showing')");
+            try
+            {
+                var isAdShowing = await page.EvaluateAsync<bool>(
+                    "() => document.querySelector('.html5-video-player')?.classList.contains('ad-showing') ?? false");
 
-            if (!isAdShowing) break;
+                if (!isAdShowing) break;
 
-            var skipButton = page.Locator(".ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern");
-            if (await skipButton.IsVisibleAsync())
-                await skipButton.ClickAsync();
+                var skipButton = page.Locator(".ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern");
+                if (await skipButton.IsVisibleAsync())
+                    await skipButton.ClickAsync();
+            }
+            catch
+            {
+                break;
+            }
 
             await page.WaitForTimeoutAsync(500);
         }
@@ -242,11 +285,11 @@ public class YouTubeScraper
         return null;
     }
 
-    private static async Task<DateTime?> TryGetPublishDateAsync(IPage page)
+    private async Task<DateTime?> TryGetPublishDateAsync(IPage page)
     {
         try
         {
-            var meta = page.Locator("meta[itemprop='datePublished']").First;
+            var meta = page.Locator("meta[itemprop='datePublished'], meta[itemprop='uploadDate']").First;
             if (await meta.CountAsync() > 0)
             {
                 var content = await meta.GetAttributeAsync("content");
@@ -267,7 +310,8 @@ public class YouTubeScraper
                 if (upload) return upload;
                 const details = window.ytInitialPlayerResponse?.videoDetails;
                 if (details?.publishDate) return details.publishDate;
-                const infoText = document.querySelector('#info-strings yt-formatted-string, #info-container yt-formatted-string')?.textContent;
+                const infoText = document.querySelector(
+                    '#info-strings yt-formatted-string, #info-container yt-formatted-string, ytd-watch-info-text #info')?.textContent;
                 if (infoText) return infoText.trim();
                 return null;
             }");
@@ -277,6 +321,32 @@ public class YouTubeScraper
         }
         catch { }
 
+        // Fallback bền nhất: player response JSON luôn nằm trong HTML nguồn,
+        // kể cả khi biến window hoặc selector UI đổi tên theo phiên bản YouTube.
+        try
+        {
+            var html = await page.ContentAsync();
+            foreach (var key in new[] { "publishDate", "uploadDate", "datePublished" })
+            {
+                var m = Regex.Match(html, $"\"{key}\"\\s*:\\s*\"([^\"]+)\"");
+                if (m.Success && PostedAtParser.TryParseAny(m.Groups[1].Value, out var fromHtml))
+                {
+                    _logger.LogInformation("[YouTube] Lấy ngày đăng từ HTML ({Key}): {Raw}", key, m.Groups[1].Value);
+                    return fromHtml;
+                }
+            }
+
+            // "dateText":{"simpleText":"22 thg 9, 2023"} — hiển thị UI, parse được cả tiếng Việt
+            var dt = Regex.Match(html, "\"dateText\"\\s*:\\s*\\{\\s*\"simpleText\"\\s*:\\s*\"([^\"]+)\"");
+            if (dt.Success && PostedAtParser.TryParseAny(dt.Groups[1].Value, out var fromDateText))
+            {
+                _logger.LogInformation("[YouTube] Lấy ngày đăng từ dateText: {Raw}", dt.Groups[1].Value);
+                return fromDateText;
+            }
+        }
+        catch { }
+
+        _logger.LogWarning("[YouTube] Không đọc được ngày đăng — video sẽ bị lọc nếu đơn có giới hạn thời gian.");
         return null;
     }
 
@@ -311,28 +381,36 @@ public class YouTubeScraper
 
         for (var i = 0; i < iterations; i++)
         {
-            var currentCount = await page.Locator(
-                "ytd-comment-thread-renderer, ytd-comment-view-model, ytd-comment-renderer").CountAsync();
-
-            if (currentCount >= maxComments) break;
-
-            if (currentCount == previousCount)
+            try
             {
-                noChangeStreak++;
-                if (noChangeStreak >= 4) break;
+                var currentCount = await page.Locator(
+                    "ytd-comment-thread-renderer, ytd-comment-view-model, ytd-comment-renderer").CountAsync();
+
+                if (currentCount >= maxComments) break;
+
+                if (currentCount == previousCount)
+                {
+                    noChangeStreak++;
+                    if (noChangeStreak >= 4) break;
+                }
+                else noChangeStreak = 0;
+
+                previousCount = currentCount;
+
+                await page.EvaluateAsync(@"() => {
+                    const panel = document.querySelector('ytd-comments#comments #contents')
+                        || document.querySelector('#contents.style-scope.ytd-comments');
+                    if (panel) panel.scrollTop += 900;
+                    window.scrollBy(0, 900);
+                }");
+
+                await page.Keyboard.PressAsync("End");
             }
-            else noChangeStreak = 0;
+            catch
+            {
+                break;
+            }
 
-            previousCount = currentCount;
-
-            await page.EvaluateAsync(@"() => {
-                const panel = document.querySelector('ytd-comments#comments #contents')
-                    || document.querySelector('#contents.style-scope.ytd-comments');
-                if (panel) panel.scrollTop += 900;
-                window.scrollBy(0, 900);
-            }");
-
-            await page.Keyboard.PressAsync("End");
             await page.WaitForTimeoutAsync(aggressive ? 1100 : 900);
         }
     }
@@ -383,7 +461,9 @@ public class YouTubeScraper
 
     private static async Task<List<string>> ExtractCommentsFromDomAsync(IPage page)
     {
-        return (await page.EvaluateAsync<string[]>(@"
+        try
+        {
+            return (await page.EvaluateAsync<string[]>(@"
             () => {
                 const texts = new Set();
                 const add = (t) => {
@@ -414,6 +494,11 @@ public class YouTubeScraper
                 return Array.from(texts);
             }
         ")).ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
     }
 
     private static async Task<List<string>> ExtractCommentsFromYtInitialDataAsync(IPage page)

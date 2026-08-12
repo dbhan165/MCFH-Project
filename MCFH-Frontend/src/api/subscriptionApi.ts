@@ -1,4 +1,4 @@
-﻿import axiosClient from './axiosClient';
+import axiosClient from './axiosClient';
 import { pickField, pickNullableString, pickNumber, pickString } from '../utils/normalizeApi';
 
 export interface SubscriptionPlan {
@@ -12,6 +12,18 @@ export interface SubscriptionPlan {
   buttonText: string;
   isPopular: boolean;
   activeSubscribers: number;
+}
+
+export interface ProjectPackage {
+  packageId: number;
+  projectName: string;
+  packageType: string;
+  mentionsIncluded: number;
+  mentionsUsed: number;
+  amount: number;
+  paymentStatus: string;
+  createdAt: string;
+  status: string;
 }
 
 export interface BillingSummary {
@@ -30,6 +42,7 @@ export interface BillingSummary {
   memberLimit: number;
   aiCreditUsed: number;
   aiCreditLimit: number;
+  projectPackages: ProjectPackage[];
 }
 
 export interface PaymentHistory {
@@ -58,7 +71,22 @@ function mapPlan(data: Record<string, unknown>): SubscriptionPlan {
   };
 }
 
+function mapProjectPackage(data: Record<string, unknown>): ProjectPackage {
+  return {
+    packageId: pickNumber(data, 'packageId', 'PackageId'),
+    projectName: pickString(data, 'projectName', 'ProjectName'),
+    packageType: pickString(data, 'packageType', 'PackageType'),
+    mentionsIncluded: pickNumber(data, 'mentionsIncluded', 'MentionsIncluded'),
+    mentionsUsed: pickNumber(data, 'mentionsUsed', 'MentionsUsed'),
+    amount: Number(pickField(data, 'amount', 'Amount') ?? 0),
+    paymentStatus: pickString(data, 'paymentStatus', 'PaymentStatus'),
+    createdAt: pickString(data, 'createdAt', 'CreatedAt'),
+    status: pickString(data, 'status', 'Status'),
+  };
+}
+
 function mapBilling(data: Record<string, unknown>): BillingSummary {
+  const packagesRaw = pickField<unknown[]>(data, 'projectPackages', 'ProjectPackages') ?? [];
   return {
     workspaceId: pickField<number>(data, 'workspaceId', 'WorkspaceId') ?? null,
     workspaceName: pickString(data, 'workspaceName', 'WorkspaceName'),
@@ -75,6 +103,7 @@ function mapBilling(data: Record<string, unknown>): BillingSummary {
     memberLimit: pickNumber(data, 'memberLimit', 'MemberLimit'),
     aiCreditUsed: pickNumber(data, 'aiCreditUsed', 'AiCreditUsed'),
     aiCreditLimit: pickNumber(data, 'aiCreditLimit', 'AiCreditLimit'),
+    projectPackages: packagesRaw.map((p) => mapProjectPackage(p as Record<string, unknown>)),
   };
 }
 

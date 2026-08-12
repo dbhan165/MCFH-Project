@@ -31,6 +31,20 @@ public class BillingSummaryDto
     public int MemberLimit { get; set; }
     public int AiCreditUsed { get; set; }
     public int AiCreditLimit { get; set; }
+    public List<ProjectPackageDto> ProjectPackages { get; set; } = new();
+}
+
+public class ProjectPackageDto
+{
+    public int PackageId { get; set; }
+    public string ProjectName { get; set; } = null!;
+    public string PackageType { get; set; } = null!;
+    public int MentionsIncluded { get; set; }
+    public int MentionsUsed { get; set; }
+    public decimal Amount { get; set; }
+    public string PaymentStatus { get; set; } = null!;
+    public DateTime CreatedAt { get; set; }
+    public string Status { get; set; } = null!;
 }
 
 public class PaymentHistoryDto

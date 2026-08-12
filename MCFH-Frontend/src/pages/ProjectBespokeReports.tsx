@@ -236,6 +236,19 @@ const ProjectBespokeReports = () => {
         }
     };
 
+    const handleDownloadRound = async (req: BespokeRequestItem, reportId: number) => {
+        const projectId = getProjectIdForRequest(req.requestId);
+        if (!wid || !projectId) return;
+        setDownloadingId(`bespoke-${req.requestId}-r${reportId}`);
+        try {
+            await projectApi.downloadBespokeReportVersion(wid, projectId, req.requestId, reportId);
+        } catch (error) {
+            setErrorMessage(extractApiError(error, 'Không thể tải bản báo cáo này.'));
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
     const handleUploadRevision = async (file: File | null) => {
         if (!selectedReqId || !wid || !file) return;
         const projectId = getProjectIdForRequest(selectedReqId);
@@ -253,6 +266,13 @@ const ProjectBespokeReports = () => {
     };
 
     const bespokeRequests = useMemo(() => bespoke?.requests ?? [], [bespoke]);
+    const selectedReq = useMemo(
+        () => bespokeRequests.find((r) => r.requestId === selectedReqId) ?? null,
+        [bespokeRequests, selectedReqId]
+    );
+    const nextSendRound = selectedReq
+        ? Math.min((selectedReq.reporterSendCount ?? 0) + 1, selectedReq.maxReporterSends || 3)
+        : 1;
     const backToReportsPath = `/workspace/${wid}/projects`;
 
     if (isLoading) {
@@ -296,7 +316,7 @@ const ProjectBespokeReports = () => {
                                 ? 'Reporter: xem báo cáo hệ thống đã gửi khách, đọc yêu cầu sửa và upload bản đã chỉnh.'
                                 : isAdmin
                                     ? 'Admin: giao Reporter — hệ thống tự gửi báo cáo cho khách; Reporter chỉ xử lý khi khách yêu cầu sửa.'
-                                    : 'Điền thông tin → hệ thống cào & xuất báo cáo. Xem xong nếu chưa ưng, gửi Reporter chỉnh tay.'}
+                                    : 'Điền thông tin → hệ thống cào & xuất báo cáo. Xem xong nếu chưa ưng, gửi Reporter chỉnh tay (tối đa 3 lần).'}
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -345,9 +365,15 @@ const ProjectBespokeReports = () => {
                                     setSendToReporterModalOpen(true);
                                 }}
                                 onDownload={() => handleDownloadBespoke(req)}
+                                onDownloadRound={(reportId) => handleDownloadRound(req, reportId)}
                                 onUploadRevision={() => { setSelectedReqId(req.requestId); setUploadRevisionModalOpen(true); }}
                                 isBusy={bespokeActionId === req.requestId}
                                 isDownloading={downloadingId === `bespoke-${req.requestId}`}
+                                downloadingRoundId={
+                                    downloadingId?.startsWith(`bespoke-${req.requestId}-r`)
+                                        ? Number(downloadingId.split('-r')[1])
+                                        : null
+                                }
                             />
                         ))}
                     </div>
@@ -374,6 +400,8 @@ const ProjectBespokeReports = () => {
                 isOpen={sendToReporterModalOpen}
                 onClose={() => setSendToReporterModalOpen(false)}
                 onSubmit={handleSendToReporter}
+                roundNumber={nextSendRound}
+                maxRounds={selectedReq?.maxReporterSends || 3}
             />
         </div>
     );
@@ -394,19 +422,55 @@ interface BespokeRequestRowProps {
     onDeliver: () => void;
     onSendToReporter: () => void;
     onDownload: () => void;
+    onDownloadRound: (reportId: number) => void;
     isBusy: boolean;
     isDownloading: boolean;
+    downloadingRoundId: number | null;
     onUploadRevision: () => void;
 }
 
-function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assignReporterId, onAssignReporterChange, onAssign, onPay, onStart, onDeliver, onSendToReporter, onDownload, isBusy, isDownloading, onUploadRevision }: BespokeRequestRowProps) {
+function formatRoundTime(value: string | null | undefined) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString('vi-VN');
+}
+
+function BespokeRequestRow({
+    req,
+    isAdmin,
+    isReporter,
+    userId,
+    reporters,
+    assignReporterId,
+    onAssignReporterChange,
+    onAssign,
+    onPay,
+    onStart,
+    onDeliver,
+    onSendToReporter,
+    onDownload,
+    onDownloadRound,
+    isBusy,
+    isDownloading,
+    downloadingRoundId,
+    onUploadRevision,
+}: BespokeRequestRowProps) {
     const canWork = ['assigned', 'in_progress'].includes(req.status)
         && (isAdmin || (isReporter && req.reporterId === userId));
     const showAssign = isAdmin && req.status === 'awaiting_reporter';
     const showPay = !isAdmin && !isReporter && req.status === 'pending_payment';
+    const showSendToReporter = !isAdmin && !isReporter && req.canSendToReporter;
+    const sendExhausted =
+        !isAdmin &&
+        !isReporter &&
+        req.status === 'completed' &&
+        (req.reporterSendCount ?? 0) >= (req.maxReporterSends || 3);
     const priceLabel = req.agreedPrice != null
         ? `${req.agreedPrice.toLocaleString('vi-VN')} VND`
         : null;
+    const rounds = req.revisionRounds ?? [];
+    const maxSends = req.maxReporterSends || 3;
 
     return (
         <div className="p-6 hover:bg-white/[0.02] transition-colors">
@@ -417,6 +481,11 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${bespokeStatusClass(req.status)}`}>
                             {isAdmin || isReporter ? req.statusLabel : clientStatusLabel(req.status, req.statusLabel)}
                         </span>
+                        {!isAdmin && !isReporter && (req.reporterSendCount > 0 || showSendToReporter || sendExhausted) && (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold border border-white/10 bg-white/5 text-gray-300">
+                                Đã gửi Reporter: {req.reporterSendCount}/{maxSends}
+                            </span>
+                        )}
                     </div>
                     {req.requirements && <p className="text-sm text-gray-400 line-clamp-2 mb-2">{req.requirements}</p>}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
@@ -459,10 +528,13 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                             {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Nộp báo cáo
                         </button>
                     )}
-                    {req.status === 'report_ready' && !isReporter && !isAdmin && (
+                    {showSendToReporter && (
                         <button type="button" onClick={onSendToReporter} disabled={isBusy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-purple-600/20 text-purple-300 hover:bg-purple-600 hover:text-white disabled:opacity-50">
                             {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Gửi Reporter chỉnh sửa
                         </button>
+                    )}
+                    {sendExhausted && (
+                        <span className="text-xs text-gray-500 px-2 py-1">Đã dùng hết 3 lần gửi Reporter</span>
                     )}
                     {req.status === 'revision_requested' && (isReporter || isAdmin) && (
                         <button type="button" onClick={onUploadRevision} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-blue-600/20 text-blue-300 hover:bg-blue-600 hover:text-white disabled:opacity-50">
@@ -477,6 +549,43 @@ function BespokeRequestRow({ req, isAdmin, isReporter, userId, reporters, assign
                     )}
                 </div>
             </div>
+
+            {rounds.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Lịch sử gửi Reporter</p>
+                    <ol className="space-y-3">
+                        {rounds.map((round) => (
+                            <li key={round.roundNumber} className="text-sm text-gray-300">
+                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="font-semibold text-white">Lần {round.roundNumber}</span>
+                                    <span className="text-xs text-gray-500">{formatRoundTime(round.sentAt)}</span>
+                                    <span className="text-xs text-gray-500">
+                                        {round.reporterDeliveredAt
+                                            ? `· Đã nhận ${formatRoundTime(round.reporterDeliveredAt)}`
+                                            : '· Đang chờ Reporter'}
+                                    </span>
+                                </div>
+                                {round.note && (
+                                    <p className="mt-1 text-xs text-gray-400 whitespace-pre-wrap">{round.note}</p>
+                                )}
+                                {round.deliverableReportId != null && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onDownloadRound(round.deliverableReportId!)}
+                                        disabled={downloadingRoundId === round.deliverableReportId}
+                                        className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-[#00B4D8] hover:underline disabled:opacity-50"
+                                    >
+                                        {downloadingRoundId === round.deliverableReportId
+                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                            : <Download className="w-3 h-3" />}
+                                        Tải file Reporter{round.version ? ` (${round.version})` : ''}
+                                    </button>
+                                )}
+                            </li>
+                        ))}
+                    </ol>
+                </div>
+            )}
         </div>
     );
 }

@@ -932,7 +932,12 @@ public class ScrapeByKeywordService
         if (progress?.IsCancellationRequested == true)
             return;
 
-        progress?.StartPlatform("tiktok", "Đang mở cửa sổ Chromium để bạn giải CAPTCHA thủ công...");
+        var tikTokHeadless = _activeOptions.TikTokHeadless;
+        progress?.StartPlatform(
+            "tiktok",
+            tikTokHeadless
+                ? "Đang cào TikTok (headless)..."
+                : "Đang mở cửa sổ Chromium để bạn giải CAPTCHA thủ công...");
 
         try
         {
@@ -941,7 +946,7 @@ public class ScrapeByKeywordService
 
             var saved = await RunTikTokBrowserSessionAsync(
                 projectId, keyword, result, progress, headedCts.Token,
-                headless: false, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
+                headless: tikTokHeadless, timeFilter, allowUnknownDates, new TikTokCaptchaTracker());
 
             if (progress?.IsCancellationRequested == true)
                 return;

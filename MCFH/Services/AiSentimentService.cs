@@ -405,7 +405,7 @@ public class AiSentimentService : IAiSentimentService
             "1. Viết 3-4 câu 'executiveInsights' (Tóm tắt điều hành) thật sắc bén, chỉ ra điểm sáng và rủi ro lớn nhất.\n" +
             "2. Đề xuất 2-3 'actionItems' (Gợi ý hành động) cụ thể, mang tính thực chiến cho đội ngũ Marketing/CSKH.\n" +
             "3. Đề xuất 3-4 'marketingStrategies' (Chiến lược Marketing) đi sâu vào việc giải quyết thách thức hoặc tận dụng cơ hội.\n" +
-            "4. Viết một 'nsrComment' (1-2 câu) bình luận về sức khỏe thương hiệu dựa trên chỉ số NSR và khía cạnh tiêu cực.\n" +
+            "4. Viết một 'nsrComment' (1-2 câu) bình luận khách quan về sức khỏe thương hiệu dựa trên chỉ số NSR. (Lưu ý: NSR > 0 là thương hiệu đang có dư luận tích cực chiếm ưu thế, NSR < 0 là đang gặp khủng hoảng tiêu cực).\n" +
             "5. Viết 1 đoạn văn 'sentimentAnalysis' (Tình hình cảm xúc) phân tích nguyên nhân hình thành làn sóng cảm xúc hiện tại (tích cực/tiêu cực) và tầm ảnh hưởng.\n" +
             "6. Viết 1 đoạn văn 'channelAnalysis' (Phân tích kênh) giải thích lý do tại sao kênh hàng đầu lại chiếm volume thảo luận lớn và hành vi người dùng trên kênh đó.\n" +
             "7. Viết 1 đoạn văn 'influencerAnalysis' (Phân tích người ảnh hưởng) đánh giá cách các tài khoản nổi bật đang định hướng dư luận và mức độ lan truyền.\n" +

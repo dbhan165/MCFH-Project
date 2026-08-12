@@ -14,6 +14,13 @@ export interface Project {
   createdAt: string | null;
 }
 
+export interface MuteEntity {
+  muteId: number;
+  entityType: string;
+  entityValue: string;
+  createdAt: string;
+}
+
 export interface CreateProjectPayload {
   name: string;
   description?: string;
@@ -58,13 +65,6 @@ export interface MentionTag {
   tagId: number;
   name: string;
   color: string | null;
-}
-
-export interface MuteEntity {
-  muteId: number;
-  entityType: 'author' | 'platform' | string;
-  entityValue: string;
-  createdAt?: string | null;
 }
 
 export interface ProjectMention {
@@ -192,6 +192,16 @@ export interface ReportCenter {
   reports: ReportFile[];
 }
 
+export interface BespokeRevisionRound {
+  roundNumber: number;
+  sentAt: string;
+  note: string;
+  clientUserId: number | null;
+  reporterDeliveredAt: string | null;
+  deliverableReportId: number | null;
+  version: string | null;
+}
+
 export interface BespokeRequestItem {
   requestId: number;
   /** Project riêng tạo kèm đơn bespoke — dùng cho pay/download/assign. */
@@ -216,6 +226,11 @@ export interface BespokeRequestItem {
   agreedPrice: number | null;
   hasDeliverable: boolean;
   deliverableReportId: number | null;
+  revisionFeedback?: string | null;
+  reporterSendCount: number;
+  maxReporterSends: number;
+  canSendToReporter: boolean;
+  revisionRounds: BespokeRevisionRound[];
 }
 
 export interface ReporterOption {

@@ -40,7 +40,7 @@ const DashboardLayout = () => {
 
   const bottomMenuItems = [
     { path: '/profile', icon: <UserCircle size={20} />, label: 'Hồ sơ cá nhân' },
-    { path: '/subscription', icon: <CreditCard size={20} />, label: 'Gói cước (Billing)' },
+    { path: '/subscription', icon: <CreditCard size={20} />, label: 'Hạn mức & Thanh toán' },
   ];
 
   const executeLogout = () => {

@@ -98,12 +98,12 @@ public class ThreadsScraper
             {
                 playwright = await Playwright.CreateAsync();
                 browser = await playwright.Chromium.LaunchAsync(
-                    ThreadsStealthHelper.CreateLaunchOptions(options?.ThreadsHeadless ?? false, null));
+                    ThreadsStealthHelper.CreateLaunchOptions(options?.ThreadsHeadless ?? true, null));
             }
 
             if (context == null)
             {
-                context = await ThreadsStealthHelper.CreateContextAsync(browser, options?.ThreadsHeadless ?? false, onStatus);
+                context = await ThreadsStealthHelper.CreateContextAsync(browser, options?.ThreadsHeadless ?? true, onStatus);
                 await ThreadsSessionHelper.LoadCookiesAsync(context);
             }
 

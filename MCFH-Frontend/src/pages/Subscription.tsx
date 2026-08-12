@@ -54,12 +54,7 @@ const Subscription = () => {
     await loadData(wid);
   };
 
-  const statusLabel =
-    billing?.status === 'active'
-      ? 'Đang hoạt động'
-      : billing?.status === 'free'
-        ? 'Miễn phí'
-        : billing?.status ?? '—';
+
 
   if (isLoading) {
     return (
@@ -77,7 +72,7 @@ const Subscription = () => {
 
       <div className="p-8 md:p-10 max-w-5xl mx-auto w-full">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <h1 className="text-4xl font-bold tracking-tight">Gói cước (Billing)</h1>
+          <h1 className="text-4xl font-bold tracking-tight">Hạn mức & Thanh toán</h1>
           {workspaces.length > 1 && (
             <select
               value={workspaceId ?? ''}
@@ -116,33 +111,84 @@ const Subscription = () => {
                 <div className="relative z-10">
                   <div className="flex flex-wrap items-center gap-2 mb-4">
                     <span className="inline-block px-3 py-1 bg-[#FF7575]/20 text-[#FF7575] rounded-full text-xs font-bold uppercase border border-[#FF7575]/30">
-                      Gói hiện tại
-                    </span>
-                    <span className="inline-block px-3 py-1 bg-white/5 text-gray-300 rounded-full text-xs font-semibold">
-                      {statusLabel}
+                      Workspace
                     </span>
                   </div>
-                  <h2 className="text-3xl font-bold mb-1">{billing?.planName ?? 'Khởi động'}</h2>
-                  <p className="text-gray-500 text-sm mb-1">{billing?.workspaceName}</p>
-                  <p className="text-gray-400 mb-6">{billing?.renewalNote ?? 'Chưa có gói trả phí.'}</p>
+                  <h2 className="text-3xl font-bold mb-1">{billing?.workspaceName}</h2>
+                  <p className="text-gray-500 text-sm mb-6">Quản lý các dự án và hạn mức tài nguyên chung.</p>
                   <Link
-                    to={workspaceId ? `/subscription/upgrade?workspaceId=${workspaceId}` : '/subscription/upgrade'}
-                    className="inline-flex bg-[#FF7575] hover:bg-[#ff6262] text-white px-6 py-3 rounded-lg font-bold transition-colors"
+                    to={workspaceId ? `/create-project?wid=${workspaceId}` : '/create-project'}
+                    className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-6 py-3 rounded-lg font-bold transition-colors"
                   >
-                    Nâng cấp / đổi gói
+                    Tạo dự án mới
                   </Link>
                 </div>
               </div>
 
               <div className="bg-[#0A101D] border border-white/5 rounded-2xl p-8">
-                <h3 className="text-lg font-bold mb-6">Mức sử dụng tài nguyên</h3>
+                <h3 className="text-lg font-bold mb-6">Mức sử dụng tài nguyên (Workspace)</h3>
                 <div className="space-y-6">
-                  <UsageBar label="Dự án" used={billing?.projectUsed ?? 0} limit={billing?.projectLimit ?? 1} color="bg-[#00B4D8]" />
-                  <UsageBar label="Mentions" used={billing?.mentionUsed ?? 0} limit={billing?.mentionLimit ?? 1000} color="bg-yellow-500" />
-                  <UsageBar label="Thành viên" used={billing?.memberUsed ?? 0} limit={billing?.memberLimit ?? 5} color="bg-emerald-500" />
-                  <UsageBar label="AI Credits" used={billing?.aiCreditUsed ?? 0} limit={billing?.aiCreditLimit ?? 100} color="bg-violet-500" />
+                  <UsageBar label="AI Credits (Dùng chung)" used={billing?.aiCreditUsed ?? 0} limit={billing?.aiCreditLimit ?? 100} color="bg-violet-500" />
                 </div>
               </div>
+            </div>
+
+            {/* Section: Project Packages */}
+            <div className="bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden mb-8">
+              <div className="p-6 border-b border-white/5 flex items-center gap-2">
+                <Zap className="text-[#FF7575]" />
+                <h3 className="text-lg font-bold">Gói dữ liệu dự án (Project Packages)</h3>
+              </div>
+              {!billing?.projectPackages || billing.projectPackages.length === 0 ? (
+                <p className="p-6 text-gray-500 text-sm">
+                  Bạn chưa mua gói Mentions nào cho các dự án trong Workspace này.
+                </p>
+              ) : (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-white/[0.02]">
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Dự án</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Gói mua</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Mức sử dụng</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Số tiền</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Thanh toán</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {billing.projectPackages.map((pkg) => {
+                      const percent = pkg.mentionsIncluded > 0 
+                          ? Math.min(100, Math.round((pkg.mentionsUsed / pkg.mentionsIncluded) * 100))
+                          : pkg.mentionsIncluded === -1 ? 0 : 100;
+                      return (
+                      <tr key={pkg.packageId} className="hover:bg-white/[0.02]">
+                        <td className="px-6 py-4 text-sm font-semibold">{pkg.projectName}</td>
+                        <td className="px-6 py-4 text-sm text-gray-300">
+                          {pkg.packageType}
+                          {pkg.status === 'exhausted' && <span className="ml-2 text-xs text-amber-500 border border-amber-500/30 px-2 py-0.5 rounded-full">Đã hết</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1 w-48">
+                            <div className="text-xs text-gray-400 flex justify-between">
+                              <span>Mentions</span>
+                              <span>{pkg.mentionsUsed} / {pkg.mentionsIncluded === -1 ? '∞' : pkg.mentionsIncluded}</span>
+                            </div>
+                            <div className="w-full bg-[#151B2B] h-1.5 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full ${percent > 85 ? 'bg-amber-500' : 'bg-blue-500'}`} 
+                                style={{ width: `${pkg.mentionsIncluded === -1 ? 0 : percent}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-bold text-sm">{pkg.amount.toLocaleString('vi-VN')} ₫</td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-semibold text-emerald-500">{pkg.paymentStatus}</span>
+                        </td>
+                      </tr>
+                    )})}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             <div className="bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden">
@@ -152,7 +198,7 @@ const Subscription = () => {
               </div>
               {payments.length === 0 ? (
                 <p className="p-6 text-gray-500 text-sm">
-                  Chưa có giao dịch. Nâng cấp gói để thấy hóa đơn demo tại đây.
+                  Chưa có giao dịch. Các hóa đơn mua gói dữ liệu cho dự án sẽ hiển thị tại đây.
                 </p>
               ) : (
                 <table className="w-full text-left">

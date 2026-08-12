@@ -6,7 +6,6 @@ import type {
   CreateProjectPayload,
   InfluencerAnalytics,
   MentionTag,
-  MuteEntity,
   Project,
   ProjectMention,
   AiAnalysisProgress,
@@ -578,6 +577,31 @@ export const projectApi = {
     window.URL.revokeObjectURL(url);
   },
 
+  downloadBespokeReportVersion: async (
+    workspaceId: number,
+    projectId: number,
+    requestId: number,
+    reportId: number
+  ) => {
+    const response = await axiosClient.get(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/reports/${reportId}/download`,
+      { responseType: 'blob' }
+    );
+    const contentType = String(response.headers['content-type'] ?? 'application/pdf');
+    const disposition = response.headers['content-disposition'] as string | undefined;
+    const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+    const rawName = match?.[1]?.replace(/['"]/g, '');
+    const fileName = rawName || `bespoke-report-${requestId}-v${reportId}.pdf`;
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   uploadBespokeRevision: async (
     workspaceId: number,
     projectId: number,
@@ -779,21 +803,6 @@ export const projectApi = {
     );
   },
 
-  listMutedSources: async (workspaceId: number, projectId: number): Promise<MuteEntity[]> => {
-    const response = await axiosClient.get<unknown[]>(
-      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources`
-    );
-    return (response.data ?? []).map((item) => {
-      const m = item as Record<string, unknown>;
-      return {
-        muteId: pickNumber(m, 'muteId', 'MuteId'),
-        entityType: pickString(m, 'entityType', 'EntityType'),
-        entityValue: pickString(m, 'entityValue', 'EntityValue'),
-        createdAt: pickNullableString(m, 'createdAt', 'CreatedAt'),
-      };
-    });
-  },
-
   muteMentionSource: async (
     workspaceId: number,
     projectId: number,
@@ -805,6 +814,13 @@ export const projectApi = {
     );
   },
 
+  listMutedSources: async (workspaceId: number, projectId: number): Promise<any[]> => {
+    const response = await axiosClient.get(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources`
+    );
+    return response.data;
+  },
+
   unmuteMentionSource: async (workspaceId: number, projectId: number, muteId: number): Promise<void> => {
     await axiosClient.delete(
       `/api/workspaces/${workspaceId}/projects/${projectId}/muted-sources/${muteId}`
@@ -812,7 +828,23 @@ export const projectApi = {
   },
 };
 
+function mapRevisionRound(r: Record<string, unknown>) {
+  return {
+    roundNumber: pickNumber(r, 'roundNumber', 'RoundNumber'),
+    sentAt: pickString(r, 'sentAt', 'SentAt'),
+    note: pickString(r, 'note', 'Note'),
+    clientUserId: pickField<number>(r, 'clientUserId', 'ClientUserId') ?? null,
+    reporterDeliveredAt: pickNullableString(r, 'reporterDeliveredAt', 'ReporterDeliveredAt'),
+    deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,
+    version: pickNullableString(r, 'version', 'Version'),
+  };
+}
+
 function mapBespokeRequest(r: Record<string, unknown>): BespokeRequestItem {
+  const roundsRaw = (pickField<unknown[]>(r, 'revisionRounds', 'RevisionRounds') ?? []) as Record<
+    string,
+    unknown
+  >[];
   return {
     requestId: pickNumber(r, 'requestId', 'RequestId'),
     projectId: pickNumber(r, 'projectId', 'ProjectId'),
@@ -836,6 +868,11 @@ function mapBespokeRequest(r: Record<string, unknown>): BespokeRequestItem {
     agreedPrice: pickField<number>(r, 'agreedPrice', 'AgreedPrice') ?? null,
     hasDeliverable: pickField(r, 'hasDeliverable', 'HasDeliverable') === true,
     deliverableReportId: pickField<number>(r, 'deliverableReportId', 'DeliverableReportId') ?? null,
+    revisionFeedback: pickNullableString(r, 'revisionFeedback', 'RevisionFeedback'),
+    reporterSendCount: pickNumber(r, 'reporterSendCount', 'ReporterSendCount'),
+    maxReporterSends: pickNumber(r, 'maxReporterSends', 'MaxReporterSends') || 3,
+    canSendToReporter: pickField(r, 'canSendToReporter', 'CanSendToReporter') === true,
+    revisionRounds: roundsRaw.map(mapRevisionRound),
   };
 }
 
