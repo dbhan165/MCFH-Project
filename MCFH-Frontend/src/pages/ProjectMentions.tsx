@@ -26,7 +26,6 @@ import {
   Edit2,
   Check,
   Scale,
-  Calculator,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { AiAnalysisProgress, ProjectMention, MentionTag, MuteEntity } from '../types/project';
@@ -168,13 +167,6 @@ function MentionCard({
   const isLongContent = item.content.length > 320;
   const displayContent =
     isLongContent && !contentExpanded ? `${item.content.slice(0, 320).trimEnd()}…` : item.content;
-
-  const commentLabel =
-    item.comments.length > 0
-      ? `${formatNumber(item.comments.length)} bình luận`
-      : item.commentsCount > 0
-        ? `${formatNumber(item.commentsCount)} bình luận`
-        : 'Không có bình luận';
 
   return (
     <article
