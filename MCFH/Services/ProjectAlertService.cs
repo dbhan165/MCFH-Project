@@ -44,34 +44,21 @@ public class ProjectAlertService
             var mutedAuthors = new HashSet<string>(muted.Where(m => m.EntityType == "author").Select(m => m.EntityValue), StringComparer.OrdinalIgnoreCase);
             var mutedPlatforms = new HashSet<string>(muted.Where(m => m.EntityType == "platform").Select(m => m.EntityValue), StringComparer.OrdinalIgnoreCase);
 
-            var positive = 0;
-            var negative = 0;
-            var neutral = 0;
-            var crisisTotal = 0;
-
-            foreach (var feedback in feedbacks)
+            var validFeedbacks = feedbacks.Where(f =>
             {
-                var author = feedback.AuthorName?.Trim();
-                var platform = (feedback.Platform ?? "").Trim();
-                if (!string.IsNullOrWhiteSpace(author) && mutedAuthors.Contains(author)) continue;
-                if (!string.IsNullOrWhiteSpace(platform) && mutedPlatforms.Contains(platform)) continue;
-                var sentiment = feedback.AiAnalysis?.MainSentiment?.ToLowerInvariant();
-                switch (sentiment)
-                {
-                    case "positive": positive++; break;
-                    case "negative": negative++; break;
-                    case "neutral": neutral++; break;
-                }
+                var author = f.AuthorName?.Trim();
+                var platform = (f.Platform ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(author) && mutedAuthors.Contains(author)) return false;
+                if (!string.IsNullOrWhiteSpace(platform) && mutedPlatforms.Contains(platform)) return false;
+                return true;
+            }).ToList();
 
-                if (feedback.AiAnalysis?.IsCrisisAlert == true)
-                    crisisTotal++;
-            }
+            var (positive, negative, neutral, unanalyzed, analyzed, nsr) = NsrCalculator.CalculateFromFeedbacks(validFeedbacks);
+            var crisisTotal = validFeedbacks.Count(f => f.AiAnalysis?.IsCrisisAlert == true);
 
-            var analyzed = positive + negative + neutral;
             if (analyzed == 0 && crisisCountInBatch == 0) return;
 
             var negativePercent = analyzed > 0 ? negative * 100.0 / analyzed : 0;
-            var nsr = analyzed > 0 ? Math.Round((positive - negative) * 100.0 / analyzed, 1) : 0;
             var negativeTrend = nsr < 0 || negativePercent >= 35;
             var shouldAlert = crisisCountInBatch > 0 || crisisTotal > 0 || negativeTrend;
             if (!shouldAlert) return;

@@ -25,6 +25,8 @@ import {
   Pin,
   Edit2,
   Check,
+  Scale,
+  Calculator,
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { AiAnalysisProgress, ProjectMention, MentionTag, MuteEntity } from '../types/project';
@@ -57,6 +59,34 @@ const SENTIMENT_ACCENT: Record<string, string> = {
 
 function getSentimentAccent(sentiment: string | null | undefined) {
   return SENTIMENT_ACCENT[sentiment?.toLowerCase() ?? 'pending'] ?? SENTIMENT_COLORS.pending;
+}
+
+function computeMentionNsrWeight(commentsCount: number, platform?: string | null) {
+  let weight = 1.0;
+  const reasons: string[] = [];
+
+  if (commentsCount >= 20) {
+    weight *= 2.0;
+    reasons.push('Tương tác cao');
+  }
+
+  const plat = platform?.toLowerCase();
+  if (plat === 'news') {
+    weight *= 1.5;
+    reasons.push('Báo chí');
+  } else if (plat === 'youtube' || plat === 'facebook' || plat === 'tiktok' || plat === 'threads' || plat === 'instagram' || (plat && plat !== 'default')) {
+    weight *= 1.3;
+    reasons.push('Mạng xã hội');
+  }
+
+  if (reasons.length === 0) {
+    reasons.push('Tiêu chuẩn');
+  }
+
+  return {
+    weight: Math.round(weight * 10) / 10,
+    reasonStr: reasons.join(' + '),
+  };
 }
 
 function MetricCard({
@@ -133,6 +163,7 @@ function MentionCard({
   const hasComments = item.comments.length > 0;
   const hasSentiment = item.sentiment != null && item.sentiment !== '';
   const accent = getSentimentAccent(item.sentiment);
+  const nsrWeightInfo = computeMentionNsrWeight(item.commentsCount, item.platform);
   const platformColor = getPlatformChartColor(item.platform);
   const isLongContent = item.content.length > 320;
   const displayContent =
@@ -199,6 +230,17 @@ function MentionCard({
                 ? ` · ${Math.round(item.confidenceScore * 100)}%`
                 : ''}
             </span>
+
+            {/* NSR Impact Badge */}
+            {hasSentiment && (
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 border border-cyan-500/30 bg-cyan-500/10 rounded-full text-xs font-medium text-cyan-300 shadow-xs"
+                title={`Bài viết đóng góp hệ số x${nsrWeightInfo.weight} vào chỉ số Cảm xúc (NSR) tổng của dự án (${nsrWeightInfo.reasonStr})`}
+              >
+                <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Ảnh hưởng: <strong className="font-semibold text-cyan-100">{nsrWeightInfo.weight}x</strong></span>
+              </span>
+            )}
 
             <button
               type="button"
@@ -343,9 +385,33 @@ function MentionCard({
               <div className="p-1.5 rounded-lg bg-[#FF7575]/10">
                 <Sparkles className="w-3.5 h-3.5 text-[#FF7575]" />
               </div>
-              <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <p className="text-sm font-semibold text-white">Tóm tắt AI</p>
-                <p className="text-[11px] text-gray-500">{commentLabel}</p>
+                {hasSentiment && (
+                  <div
+                    className="inline-flex items-center gap-2 bg-cyan-950/40 border border-cyan-500/20 px-3 py-1 rounded-lg text-xs"
+                    title="Mỗi bài viết được gán trọng số ảnh hưởng (x1.0 - x2.0) dựa trên nền tảng và lượng tương tác để tính điểm Cảm xúc (NSR) tổng của dự án."
+                  >
+                    <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span className="text-gray-300 font-medium">Tác động NSR:</span>
+                    {item.sentiment?.toLowerCase() === 'positive' ? (
+                      <span className="font-bold text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/25">
+                        +{nsrWeightInfo.weight} Tích cực
+                      </span>
+                    ) : item.sentiment?.toLowerCase() === 'negative' ? (
+                      <span className="font-bold text-rose-300 bg-rose-500/15 px-2 py-0.5 rounded border border-rose-500/25">
+                        -{nsrWeightInfo.weight} Tiêu cực
+                      </span>
+                    ) : (
+                      <span className="font-medium text-gray-300 bg-gray-500/15 px-2 py-0.5 rounded border border-gray-500/25">
+                        0 (Trung tính)
+                      </span>
+                    )}
+                    <span className="text-[11px] text-cyan-300/80 font-normal">
+                      ({nsrWeightInfo.reasonStr} · x{nsrWeightInfo.weight})
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             {item.analyzedAt && (
