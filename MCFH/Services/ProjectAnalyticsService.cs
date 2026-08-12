@@ -454,24 +454,7 @@ public class ProjectAnalyticsService
             {
                 var mentions = g.Count();
                 var comments = g.Sum(f => f.CommentsCount ?? 0);
-                var positive = 0;
-                var negative = 0;
-                var neutral = 0;
-                var unanalyzed = 0;
-
-                foreach (var f in g)
-                {
-                    switch (f.AiAnalysis?.MainSentiment?.ToLowerInvariant())
-                    {
-                        case "positive": positive++; break;
-                        case "negative": negative++; break;
-                        case "neutral": neutral++; break;
-                        default: unanalyzed++; break;
-                    }
-                }
-
-                var analyzed = positive + negative + neutral;
-                var nsr = analyzed > 0 ? Math.Round((positive - negative) * 100.0 / analyzed, 1) : 0;
+                var (positive, negative, neutral, unanalyzed, analyzed, nsr) = NsrCalculator.CalculateFromFeedbacks(g);
 
                 return new ChannelStatsDto
                 {
@@ -698,37 +681,7 @@ public class ProjectAnalyticsService
     private static (int Positive, int Negative, int Neutral, int Unanalyzed, int Analyzed, double NsrScore) BuildSentimentCounts(
         List<ScrapedFeedback> feedbacks)
     {
-        var positive = 0;
-        var negative = 0;
-        var neutral = 0;
-        var unanalyzed = 0;
-
-        foreach (var feedback in feedbacks)
-        {
-            var sentiment = feedback.AiAnalysis?.MainSentiment?.ToLowerInvariant();
-            switch (sentiment)
-            {
-                case "positive":
-                    positive++;
-                    break;
-                case "negative":
-                    negative++;
-                    break;
-                case "neutral":
-                    neutral++;
-                    break;
-                default:
-                    unanalyzed++;
-                    break;
-            }
-        }
-
-        var analyzed = positive + negative + neutral;
-        var nsr = analyzed > 0
-            ? Math.Round((positive - negative) * 100.0 / analyzed, 1)
-            : 0;
-
-        return (positive, negative, neutral, unanalyzed, analyzed, nsr);
+        return NsrCalculator.CalculateFromFeedbacks(feedbacks);
     }
 
     private static string BuildFallbackAiSummary(string? sentiment, int commentCount) =>

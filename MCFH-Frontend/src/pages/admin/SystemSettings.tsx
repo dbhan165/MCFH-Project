@@ -3,6 +3,7 @@ import {
   Plug,
   Mail,
   Wallet,
+  Calculator,
   Eye,
   EyeOff,
 } from 'lucide-react';
@@ -10,8 +11,9 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import { adminApi, aiModelApi } from '../../api/portalApi';
 import BrevoKeyPanel from './settings/BrevoKeyPanel';
 import PayOsKeyPanel from './settings/PayOsKeyPanel';
+import NsrConfigPanel from './settings/NsrConfigPanel';
 
-type SettingsTab = 'api' | 'brevo' | 'payos';
+type SettingsTab = 'api' | 'brevo' | 'payos' | 'nsr';
 
 interface SettingsCategory {
   id: SettingsTab;
@@ -23,6 +25,7 @@ const settingsCategories: SettingsCategory[] = [
   { id: 'api', label: 'Tích hợp API & AI', icon: Plug },
   { id: 'brevo', label: 'Brevo Email Key', icon: Mail },
   { id: 'payos', label: 'PayOS Key', icon: Wallet },
+  { id: 'nsr', label: 'Thuật toán NSR', icon: Calculator },
 ];
 
 const defaultModelValue = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
@@ -230,6 +233,8 @@ const SystemSettings = () => {
           {activeTab === 'brevo' && <BrevoKeyPanel />}
 
           {activeTab === 'payos' && <PayOsKeyPanel />}
+
+          {activeTab === 'nsr' && <NsrConfigPanel />}
           </div>
         </div>
       </div>
