@@ -60,6 +60,17 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, onSuccess }: CreateBe
     e.preventDefault();
     if (!wid || modules.length === 0) return;
 
+    // Khoảng thời gian phải nằm trong quá khứ — dữ liệu tương lai không tồn tại để cào.
+    const today = new Date().toISOString().slice(0, 10);
+    if ((dateFrom && dateFrom > today) || (dateTo && dateTo > today)) {
+      setErrorMessage('Ngày bắt đầu và kết thúc không được vượt quá ngày hiện tại.');
+      return;
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setErrorMessage('Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
     try {
@@ -182,6 +193,7 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, onSuccess }: CreateBe
                 <input
                   type="date"
                   value={dateFrom}
+                  max={dateTo || new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setDateFrom(e.target.value)}
                   className="w-full px-4 py-3 bg-[#0A101D] border border-white/10 rounded-xl text-white focus:border-[#FF7575] focus:outline-none [color-scheme:dark]"
                 />
@@ -191,6 +203,8 @@ const ProjectCreateBespokeModal = ({ isOpen, onClose, wid, onSuccess }: CreateBe
                 <input
                   type="date"
                   value={dateTo}
+                  min={dateFrom || undefined}
+                  max={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setDateTo(e.target.value)}
                   className="w-full px-4 py-3 bg-[#0A101D] border border-white/10 rounded-xl text-white focus:border-[#FF7575] focus:outline-none [color-scheme:dark]"
                 />

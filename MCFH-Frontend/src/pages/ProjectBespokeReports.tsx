@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
     Settings2, Plus, AlertCircle, CheckCircle2, Loader2,
-    UserCheck, Play, Send, Download, ArrowLeft, RefreshCw, UploadCloud, CreditCard
+    UserCheck, Play, Send, Download, ArrowLeft, RefreshCw, UploadCloud, CreditCard, Trash2
 } from 'lucide-react';
 import { projectApi } from '../api/projectApi';
 import type { BespokeCenter, BespokeRequestItem, ReporterOption } from '../types/project';
@@ -10,6 +10,7 @@ import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { isSystemAdmin, isSystemReporter } from '../utils/workspaceHelpers';
 import ProjectCreateBespokeModal from './ProjectCreateBespoke';
 import { UploadRevisionModal, SendToReporterModal } from './ProjectMockModals';
+import { useAppModal } from '../contexts/AppModalContext';
 
 function bespokeStatusClass(status: string) {
     switch (status) {
@@ -66,6 +67,7 @@ const ProjectBespokeReports = () => {
 
     const isAdmin = isSystemAdmin(userRole);
     const isReporter = isSystemReporter(userRole);
+    const { confirm } = useAppModal();
 
     const getProjectIdForRequest = useCallback(
         (requestId: number) => requestProjectMap[requestId] ?? null,
@@ -223,6 +225,30 @@ const ProjectBespokeReports = () => {
         }
     };
 
+    const handleDelete = async (req: BespokeRequestItem) => {
+        const projectId = getProjectIdForRequest(req.requestId);
+        if (!wid || !projectId) return;
+        const ok = await confirm({
+            title: 'Xóa báo cáo chuyên sâu',
+            message: `Xóa yêu cầu «${req.title}» cùng toàn bộ file báo cáo? Hành động này không thể hoàn tác.`,
+            confirmText: 'Xóa',
+            cancelText: 'Hủy',
+            type: 'danger',
+        });
+        if (!ok) return;
+        setBespokeActionId(req.requestId);
+        setErrorMessage('');
+        try {
+            await projectApi.deleteBespokeRequest(wid, projectId, req.requestId);
+            setSuccessMessage('Đã xóa báo cáo chuyên sâu.');
+            await loadBespokeData();
+        } catch (error) {
+            setErrorMessage(extractApiError(error, 'Không thể xóa báo cáo.'));
+        } finally {
+            setBespokeActionId(null);
+        }
+    };
+
     const handleDownloadBespoke = async (req: BespokeRequestItem) => {
         const projectId = getProjectIdForRequest(req.requestId);
         if (!wid || !projectId) return;
@@ -366,6 +392,7 @@ const ProjectBespokeReports = () => {
                                 }}
                                 onDownload={() => handleDownloadBespoke(req)}
                                 onDownloadRound={(reportId) => handleDownloadRound(req, reportId)}
+                                onDelete={() => handleDelete(req)}
                                 onUploadRevision={() => { setSelectedReqId(req.requestId); setUploadRevisionModalOpen(true); }}
                                 isBusy={bespokeActionId === req.requestId}
                                 isDownloading={downloadingId === `bespoke-${req.requestId}`}
@@ -423,6 +450,7 @@ interface BespokeRequestRowProps {
     onSendToReporter: () => void;
     onDownload: () => void;
     onDownloadRound: (reportId: number) => void;
+    onDelete: () => void;
     isBusy: boolean;
     isDownloading: boolean;
     downloadingRoundId: number | null;
@@ -451,6 +479,7 @@ function BespokeRequestRow({
     onSendToReporter,
     onDownload,
     onDownloadRound,
+    onDelete,
     isBusy,
     isDownloading,
     downloadingRoundId,
@@ -545,6 +574,17 @@ function BespokeRequestRow({
                         <button type="button" onClick={onDownload} disabled={isDownloading} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-[#00B4D8] bg-[#00B4D8]/10 hover:bg-[#00B4D8] hover:text-white disabled:opacity-50">
                             {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                             {req.status === 'completed' ? 'Tải bản đã chỉnh sửa' : 'Tải báo cáo'}
+                        </button>
+                    )}
+                    {!isReporter && req.status !== 'gathering_data' && (
+                        <button
+                            type="button"
+                            onClick={onDelete}
+                            disabled={isBusy}
+                            title="Xóa báo cáo này"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-red-400 bg-red-500/10 hover:bg-red-600 hover:text-white disabled:opacity-50"
+                        >
+                            {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Xóa
                         </button>
                     )}
                 </div>

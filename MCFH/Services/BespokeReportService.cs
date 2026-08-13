@@ -115,6 +115,14 @@ public class BespokeReportService
         if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Keyword))
             return null;
 
+        // Khoảng thời gian phải nằm trong quá khứ: from <= to và cả hai <= hôm nay
+        // (dữ liệu tương lai không tồn tại để cào).
+        var rangeFrom = ParseDate(dto.DateFrom);
+        var rangeTo = ParseDate(dto.DateTo);
+        var today = DateTime.Now.Date;
+        if (rangeFrom?.Date > today || rangeTo?.Date > today) return null;
+        if (rangeFrom.HasValue && rangeTo.HasValue && rangeFrom.Value.Date > rangeTo.Value.Date) return null;
+
         var keyword = dto.Keyword.Trim();
         var title = dto.Title.Trim();
         var packageType = NormalizePackageType(dto.PackageType);
@@ -515,7 +523,9 @@ public class BespokeReportService
         // để không mất dấu vết nếu backend crash giữa chừng.
         await _context.SaveChangesAsync();
 
-        var jobId = await _jobRunner.StartAsync(meta.ProjectId, userId, ComputePostedSinceDays(meta));
+        var jobId = await _jobRunner.StartAsync(
+            meta.ProjectId, userId, ComputePostedSinceDays(meta),
+            postedUntil: ParseDate(meta.DateTo));
         if (jobId == null)
         {
             await RestoreProjectSearchQueryAsync(meta);
@@ -772,6 +782,41 @@ public class BespokeReportService
 
         await LoadRequestNavigationsAsync(request);
         return MapRequest(request, user);
+    }
+
+    /// <summary>
+    /// Xóa yêu cầu bespoke cùng các bản báo cáo và file trên đĩa.
+    /// Chỉ chủ yêu cầu hoặc admin. Payment được giữ lại làm lịch sử giao dịch (chỉ gỡ liên kết).
+    /// </summary>
+    public async Task<bool> DeleteRequestAsync(int workspaceId, int projectId, int userId, int requestId)
+    {
+        var user = await GetUserWithAccessAsync(workspaceId, projectId, userId);
+        if (user == null) return false;
+
+        var request = await GetProjectRequestAsync(projectId, requestId);
+        if (request == null) return false;
+        if (request.ClientId != userId && !IsAdmin(user)) return false;
+
+        // Xóa file deliverable trên đĩa (best-effort — file lock không chặn việc xóa record).
+        foreach (var report in request.BespokeReports.ToList())
+            DeleteDeliverableFile(report.FileUrl);
+        try
+        {
+            var folder = GetBespokeFolder(requestId);
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning("Không xóa được thư mục bespoke #{RequestId}: {Message}", requestId, ex.Message);
+        }
+
+        var payments = await _context.Payments.Where(p => p.RequestId == requestId).ToListAsync();
+        foreach (var payment in payments) payment.RequestId = null;
+
+        _context.BespokeReports.RemoveRange(request.BespokeReports);
+        _context.BespokeRequests.Remove(request);
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<BespokeRequestItemDto?> AssignReporterAsync(
