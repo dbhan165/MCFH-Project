@@ -5,14 +5,14 @@ public class ReportInsightsResultDto
     public List<string> ExecutiveInsights { get; set; } = new();
     public List<string> ActionItems { get; set; } = new();
     public List<string> MarketingStrategies { get; set; } = new();
-    public string NsrComment { get; set; } = string.Empty;
-    public string SentimentAnalysis { get; set; } = string.Empty;
-    public string ChannelAnalysis { get; set; } = string.Empty;
-    public string InfluencerAnalysis { get; set; } = string.Empty;
-    public SwotAnalysisDto SwotAnalysis { get; set; } = new();
+    public string? NsrComment { get; set; }
+    public string? SentimentAnalysis { get; set; }
+    public string? ChannelAnalysis { get; set; }
+    public string? InfluencerAnalysis { get; set; }
+    public SwotDto? SwotAnalysis { get; set; }
 }
 
-public class SwotAnalysisDto
+public class SwotDto
 {
     public List<string> Strengths { get; set; } = new();
     public List<string> Weaknesses { get; set; } = new();

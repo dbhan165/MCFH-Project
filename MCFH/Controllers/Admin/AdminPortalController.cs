@@ -110,4 +110,22 @@ public class AdminPortalController : ControllerBase
     [HttpGet("audit-logs")]
     public async Task<IActionResult> GetAuditLogs([FromQuery] int limit = 50) =>
         Ok(await _admin.GetAuditLogsAsync(GetUserId(), limit));
+
+    [HttpGet("nsr-config")]
+    public IActionResult GetNsrConfig()
+    {
+        return Ok(new
+        {
+            formula = "NSR = [(WeightedPositive - WeightedNegative) / TotalWeight] * 100%",
+            description = "Hệ thống tự động tính điểm Weighted NSR nhằm nâng cao độ uy tín bằng cách nhân trọng số cho bài viết từ KOLs/Hot posts hoặc các nguồn truyền thông lớn.",
+            status = "Active",
+            rules = new[]
+            {
+                new { name = "Bài viết / Comment tương tác cao (>= 20 likes/replies)", weight = $"{NsrCalculator.HIGH_ENGAGEMENT_MULTIPLIER}x", description = "Bài viết có độ phủ lớn hoặc từ KOLs" },
+                new { name = "Nguồn tin tức (News / Báo chí)", weight = $"{NsrCalculator.NEWS_PLATFORM_MULTIPLIER}x", description = "Tác động thương hiệu chính thống lâu dài" },
+                new { name = "Nguồn truyền thông & Mạng xã hội", weight = $"{NsrCalculator.MEDIA_PLATFORM_MULTIPLIER}x", description = "Đề cập trên các nền tảng MXH (Facebook, TikTok, YouTube, Threads,...)" },
+                new { name = "Mention thông thường", weight = $"{NsrCalculator.DEFAULT_WEIGHT}x", description = "Bình luận tiêu chuẩn" }
+            }
+        });
+    }
 }

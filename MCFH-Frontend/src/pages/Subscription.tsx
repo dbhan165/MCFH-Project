@@ -54,12 +54,7 @@ const Subscription = () => {
     await loadData(wid);
   };
 
-  const statusLabel =
-    billing?.status === 'active'
-      ? 'Đang hoạt động'
-      : billing?.status === 'free'
-        ? 'Miễn phí'
-        : billing?.status ?? '—';
+
 
   if (isLoading) {
     return (

@@ -14,6 +14,13 @@ export interface Project {
   createdAt: string | null;
 }
 
+export interface MuteEntity {
+  muteId: number;
+  entityType: string;
+  entityValue: string;
+  createdAt: string;
+}
+
 export interface CreateProjectPayload {
   name: string;
   description?: string;
@@ -58,13 +65,6 @@ export interface MentionTag {
   tagId: number;
   name: string;
   color: string | null;
-}
-
-export interface MuteEntity {
-  muteId: number;
-  entityType: 'author' | 'platform' | string;
-  entityValue: string;
-  createdAt?: string | null;
 }
 
 export interface ProjectMention {

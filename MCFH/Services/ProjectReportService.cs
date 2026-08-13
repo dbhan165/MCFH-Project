@@ -1802,23 +1802,7 @@ public class ProjectReportService
 
     private static (int Positive, int Negative, int Neutral, double NsrScore) CountSentiments(IEnumerable<MentionDto> mentions)
     {
-        var positive = 0;
-        var negative = 0;
-        var neutral = 0;
-
-        foreach (var m in mentions)
-        {
-            switch (m.Sentiment?.ToLowerInvariant())
-            {
-                case "positive": positive++; break;
-                case "negative": negative++; break;
-                case "neutral": neutral++; break;
-            }
-        }
-
-        var analyzed = positive + negative + neutral;
-        var nsr = analyzed > 0 ? Math.Round((positive - negative) * 100.0 / analyzed, 1) : 0;
-        return (positive, negative, neutral, nsr);
+        return NsrCalculator.CalculateFromMentionDtos(mentions);
     }
 
     private static List<string> BuildExecutiveInsights(
