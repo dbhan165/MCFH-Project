@@ -8,6 +8,7 @@ import { projectApi } from '../api/projectApi';
 import type { BespokeCenter, BespokeRequestItem, ReporterOption } from '../types/project';
 import { extractApiError, loadProfileFromStorage } from '../utils/authStorage';
 import { isSystemAdmin, isSystemReporter } from '../utils/workspaceHelpers';
+import { workspaceApi } from '../api/workspaceApi';
 import ProjectCreateBespokeModal from './ProjectCreateBespoke';
 import { UploadRevisionModal, SendToReporterModal } from './ProjectMockModals';
 import { useAppModal } from '../contexts/AppModalContext';
@@ -50,6 +51,8 @@ const ProjectBespokeReports = () => {
     const wid = Number(workspaceId);
     const userRole = loadProfileFromStorage()?.role ?? 'Client';
     const userId = loadProfileFromStorage()?.userId ?? 0;
+
+    const [workspaceRole, setWorkspaceRole] = useState('');
 
     const [bespoke, setBespoke] = useState<BespokeCenter | null>(null);
     const [requestProjectMap, setRequestProjectMap] = useState<Record<number, number>>({});
@@ -139,6 +142,12 @@ const ProjectBespokeReports = () => {
     useEffect(() => {
         loadBespokeData();
     }, [loadBespokeData]);
+
+    useEffect(() => {
+        if (wid) {
+            workspaceApi.getById(wid).then(ws => setWorkspaceRole(ws.myRole || '')).catch(console.error);
+        }
+    }, [wid]);
 
     const handleAssign = async (requestId: number) => {
         const reporterId = assignReporterId[requestId];
@@ -349,11 +358,11 @@ const ProjectBespokeReports = () => {
                         <button
                             type="button"
                             onClick={loadBespokeData}
-                            className="p-2.5 rounded-xl border border-white/10 bg-white/5 text-gray-400 hover:text-white transition-colors"
+                            className="p-2 rounded-xl text-gray-400 hover:text-[#00B4D8] hover:bg-[#00B4D8]/10 transition-colors"
                         >
                             <RefreshCw className="w-4 h-4" />
                         </button>
-                        {!isReporter && (
+                        {!isReporter && workspaceRole !== 'Viewer' && (
                             <button
                                 type="button"
                                 onClick={() => setIsCreateModalOpen(true)}

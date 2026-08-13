@@ -810,6 +810,7 @@ const Projects = () => {
   const { startKeywordScrape } = useScrapeJob();
 
   const [workspaceName, setWorkspaceName] = useState('');
+  const [workspaceRole, setWorkspaceRole] = useState('');
   const [projectList, setProjectList] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -835,6 +836,7 @@ const Projects = () => {
         projectApi.getProjects(wid),
       ]);
       setWorkspaceName(ws.name);
+      setWorkspaceRole(ws.myRole || '');
       setProjectList(projects);
     } catch (error) {
       setErrorMessage(extractApiError(error, 'Không thể tải danh sách dự án.'));
@@ -1221,21 +1223,25 @@ const Projects = () => {
                 {compareMode ? 'Hủy so sánh' : 'So sánh dự án'}
               </button>
             )}
-            <Link
-              to={`/create-project?wid=${workspaceId}`}
-              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
-            >
-              <Plus size={18} />
-              Tạo dự án mới
-            </Link>
+            {workspaceRole !== 'Viewer' && (
+              <Link
+                to={`/create-project?wid=${workspaceId}`}
+                className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+              >
+                <Plus size={18} />
+                Tạo dự án mới
+              </Link>
+            )}
 
-            <Link
-              to={`/workspace/${workspaceId}/project/bespoke-reports`}
-              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
-            >
-              <Plus size={18} />
-              Tạo báo cáo chuyên sâu
-            </Link>
+            {workspaceRole !== 'Viewer' && (
+              <Link
+                to={`/workspace/${workspaceId}/project/bespoke-reports`}
+                className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+              >
+                <Plus size={18} />
+                Tạo báo cáo chuyên sâu
+              </Link>
+            )}
           </div>
         </div>
 
@@ -1359,13 +1365,15 @@ const Projects = () => {
             <p className="text-gray-400 mb-8 max-w-lg mx-auto leading-relaxed">
               Tạo dự án đầu tiên để cào mentions từ Facebook, YouTube, TikTok, Threads và chạy phân tích AI sentiment.
             </p>
-            <Link
-              to={`/create-project?wid=${workspaceId}&onboarding=1`}
-              className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-8 py-3.5 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
-            >
-              <Plus size={18} />
-              Khởi tạo dự án đầu tiên
-            </Link>
+            {workspaceRole !== 'Viewer' && (
+              <Link
+                to={`/create-project?wid=${workspaceId}&onboarding=1`}
+                className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-8 py-3.5 rounded-2xl text-sm font-bold shadow-[0_8px_30px_rgba(255,117,117,0.3)] transition-colors"
+              >
+                <Plus size={18} />
+                Khởi tạo dự án đầu tiên
+              </Link>
+            )}
           </div>
         </div>
       ) : (
@@ -1414,7 +1422,7 @@ const Projects = () => {
             </div>
           )}
 
-          {!searchQuery && (
+          {!searchQuery && workspaceRole !== 'Viewer' && (
             <Link
               to={`/create-project?wid=${workspaceId}`}
               className="group rounded-3xl border-2 border-dashed border-white/10 hover:border-[#FF7575]/40 bg-[#151B2B]/50 hover:bg-[#FF7575]/[0.03] p-6 flex flex-col items-center justify-center gap-4 min-h-[260px] transition-all"

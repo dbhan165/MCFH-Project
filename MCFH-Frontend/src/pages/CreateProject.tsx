@@ -11,6 +11,7 @@ import { projectApi } from '../api/projectApi';
 import { scrapeOrderApi, type ScrapeQuote } from '../api/scrapeOrderApi';
 import { extractApiError } from '../utils/authStorage';
 import { pickField, pickNullableString, pickNumber, pickString } from '../utils/normalizeApi';
+import { workspaceApi } from '../api/workspaceApi';
 import {
   buildDataSources,
   getPrimaryKeyword,
@@ -40,6 +41,16 @@ const CreateProject = () => {
   const [selectedPackageCode, setSelectedPackageCode] = useState('');
 
   // Load package catalog 1 lần ở parent — share cho cả PackageStep (UI) và SourcesStep (maxSources).
+  useEffect(() => {
+    if (workspaceId) {
+      workspaceApi.getById(Number(workspaceId)).then(ws => {
+        if (ws.myRole === 'Viewer') {
+          navigate(`/workspace/${workspaceId}`);
+        }
+      }).catch(console.error);
+    }
+  }, [workspaceId, navigate]);
+
   useEffect(() => {
     let cancelled = false;
     axiosClient
