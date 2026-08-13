@@ -1216,6 +1216,17 @@ public class ScrapeByKeywordService
         var proxy = useProxy ? CurrentPlaywrightProxy() : null;
         await using var browser = await playwright.Chromium.LaunchAsync(
             PlaywrightScrapeHelper.YouTubeLaunch(_activeOptions, proxy));
+
+        // Khoảng ngày tường minh (bespoke): nhúng after:/before: vào query để YouTube trả đúng
+        // video trong khoảng, và bỏ sp filter (lọc tương đối theo hiện tại) để không mâu thuẫn.
+        var dateOps = timeFilter.YouTubeSearchDateOperators();
+        if (!string.IsNullOrEmpty(dateOps))
+        {
+            Console.WriteLine($"[YouTube] Search theo khoảng ngày: «{keyword}{dateOps}»");
+            return await searchScraper.SearchAsync(
+                keyword + dateOps, poolSize, _activeOptions, browser, postedSinceDays: null);
+        }
+
         return await searchScraper.SearchAsync(
             keyword, poolSize, _activeOptions, browser, timeFilter.PostedSinceDays);
     }

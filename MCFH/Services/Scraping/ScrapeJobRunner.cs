@@ -14,7 +14,7 @@ public class ScrapeJobRunner
         _store = store;
     }
 
-    public async Task<string?> StartAsync(int projectId, int userId, int? postedSinceDays = null, bool fastDemo = false)
+    public async Task<string?> StartAsync(int projectId, int userId, int? postedSinceDays = null, bool fastDemo = false, DateTime? postedUntil = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
@@ -44,7 +44,7 @@ public class ScrapeJobRunner
         _store.Create(jobId, projectId, userId, postedSinceDays, fastDemo);
         await ScrapingJobPersistence.CreateRunningAsync(db, jobId, projectId);
 
-        _ = Task.Run(() => ExecuteAsync(jobId, projectId, postedSinceDays, fastDemo));
+        _ = Task.Run(() => ExecuteAsync(jobId, projectId, postedSinceDays, fastDemo, postedUntil));
 
         return jobId;
     }
@@ -59,7 +59,7 @@ public class ScrapeJobRunner
 
     public bool CancelJob(string jobId, int userId) => _store.RequestCancel(jobId, userId);
 
-    private async Task ExecuteAsync(string jobId, int projectId, int? postedSinceDays, bool fastDemo)
+    private async Task ExecuteAsync(string jobId, int projectId, int? postedSinceDays, bool fastDemo, DateTime? postedUntil = null)
     {
         var progress = new ScrapeJobProgress(_store, jobId);
         var state = _store.Get(jobId);
@@ -73,7 +73,11 @@ public class ScrapeJobRunner
             using var scope = _scopeFactory.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<ScrapeByKeywordService>();
             var result = await service.ScrapeAsync(
-                projectId, progress, ScrapeTimeFilter.FromDays(postedSinceDays), fastDemo, jobId);
+                projectId, progress,
+                postedUntil.HasValue
+                    ? ScrapeTimeFilter.FromDaysUntil(postedSinceDays, postedUntil)
+                    : ScrapeTimeFilter.FromDays(postedSinceDays),
+                fastDemo, jobId);
 
             if (state.IsCancellationRequested)
                 state.CompleteCancelled(result);

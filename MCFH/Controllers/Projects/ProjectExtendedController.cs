@@ -411,6 +411,14 @@ public class ProjectExtendedController : ControllerBase
         return Ok(result);
     }
 
+    [HttpDelete("{projectId}/bespoke/{requestId}")]
+    public async Task<IActionResult> DeleteBespokeRequest(int workspaceId, int projectId, int requestId)
+    {
+        var deleted = await _bespokeService.DeleteRequestAsync(workspaceId, projectId, GetUserId(), requestId);
+        if (!deleted) return NotFound(new { message = "Không tìm thấy yêu cầu hoặc bạn không có quyền xóa." });
+        return Ok(new { message = "Đã xóa báo cáo chuyên sâu." });
+    }
+
     [HttpGet("{projectId}/bespoke/{requestId}/download")]
     public async Task<IActionResult> DownloadBespokeReport(int workspaceId, int projectId, int requestId)
     {
