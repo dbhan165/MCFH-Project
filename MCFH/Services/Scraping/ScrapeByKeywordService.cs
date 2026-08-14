@@ -939,10 +939,12 @@ public class ScrapeByKeywordService
                 ? "Đang cào TikTok (headless)..."
                 : "Đang mở cửa sổ Chromium để bạn giải CAPTCHA thủ công...");
 
+        // Timeout cho cả discovery + mở từng video (+ chờ CAPTCHA nếu headed).
+        var sessionTimeoutSec = HeadedRetryTimeoutSeconds();
         try
         {
-            using var headedCts = CreateTikTokSessionCts(
-                progress, _activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds);
+            using var headedCts = CreateTikTokSessionCts(progress, sessionTimeoutSec);
+            Console.WriteLine($"[TikTok] Session timeout = {sessionTimeoutSec}s (headless={tikTokHeadless})");
 
             var saved = await RunTikTokBrowserSessionAsync(
                 projectId, keyword, result, progress, headedCts.Token,
@@ -954,7 +956,7 @@ public class ScrapeByKeywordService
             if (saved == 0 && result.TikTok.Count == 0)
             {
                 const string noVideoMsg =
-                    "TikTok: không tìm thấy video công khai — thử từ khóa ngắn hơn (vd. FPT).";
+                    "TikTok: không tìm thấy video công khai trong khoảng ngày — thử từ khóa ngắn hơn hoặc nới khoảng ngày.";
                 progress?.CompletePlatform("tiktok", 0, noVideoMsg);
                 lock (result.Errors)
                     result.Errors.Add(noVideoMsg);
@@ -967,7 +969,7 @@ public class ScrapeByKeywordService
         catch (OperationCanceledException)
         {
             var timeoutMsg =
-                $"TikTok: hết thời gian tìm video ({_activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds}s). Thử từ khóa ngắn hơn hoặc bật chế độ demo.";
+                $"TikTok: hết thời gian phiên cào ({sessionTimeoutSec}s). Tăng TikTokDiscoveryTimeoutSeconds trong appsettings.";
             progress?.FailPlatform("tiktok", timeoutMsg);
             lock (result.Errors)
                 result.Errors.Add(timeoutMsg);
@@ -1013,6 +1015,27 @@ public class ScrapeByKeywordService
             {
                 await TikTokSessionHelper.TrySaveAfterSuccessfulSessionAsync(context, captchaTracker, 0);
                 return 0;
+            }
+
+            // Ưu tiên URL khớp từ khóa (vd. @fpt..., /tuyendung...) rồi mới tới video rác đầu list.
+            urls = PrioritizeTikTokUrlsByKeyword(urls, keyword);
+
+            // Bỏ qua video ngoài khoảng ngày bằng ID (không mở trang) — tiết kiệm timeout.
+            if (timeFilter.IsActive && !allowUnknownDates)
+            {
+                var before = urls.Count;
+                urls = urls
+                    .Where(u =>
+                    {
+                        if (!TikTokScraper.TryParsePostedAtFromVideoId(u, out var posted))
+                            return true; // không parse được → vẫn mở để lấy ngày/DOM
+                        if (timeFilter.IsWithinRange(posted, allowUnknownDate: false))
+                            return true;
+                        Console.WriteLine($"[TikTok] Skip sớm (ID ngoài khoảng): {u} posted={posted:yyyy-MM-dd}");
+                        return false;
+                    })
+                    .ToList();
+                Console.WriteLine($"[TikTok] Sau lọc ngày từ ID: còn {urls.Count}/{before} URL cần mở.");
             }
 
             progress?.UpdatePlatform("tiktok", result.TikTok.Count,
@@ -1202,7 +1225,30 @@ public class ScrapeByKeywordService
     private int HeadedRetryTimeoutSeconds()
     {
         var wait = _activeOptions.TikTokAllowManualCaptcha ? _activeOptions.TikTokCaptchaWaitSeconds : 0;
-        return _activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds + wait + 120;
+        // Discovery + chờ CAPTCHA + ~90s mỗi video mục tiêu (mở trang + comment).
+        var perVideo = Math.Max(_activeOptions.EffectiveMaxVideosPerPlatform, 5) * 90;
+        return _activeOptions.EffectiveTikTokDiscoveryTimeoutSeconds + wait + perVideo + 120;
+    }
+
+    /// <summary>Đưa URL có username/path chứa token từ khóa lên đầu danh sách.</summary>
+    private static List<string> PrioritizeTikTokUrlsByKeyword(List<string> urls, string keyword)
+    {
+        var tokens = keyword
+            .Split([' ', ',', ';', '|', '/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.TrimStart('@').ToLowerInvariant())
+            .Where(t => t.Length >= 2)
+            .Distinct()
+            .ToList();
+        if (tokens.Count == 0) return urls;
+
+        return urls
+            .OrderByDescending(u =>
+            {
+                var hay = u.ToLowerInvariant();
+                return tokens.Count(t => hay.Contains(t));
+            })
+            .ThenBy(u => urls.IndexOf(u))
+            .ToList();
     }
 
     private async Task<List<string>> RunYouTubeSearchAsync(

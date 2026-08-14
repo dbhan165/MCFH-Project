@@ -285,28 +285,37 @@ public class TikTokScraper
     }
 
     /// <summary>
-    /// Fallback cuối: ID video TikTok là số 64-bit có 32 bit cao là unix timestamp (giây) lúc đăng,
-    /// nên luôn giải mã được ngày đăng chính xác từ URL kể cả khi trang không hiển thị ngày.
+    /// ID video TikTok là số 64-bit có 32 bit cao là unix timestamp (giây) lúc đăng —
+    /// dùng để lọc khoảng ngày trước khi mở trang, và làm fallback khi DOM không có ngày.
     /// </summary>
+    public static bool TryParsePostedAtFromVideoId(string videoUrl, out DateTime postedAtUtc)
+    {
+        postedAtUtc = default;
+        try
+        {
+            var m = Regex.Match(videoUrl, @"/video/(\d{15,20})");
+            if (!m.Success || !ulong.TryParse(m.Groups[1].Value, out var id)) return false;
+
+            var seconds = (long)(id >> 32);
+            var min = new DateTimeOffset(2015, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+            var max = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds();
+            if (seconds < min || seconds > max) return false;
+
+            postedAtUtc = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void TryFillPostedAtFromVideoId(string videoUrl, ScrapeResult result)
     {
         if (result.PostedAt.HasValue) return;
-
-        try
-        {
-            var m = System.Text.RegularExpressions.Regex.Match(videoUrl, @"/video/(\d{15,20})");
-            if (!m.Success || !ulong.TryParse(m.Groups[1].Value, out var id)) return;
-
-            var seconds = (long)(id >> 32);
-            // Sanity check: 2015 → hiện tại + 1 ngày.
-            var min = new DateTimeOffset(2015, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
-            var max = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds();
-            if (seconds < min || seconds > max) return;
-
-            result.PostedAt = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
-            Console.WriteLine($"[TikTok] PostedAt từ video ID: {result.PostedAt:yyyy-MM-dd HH:mm} UTC");
-        }
-        catch { }
+        if (!TryParsePostedAtFromVideoId(videoUrl, out var fromId)) return;
+        result.PostedAt = fromId;
+        Console.WriteLine($"[TikTok] PostedAt từ video ID: {result.PostedAt:yyyy-MM-dd HH:mm} UTC");
     }
 
     private static async Task TryFillPostedAtFromMetaAsync(IPage page, ScrapeResult result)
