@@ -157,6 +157,10 @@ jobs:
             echo "Kiểm tra cấu hình Docker Compose..."
             docker compose config --quiet
 
+            echo "Dừng các container cũ và dọn dẹp network..."
+            docker compose down --remove-orphans || true
+            docker network prune -f || true
+
             echo "Tải image mới..."
             export IMAGE_TAG="${{ github.sha }}"
             export DOCKER_USERNAME="$DOCKER_USERNAME"
