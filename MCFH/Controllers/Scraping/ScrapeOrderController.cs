@@ -120,4 +120,24 @@ public class ScrapeOrderController : ControllerBase
         if (result == null) return NotFound(new { message = "Project không tồn tại hoặc bạn không có quyền truy cập." });
         return Ok(result);
     }
+
+    [AllowAnonymous]
+    [HttpGet("force-scrape/{projectId:int}")]
+    public IActionResult ForceScrape(int projectId)
+    {
+        var jobId = Guid.NewGuid().ToString("N");
+        Hangfire.BackgroundJob.Enqueue<MCFH.Services.Scraping.ScrapeByKeywordService>(s => s.ScrapeAsync(projectId, null, null, false, jobId));
+        
+        // Cập nhật jobId vào SCRAPE_ORDERS
+        var db = HttpContext.RequestServices.GetService<MCFH.Models.McfhDbContext>();
+        var order = db.ScrapeOrders.OrderByDescending(o => o.OrderId).FirstOrDefault(o => o.ProjectId == projectId);
+        if (order != null)
+        {
+            order.ScrapeJobId = jobId;
+            order.Status = "scraping";
+            order.ProgressPercent = 5;
+            db.SaveChanges();
+        }
+        return Ok(new { message = "Enqueued", jobId = jobId });
+    }
 }

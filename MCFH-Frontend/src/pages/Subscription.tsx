@@ -116,12 +116,14 @@ const Subscription = () => {
                   </div>
                   <h2 className="text-3xl font-bold mb-1">{billing?.workspaceName}</h2>
                   <p className="text-gray-500 text-sm mb-6">Quản lý các dự án và hạn mức tài nguyên chung.</p>
-                  <Link
-                    to={workspaceId ? `/create-project?wid=${workspaceId}` : '/create-project'}
-                    className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-6 py-3 rounded-lg font-bold transition-colors"
-                  >
-                    Tạo dự án mới
-                  </Link>
+                  {workspaces.find(w => w.workspaceId === workspaceId)?.myRole !== 'Viewer' && (
+                    <Link
+                      to={workspaceId ? `/create-project?wid=${workspaceId}` : '/create-project'}
+                      className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-6 py-3 rounded-lg font-bold transition-colors"
+                    >
+                      Tạo dự án mới
+                    </Link>
+                  )}
                 </div>
               </div>
 

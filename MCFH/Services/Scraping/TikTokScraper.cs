@@ -154,6 +154,7 @@ public class TikTokScraper
         await FillFromDomAsync(page, result);
         await FillFromEmbeddedJsonAsync(page, result);
         await TryFillPostedAtFromMetaAsync(page, result);
+        TryFillPostedAtFromVideoId(cleanUrl, result);
 
         var collectedComments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -281,6 +282,31 @@ public class TikTokScraper
             if (PostedAtParser.TryParseAny(dateText, out var fromDom))
                 result.PostedAt = fromDom;
         }
+    }
+
+    /// <summary>
+    /// Fallback cuối: ID video TikTok là số 64-bit có 32 bit cao là unix timestamp (giây) lúc đăng,
+    /// nên luôn giải mã được ngày đăng chính xác từ URL kể cả khi trang không hiển thị ngày.
+    /// </summary>
+    private static void TryFillPostedAtFromVideoId(string videoUrl, ScrapeResult result)
+    {
+        if (result.PostedAt.HasValue) return;
+
+        try
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(videoUrl, @"/video/(\d{15,20})");
+            if (!m.Success || !ulong.TryParse(m.Groups[1].Value, out var id)) return;
+
+            var seconds = (long)(id >> 32);
+            // Sanity check: 2015 → hiện tại + 1 ngày.
+            var min = new DateTimeOffset(2015, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+            var max = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeSeconds();
+            if (seconds < min || seconds > max) return;
+
+            result.PostedAt = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+            Console.WriteLine($"[TikTok] PostedAt từ video ID: {result.PostedAt:yyyy-MM-dd HH:mm} UTC");
+        }
+        catch { }
     }
 
     private static async Task TryFillPostedAtFromMetaAsync(IPage page, ScrapeResult result)

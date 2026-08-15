@@ -520,11 +520,26 @@ public class ScrapeOrderService
 
     public async Task<List<ScrapeOrderDto>> ListOrdersAsync(int userId, int? workspaceId = null, int? projectId = null)
     {
-        var query = _context.ScrapeOrders.Where(o => o.UserId == userId);
+        var query = _context.ScrapeOrders.AsQueryable();
+
         if (workspaceId.HasValue)
-            query = query.Where(o => o.WorkspaceId == workspaceId);
-        if (projectId.HasValue)
-            query = query.Where(o => o.ProjectId == projectId);
+        {
+            var isMember = await _context.WorkspaceMembers.AnyAsync(m => m.WorkspaceId == workspaceId.Value && m.UserId == userId);
+            if (!isMember) return new List<ScrapeOrderDto>();
+            query = query.Where(o => o.WorkspaceId == workspaceId.Value);
+        }
+        else if (projectId.HasValue)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.ProjectId == projectId.Value);
+            if (project == null) return new List<ScrapeOrderDto>();
+            var isMember = await _context.WorkspaceMembers.AnyAsync(m => m.WorkspaceId == project.WorkspaceId && m.UserId == userId);
+            if (!isMember) return new List<ScrapeOrderDto>();
+            query = query.Where(o => o.ProjectId == projectId.Value);
+        }
+        else
+        {
+            query = query.Where(o => o.UserId == userId);
+        }
 
         var orders = await query.OrderByDescending(o => o.CreatedAt).Take(50).ToListAsync();
 

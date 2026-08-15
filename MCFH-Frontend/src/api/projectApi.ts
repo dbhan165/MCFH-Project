@@ -561,6 +561,12 @@ export const projectApi = {
     return mapBespokeRequest(response.data);
   },
 
+  deleteBespokeRequest: async (workspaceId: number, projectId: number, requestId: number) => {
+    await axiosClient.delete(
+      `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}`
+    );
+  },
+
   downloadBespokeReport: async (workspaceId: number, projectId: number, requestId: number) => {
     const response = await axiosClient.get(
       `/api/workspaces/${workspaceId}/projects/${projectId}/bespoke/${requestId}/download`,

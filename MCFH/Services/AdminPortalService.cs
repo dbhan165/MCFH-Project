@@ -2,6 +2,7 @@ using MCFH.DTOs;
 using MCFH.DTOs.ProjectDtos;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace MCFH.Services;
 
@@ -10,12 +11,14 @@ public class AdminPortalService
     private readonly McfhDbContext _context;
     private readonly BespokeReportService _bespoke;
     private readonly EncryptionService _encryption;
+    private readonly IMemoryCache _cache;
 
-    public AdminPortalService(McfhDbContext context, BespokeReportService bespoke, EncryptionService encryption)
+    public AdminPortalService(McfhDbContext context, BespokeReportService bespoke, EncryptionService encryption, IMemoryCache cache)
     {
         _context = context;
         _bespoke = bespoke;
         _encryption = encryption;
+        _cache = cache;
     }
 
     public async Task<AdminDashboardDto?> GetDashboardAsync(int userId)
@@ -734,6 +737,7 @@ public class AdminPortalService
         }
 
         await _context.SaveChangesAsync();
+        _cache.Remove("GeminiSettings");
         return await ListSettingsAsync(adminUserId);
     }
 

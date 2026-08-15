@@ -1149,8 +1149,13 @@ public class ProjectReportService
                 : $"Cân bằng ({FormatNumber(sentiment.Positive)} tích cực vs {FormatNumber(sentiment.Negative)} tiêu cực)";
             sb.AppendLine("<div class=\"chart-wrap\" style=\"text-align:center;\">");
             sb.AppendLine("<div style=\"font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;\">NSR Score</div>");
-            sb.AppendLine(BuildGaugeSvg(Math.Clamp((nsrScore + 100) / 2.0, 0, 100), theme.Primary, "#e5e7eb"));
+            sb.AppendLine(BuildNsrGaugeSvg(nsrScore));
             sb.AppendLine("<div style=\"display:flex;justify-content:space-between;max-width:180px;margin:2px auto 0;font-size:10px;color:#9ca3af;\"><span>-100</span><span>0</span><span>+100</span></div>");
+            sb.AppendLine("<div style=\"display:flex;justify-content:center;gap:14px;margin:8px auto 0;font-size:10.5px;color:#6b7280;\">"
+                + "<span><span style=\"display:inline-block;width:8px;height:8px;border-radius:99px;background:#ef4444;margin-right:4px;\"></span>Tiêu cực</span>"
+                + "<span><span style=\"display:inline-block;width:8px;height:8px;border-radius:99px;background:#9ca3af;margin-right:4px;\"></span>Cân bằng</span>"
+                + "<span><span style=\"display:inline-block;width:8px;height:8px;border-radius:99px;background:#10b981;margin-right:4px;\"></span>Tích cực</span>"
+                + "</div>");
             sb.AppendLine($"<p style=\"margin:8px 0 0;font-size:20px;font-weight:800;color:#111827;\">{FormatNsr(nsrScore)}</p>");
             sb.AppendLine($"<p style=\"margin:4px 0 0;font-size:12px;color:#6b7280;line-height:1.5;\">{EscapeHtml(nsrText)}. Tính trên {FormatNumber(analyzedTotal)} mention đã phân tích.</p>");
             sb.AppendLine("</div></div>");
@@ -1529,19 +1534,37 @@ public class ProjectReportService
             """;
     }
 
-    private static string BuildGaugeSvg(double valuePct, string arc, string track)
+    /// <summary>
+    /// Đồng hồ NSR bán nguyệt: 3 vùng màu cố định theo ngữ nghĩa
+    /// (đỏ = tiêu cực, xám = cân bằng, xanh = tích cực) và kim chỉ vào giá trị NSR trên thang -100..+100.
+    /// </summary>
+    private static string BuildNsrGaugeSvg(double nsr)
     {
-        valuePct = Math.Clamp(valuePct, 0, 100);
-        var r = 60.0;
-        var c = Math.PI * r;
-        var dash = c * valuePct / 100.0;
-        var gap = c - dash;
+        nsr = Math.Clamp(nsr, -100, 100);
+
+        // -100 → 180° (trái), 0 → 90° (đỉnh), +100 → 0° (phải)
+        static (double X, double Y) Point(double value, double r)
+        {
+            var rad = (90 - value * 0.9) * Math.PI / 180.0;
+            return (90.0 + r * Math.Cos(rad), 95.0 - r * Math.Sin(rad));
+        }
+
+        static string ZoneArc(double from, double to, string color)
+        {
+            var (x1, y1) = Point(from, 66.0);
+            var (x2, y2) = Point(to, 66.0);
+            return $"""<path d="M{x1:0.##} {y1:0.##} A66 66 0 0 1 {x2:0.##} {y2:0.##}" fill="none" stroke="{color}" stroke-width="14"/>""";
+        }
+
+        var (nx, ny) = Point(nsr, 47.0);
         return $"""
-            <svg width="180" height="110" viewBox="0 0 180 110">
-              <path d="M20 95 A70 70 0 0 1 160 95" fill="none" stroke="{track}" stroke-width="16" stroke-linecap="round"/>
-              <path d="M20 95 A70 70 0 0 1 160 95" fill="none" stroke="{arc}" stroke-width="16" stroke-linecap="round"
-                stroke-dasharray="{dash:0.##} {gap:0.##}"/>
-              <circle cx="90" cy="95" r="6" fill="#111827"/>
+            <svg width="180" height="112" viewBox="0 0 180 112">
+              {ZoneArc(-100, -16.5, "#ef4444")}
+              {ZoneArc(-13.5, 13.5, "#9ca3af")}
+              {ZoneArc(16.5, 100, "#10b981")}
+              <line x1="90" y1="95" x2="{nx:0.##}" y2="{ny:0.##}" stroke="#111827" stroke-width="3.5" stroke-linecap="round"/>
+              <circle cx="90" cy="95" r="6.5" fill="#111827"/>
+              <circle cx="90" cy="95" r="2.5" fill="#ffffff"/>
             </svg>
             """;
     }
@@ -1880,19 +1903,28 @@ public class ProjectReportService
                 $"với {FormatNumber(totalMentions)} bài hiện tại, chỉ cần vài bài đổi nhãn là NSR ({FormatNsr(nsrScore)}) có thể đổi chiều.");
         }
 
-        // 3. Tập trung kênh quá cao → thiếu góc nhìn
+        // 3. Kênh áp đảo → chiến lược tập trung nguồn lực theo sentiment của chính kênh đó
         if (topChannel != null && topChannel.MentionShare >= 60 && channelList.Count > 0)
         {
-            var presentPlatforms = channelList.Select(c => c.Platform).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var missing = new[] { "facebook", "youtube", "tiktok", "news" }
-                .Where(p => !presentPlatforms.Contains(p))
-                .Select(FormatPlatformLabel)
-                .Take(2)
-                .ToList();
-            var suggest = missing.Count > 0 ? string.Join(" và ", missing) : "các nền tảng khác";
-            items.Add(
-                $"{topChannel.MentionShare:0.#}% thảo luận đang dồn vào {topChannel.Label} ({FormatNumber(topChannel.Mentions)}/{FormatNumber(totalMentions)} bài) — " +
-                $"bổ sung cào {suggest} ở kỳ tới để tránh kết luận lệch theo một nền tảng.");
+            var hasChannelSentiment = topChannel.Positive + topChannel.Negative > 0;
+            if (hasChannelSentiment && topChannel.NsrScore < 0)
+            {
+                items.Add(
+                    $"{topChannel.MentionShare:0.#}% thảo luận về từ khóa diễn ra trên {topChannel.Label} và sentiment tại đây đang nghiêng tiêu cực (NSR {FormatNsr(topChannel.NsrScore)}) — " +
+                    $"ưu tiên nhân sự trực phản hồi bình luận trên chính kênh này trước tiên: dư luận của cả chủ đề gần như được quyết định tại đây, xử lý tốt một kênh là xoay chuyển được toàn cục.");
+            }
+            else if (hasChannelSentiment)
+            {
+                items.Add(
+                    $"{topChannel.Label} là \"sân khấu chính\" của chủ đề ({topChannel.MentionShare:0.#}% thảo luận, NSR {FormatNsr(topChannel.NsrScore)}) — " +
+                    $"dồn ngân sách nội dung và booking creator vào kênh này để cộng hưởng với đà thảo luận sẵn có, đồng thời tái sử dụng bài đang chạy tốt (cắt clip, repost) sang các kênh còn lại để mở rộng độ phủ với chi phí thấp.");
+            }
+            else
+            {
+                items.Add(
+                    $"{topChannel.MentionShare:0.#}% thảo luận về từ khóa tập trung trên {topChannel.Label} ({FormatNumber(topChannel.Mentions)}/{FormatNumber(totalMentions)} bài) — " +
+                    $"đặt {topChannel.Label} làm kênh ưu tiên trong kế hoạch truyền thông kỳ tới: theo dõi sát các bài mới, phản hồi bình luận trong ngày và đo lường riêng KPI cho kênh này.");
+            }
         }
 
         // 4. Cơ hội: creator dẫn đầu + bài tích cực tốt nhất
