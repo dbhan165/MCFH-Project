@@ -38,8 +38,12 @@ RUN printf '%s\n' \
 '    root /usr/share/nginx/html;' \
 '    index index.html;' \
 '' \
+'    # Dùng resolver của Docker để tránh Nginx crash khi backend chưa chạy' \
+'    resolver 127.0.0.11 valid=30s;' \
+'    set $upstream_backend "http://backend:8080";' \
+'' \
 '    location /api/ {' \
-'        proxy_pass http://backend:8080/api/;' \
+'        proxy_pass $upstream_backend/api/;' \
 '        proxy_http_version 1.1;' \
 '        proxy_set_header Host $host;' \
 '        proxy_set_header X-Real-IP $remote_addr;' \
@@ -50,14 +54,14 @@ RUN printf '%s\n' \
 '    }' \
 '' \
 '    location /swagger {' \
-'        proxy_pass http://backend:8080/swagger;' \
+'        proxy_pass $upstream_backend/swagger;' \
 '        proxy_http_version 1.1;' \
 '        proxy_set_header Host $host;' \
 '        proxy_set_header X-Forwarded-Proto $scheme;' \
 '    }' \
 '' \
 '    location /hangfire {' \
-'        proxy_pass http://backend:8080/hangfire;' \
+'        proxy_pass $upstream_backend/hangfire;' \
 '        proxy_http_version 1.1;' \
 '        proxy_set_header Host $host;' \
 '        proxy_set_header X-Forwarded-Proto $scheme;' \
