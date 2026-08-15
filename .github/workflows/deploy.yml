@@ -135,6 +135,10 @@ jobs:
 
             cd "$PROJECT_DIR"
 
+            echo "Đồng bộ file cấu hình mới nhất từ Github..."
+            git fetch origin main
+            git reset --hard origin/main
+
             echo "Đăng nhập Docker Hub..."
             echo "$DOCKER_PASSWORD" | docker login \
               --username "$DOCKER_USERNAME" \
