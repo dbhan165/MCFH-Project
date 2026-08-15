@@ -197,6 +197,21 @@ namespace MCFH
             app.UseAuthentication(); // Xác thực danh tính
             app.UseAuthorization();  // Kiểm tra phân quyền
 
+            // Automatic Database Migration on Startup
+            using (var scope = app.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
+                try
+                {
+                    dbContext.Database.Migrate();
+                }
+                catch (Exception ex)
+                {
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+                    logger.LogError(ex, "Lỗi khi chạy Migration DataBase");
+                }
+            }
+
             app.UseHangfireDashboard("/hangfire");
 
             app.MapControllers();

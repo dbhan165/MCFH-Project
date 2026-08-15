@@ -1,4 +1,4 @@
-﻿using MCFH.Models; // Đổi lại đúng namespace của folder Models của bạn
+using MCFH.Models; // Đổi lại đúng namespace của folder Models của bạn
 using MCFH.Configuration;
 using MCFH.Services;
 using MCFHBackend.DTOs.AuthDtos;
@@ -448,9 +448,9 @@ namespace MCFH.Controllers
                 // Bắt chính xác lỗi nếu Frontend truyền lên Token fake, chế, hoặc Token đã hết hạn từ hôm qua
                 return BadRequest(new { message = "Mã xác thực Google không hợp lệ hoặc đã hết hạn sử dụng." });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Lỗi hệ thống khi xử lý xác thực Google." });
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Lỗi hệ thống khi xử lý xác thực Google: " + ex.Message + " | Inner: " + ex.InnerException?.Message + " | Stack: " + ex.StackTrace });
             }
         }
 
