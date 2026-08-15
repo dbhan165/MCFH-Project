@@ -163,7 +163,7 @@ jobs:
             docker compose up -d sqlserver
 
             echo "Chạy service tạo hoặc cập nhật database..."
-            docker compose up sqlserver-migration
+            docker compose up sqlserver-init
 
             echo "Khởi động backend và frontend..."
             docker compose up -d \
