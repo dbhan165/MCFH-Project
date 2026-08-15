@@ -43,7 +43,8 @@ services:
 
       Auth__FrontendBaseUrl: https://mcfh.io.vn
       Auth__GoogleClientId: ${VITE_GOOGLE_CLIENT_ID:-}
-      AzureBlob__ConnectionString: ${AZURE_BLOB_CONNECTION_STRING:-}
+      AzureBlob__ConnectionString: ${ConnectionString:-}
+      AzureBlob__ContainerName: ${ContainerName:-comments-prod}
 
       ConnectionStrings__MyCnn: >-
         Server=sqlserver,1433;
