@@ -16,6 +16,18 @@ namespace MCFH
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = 52428800; // 50MB
+            });
+
+            builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+            {
+                options.ValueLengthLimit = int.MaxValue;
+                options.MultipartBodyLengthLimit = 52428800; // 50MB
+                options.MultipartHeadersLengthLimit = int.MaxValue;
+            });
+
             // Local: ưu tiên .playwright (playwright.ps1 install).
             // Nếu IDE/sandbox đã set PLAYWRIGHT_BROWSERS_PATH nhưng thư mục trống (không có chrome.exe),
             // ghi đè bằng .playwright — tránh lỗi "Chromium chưa được cài" dù đã install local.

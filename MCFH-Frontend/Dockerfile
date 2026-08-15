@@ -42,6 +42,8 @@ RUN printf '%s\n' \
 '    resolver 127.0.0.11 valid=30s;' \
 '    set $upstream_backend "http://backend:8080";' \
 '' \
+'    client_max_body_size 50M;' \
+'' \
 '    location /api/ {' \
 '        proxy_pass $upstream_backend;' \
 '        proxy_http_version 1.1;' \
