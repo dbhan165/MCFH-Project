@@ -1,7 +1,7 @@
 services:
   frontend:
     container_name: mcfh-frontend
-    image: truongnhat2102/mcfh-frontend:${IMAGE_TAG:-latest}
+    image: ${DOCKER_USERNAME:-truongnhat2102}/mcfh-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./MCFH-Frontend
       dockerfile: Dockerfile
@@ -25,7 +25,7 @@ services:
 
   backend:
     container_name: mcfh-backend
-    image: truongnhat2102/mcfh-backend:${IMAGE_TAG:-latest}
+    image: ${DOCKER_USERNAME:-truongnhat2102}/mcfh-backend:${IMAGE_TAG:-latest}
     build:
       context: ./MCFH
       dockerfile: Dockerfile
