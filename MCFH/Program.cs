@@ -204,6 +204,7 @@ namespace MCFH
                 try
                 {
                     dbContext.Database.Migrate();
+                    MCFH.Models.DataSeeder.SeedData(dbContext);
                 }
                 catch (Exception ex)
                 {
