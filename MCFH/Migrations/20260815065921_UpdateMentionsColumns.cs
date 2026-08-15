@@ -54,8 +54,8 @@ namespace MCFHBackend.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "mentions_package",
                 table: "SCRAPE_ORDERS",
-                type: "varchar(20)",
-                maxLength: 20,
+                type: "varchar(50)",
+                maxLength: 50,
                 nullable: true);
 
             migrationBuilder.AddColumn<DateTime>(
@@ -132,11 +132,11 @@ namespace MCFHBackend.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     project_id = table.Column<int>(type: "int", nullable: false),
                     payment_id = table.Column<int>(type: "int", nullable: false),
-                    package_type = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
+                    package_type = table.Column<string>(type: "varchar(50)", unicode: false, maxLength: 50, nullable: false),
                     mentions_included = table.Column<int>(type: "int", nullable: false),
                     mentions_used = table.Column<int>(type: "int", nullable: false),
                     expires_at = table.Column<DateTime>(type: "datetime", nullable: true),
-                    status = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
+                    status = table.Column<string>(type: "varchar(50)", unicode: false, maxLength: 50, nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime", nullable: false, defaultValueSql: "(getdate())")
                 },
                 constraints: table =>

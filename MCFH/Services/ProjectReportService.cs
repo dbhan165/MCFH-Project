@@ -361,7 +361,7 @@ public class ProjectReportService
         var generated = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
 
         var dominantSentiment = ResolveDominantSentiment(overview?.PositiveCount ?? 0, overview?.NegativeCount ?? 0, overview?.NeutralCount ?? 0) ?? "N/A";
-        var topChannel = channels?.Channels.FirstOrDefault();
+        var topChannel = channels?.Channels.OrderByDescending(c => c.Mentions).FirstOrDefault();
         var topRiskChannel = channels?.Channels.OrderByDescending(c => c.NegativePercent).FirstOrDefault();
         var topInfluencer = influencers?.Influencers.FirstOrDefault();
         
@@ -544,7 +544,7 @@ public class ProjectReportService
             sb.AppendLine("<div class=\"slide-col-right\">");
             sb.AppendLine($"<img src=\"{GenerateQuickChartUrl(channelChartConfig, 900, 500)}\" style=\"width:100%; display:block; margin-bottom: 40px;\" />");
             sb.AppendLine("<table class=\"slide-table\"><thead><tr><th>Nền tảng</th><th>Mentions</th><th>% SOV</th><th>NSR</th></tr></thead><tbody>");
-            foreach (var ch in channels.Channels.Take(3))
+            foreach (var ch in channels.Channels.OrderByDescending(c => c.Mentions).Take(3))
             {
                 sb.AppendLine($"<tr><td>{EscapeHtml(ch.Label)}</td><td>{FormatNumber(ch.Mentions)}</td><td>{ch.MentionShare:0.#}%</td><td style=\"color:{(ch.NsrScore >= 0 ? "#10b981" : "#ef4444")}\">{FormatNsr(ch.NsrScore)}</td></tr>");
             }
