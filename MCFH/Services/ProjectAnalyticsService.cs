@@ -205,7 +205,7 @@ public class ProjectAnalyticsService
             .ToListAsync();
 
         var mentions = new List<MentionDto>();
-        var repairedIds = new List<int>();
+        var repairs = new Dictionary<int, int>();
 
         foreach (var row in rows)
         {
@@ -226,8 +226,8 @@ public class ProjectAnalyticsService
             var comments = bundle.Comments;
 
             // DB lệch file (dữ liệu cũ / file mất / AI ghi summary khi chưa có file)
-            if (comments.Count == 0 && (row.CommentsCount ?? 0) > 0)
-                repairedIds.Add(row.FeedbackId);
+            if (comments.Count != (row.CommentsCount ?? 0))
+                repairs[row.FeedbackId] = comments.Count;
 
             var commentsCount = comments.Count;
 
@@ -268,13 +268,14 @@ public class ProjectAnalyticsService
             });
         }
 
-        if (repairedIds.Count > 0)
+        if (repairs.Count > 0)
         {
+            var repairIds = repairs.Keys.ToList();
             var toFix = await _context.ScrapedFeedbacks
-                .Where(f => repairedIds.Contains(f.FeedbackId))
+                .Where(f => repairIds.Contains(f.FeedbackId))
                 .ToListAsync();
             foreach (var f in toFix)
-                f.CommentsCount = 0;
+                f.CommentsCount = repairs[f.FeedbackId];
             await _context.SaveChangesAsync();
         }
 
