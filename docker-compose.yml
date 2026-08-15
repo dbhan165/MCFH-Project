@@ -63,6 +63,7 @@ services:
       - backend_temp:/app/Temp
       - backend_cookies:/app/Cookies
       - backend_exports:/app/Export
+      - backend_storage_data:/app/StorageData
 
     restart: unless-stopped
 
@@ -159,3 +160,5 @@ volumes:
     name: mcfh-backend-cookies
   backend_exports:
     name: mcfh-backend-exports
+  backend_storage_data:
+    name: mcfh-backend-storagedata

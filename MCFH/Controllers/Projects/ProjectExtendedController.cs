@@ -479,9 +479,16 @@ public class ProjectExtendedController : ControllerBase
             return BadRequest(new { message = "Vui lòng chọn file báo cáo." });
 
         await using var stream = file.OpenReadStream();
-        var result = await _bespokeService.UploadRevisionAsync(
-            workspaceId, projectId, GetUserId(), requestId, stream, file.FileName);
-        if (result == null) return BadRequest(new { message = "Không thể upload bản sửa đổi." });
-        return Ok(result);
+        try
+        {
+            var result = await _bespokeService.UploadRevisionAsync(
+                workspaceId, projectId, GetUserId(), requestId, stream, file.FileName);
+            if (result == null) return BadRequest(new { message = "Không thể upload bản sửa đổi." });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

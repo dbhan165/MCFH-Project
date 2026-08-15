@@ -1798,7 +1798,10 @@ public class BespokeReportService
     private static bool IsAllowedDeliverableExtension(string fileName)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        return ext is ".html" or ".htm" or ".pdf" or ".pptx" or ".ppt";
+        var allowed = ext is ".html" or ".htm" or ".pdf" or ".pptx" or ".ppt" or ".docx" or ".doc" or ".xlsx" or ".xls" or ".zip" or ".rar";
+        if (!allowed)
+            throw new InvalidOperationException($"Định dạng file {ext} không được hỗ trợ. Vui lòng tải lên các định dạng: pdf, pptx, ppt, docx, doc, xlsx, xls, zip, rar, html.");
+        return true;
     }
 
     private static string SanitizeFileName(string fileName)

@@ -90,9 +90,16 @@ public class ReporterController : ControllerBase
             return BadRequest(new { message = "Vui lòng chọn file báo cáo." });
 
         await using var stream = file.OpenReadStream();
-        var result = await _reporter.UploadRevisionAsync(GetUserId(), requestId, stream, file.FileName);
-        if (result == null) return BadRequest(new { message = "Không thể upload. Chỉ nhận đơn đang được giao / đang xử lý / chờ sửa đổi." });
-        return Ok(result);
+        try
+        {
+            var result = await _reporter.UploadRevisionAsync(GetUserId(), requestId, stream, file.FileName);
+            if (result == null) return BadRequest(new { message = "Không thể upload. Chỉ nhận đơn đang được giao / đang xử lý / chờ sửa đổi." });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpGet("performance")]
