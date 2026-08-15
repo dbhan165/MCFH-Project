@@ -83,7 +83,7 @@ services:
       - "1433:1433"
 
     volumes:
-      - ./database:/var/opt/mssql
+      - sqlserver_data:/var/opt/mssql
 
     healthcheck:
       test:
@@ -145,6 +145,7 @@ networks:
     driver: bridge
 
 volumes:
+  sqlserver_data:
   backend_logs:
   backend_reports:
   backend_uploads:

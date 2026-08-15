@@ -168,11 +168,6 @@ jobs:
             
             docker compose pull
 
-            echo "Sửa quyền truy cập thư mục database..."
-            if [ -d "./database" ]; then
-              docker run --rm -v $(pwd)/database:/db alpine chown -R 10001:10001 /db || true
-            fi
-
             echo "Cập nhật và khởi động lại CSDL (nếu cần)..."
             docker compose up -d sqlserver
 
