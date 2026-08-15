@@ -43,7 +43,7 @@ RUN printf '%s\n' \
 '    set $upstream_backend "http://backend:8080";' \
 '' \
 '    location /api/ {' \
-'        proxy_pass $upstream_backend/api/;' \
+'        proxy_pass $upstream_backend;' \
 '        proxy_http_version 1.1;' \
 '        proxy_set_header Host $host;' \
 '        proxy_set_header X-Real-IP $remote_addr;' \
@@ -54,14 +54,14 @@ RUN printf '%s\n' \
 '    }' \
 '' \
 '    location /swagger {' \
-'        proxy_pass $upstream_backend/swagger;' \
+'        proxy_pass $upstream_backend;' \
 '        proxy_http_version 1.1;' \
 '        proxy_set_header Host $host;' \
 '        proxy_set_header X-Forwarded-Proto $scheme;' \
 '    }' \
 '' \
 '    location /hangfire {' \
-'        proxy_pass $upstream_backend/hangfire;' \
+'        proxy_pass $upstream_backend;' \
 '        proxy_http_version 1.1;' \
 '        proxy_set_header Host $host;' \
 '        proxy_set_header X-Forwarded-Proto $scheme;' \
