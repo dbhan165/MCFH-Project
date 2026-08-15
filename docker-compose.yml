@@ -146,9 +146,16 @@ networks:
 
 volumes:
   sqlserver_data:
+    name: mcfh-sqlserver-data
   backend_logs:
+    name: mcfh-backend-logs
   backend_reports:
+    name: mcfh-backend-reports
   backend_uploads:
+    name: mcfh-backend-uploads
   backend_temp:
+    name: mcfh-backend-temp
   backend_cookies:
+    name: mcfh-backend-cookies
   backend_exports:
+    name: mcfh-backend-exports
