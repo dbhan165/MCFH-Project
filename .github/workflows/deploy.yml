@@ -145,6 +145,9 @@ jobs:
 
             cd "$PROJECT_DIR"
 
+            echo "Dọn dẹp các file cấu hình rác do tạo nhầm..."
+            rm -f compose.yaml compose.yml
+
             echo "Đăng nhập Docker Hub..."
             echo "$DOCKER_PASSWORD" | docker login \
               --username "$DOCKER_USERNAME" \
