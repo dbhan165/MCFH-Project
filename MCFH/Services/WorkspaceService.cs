@@ -1,4 +1,4 @@
-﻿using MCFH.DTOs.WorkspaceDtos;
+using MCFH.DTOs.WorkspaceDtos;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -286,7 +286,14 @@ namespace MCFH.Services
                     </p>
                 </div>";
 
-            await _emailService.SendEmailAsync(dto.Email, subject, htmlMessage);
+            try
+            {
+                await _emailService.SendEmailAsync(dto.Email, subject, htmlMessage);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARNING] Không thể gửi email mời (có thể do chưa cấu hình SMTP/Brevo): {ex.Message}");
+            }
 
             await LogActivityAsync(workspaceId, invitedByUserId,
                 actionType: "INVITE_MEMBER",
