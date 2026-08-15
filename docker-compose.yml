@@ -42,6 +42,7 @@ services:
       TZ: Asia/Ho_Chi_Minh
 
       Auth__FrontendBaseUrl: https://mcfh.io.vn
+      Auth__GoogleClientId: ${VITE_GOOGLE_CLIENT_ID:-}
 
       ConnectionStrings__MyCnn: >-
         Server=sqlserver,1433;
