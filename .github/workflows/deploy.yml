@@ -157,9 +157,12 @@ jobs:
             docker compose config --quiet
 
             echo "Tải image mới..."
-            docker compose pull backend frontend
+            export IMAGE_TAG="${{ github.sha }}"
+            export DOCKER_USERNAME="$DOCKER_USERNAME"
+            
+            docker compose pull
 
-            echo "Khởi tạo SQL Server..."
+            echo "Cập nhật và khởi động lại CSDL (nếu cần)..."
             docker compose up -d sqlserver
 
             echo "Chạy service tạo hoặc cập nhật database..."
