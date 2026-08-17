@@ -20,7 +20,8 @@ namespace MCFH.Services
         {
             return await _context.Workspaces
                 .AnyAsync(w => w.WorkspaceId == workspaceId &&
-                               w.OwnerId == userId &&
+                               (w.OwnerId == userId || 
+                                w.WorkspaceMembers.Any(m => m.UserId == userId && m.Role.RoleName == "Owner")) &&
                                w.IsDeleted != true);
         }
 
@@ -424,7 +425,15 @@ namespace MCFH.Services
                     </p>
                 </div>";
 
-            await _emailService.SendEmailAsync(invitation.InvitedEmail, subject, htmlMessage);
+            try
+            {
+                await _emailService.SendEmailAsync(invitation.InvitedEmail, subject, htmlMessage);
+            }
+            catch (Exception ex)
+            {
+                // Ghi log lỗi nhưng không chặn tiến trình hủy lời mời
+                Console.WriteLine($"[CẢNH BÁO] Không thể gửi email hủy lời mời tới {invitation.InvitedEmail}: {ex.Message}");
+            }
 
             await LogActivityAsync(workspaceId, ownerId,
                 actionType: "REJECT_INVITE",

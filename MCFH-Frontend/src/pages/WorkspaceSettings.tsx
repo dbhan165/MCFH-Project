@@ -194,13 +194,12 @@ const WorkspaceSettings = () => {
 
   const handleRejectInvitation = async (invitationId: number) => {
     if (!workspace || !isOwner) return;
-
     try {
       await workspaceApi.rejectInvitation(workspace.workspaceId, invitationId);
-      showSuccess('Đã từ chối lời mời.');
+      showSuccess('Đã hủy lời mời.');
       await loadData();
     } catch (error) {
-      setErrorMessage(extractApiError(error, 'Không thể từ chối lời mời.'));
+      setErrorMessage(extractApiError(error, 'Không thể hủy lời mời.'));
     }
   };
 
@@ -336,8 +335,11 @@ const WorkspaceSettings = () => {
                   {isOwner && invitations.length > 0 && (
                     <div className="bg-[#151B2B] border border-yellow-500/20 rounded-2xl p-6">
                       <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-yellow-400">
-                        <Clock size={18} /> Lời mời chờ duyệt ({invitations.length})
+                        <Clock size={18} /> Lời mời đang chờ phản hồi ({invitations.length})
                       </h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Người được mời sẽ nhận email và thông báo trên hệ thống để chấp nhận hoặc từ chối.
+                      </p>
                       <div className="space-y-3">
                         {invitations.map((inv) => (
                           <div key={inv.invitationId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#0A101D] rounded-xl border border-white/5">
@@ -349,16 +351,10 @@ const WorkspaceSettings = () => {
                             </div>
                             <div className="flex gap-2">
                               <button
-                                onClick={() => handleApproveInvitation(inv.invitationId)}
-                                className="px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-sm font-bold"
-                              >
-                                Duyệt
-                              </button>
-                              <button
                                 onClick={() => handleRejectInvitation(inv.invitationId)}
-                                className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-bold"
+                                className="px-4 py-2 rounded-lg bg-white/5 text-gray-300 hover:bg-red-500/10 hover:text-red-300 text-sm font-bold"
                               >
-                                Từ chối
+                                Hủy lời mời
                               </button>
                             </div>
                           </div>
