@@ -215,8 +215,8 @@ namespace MCFH
                 var dbContext = scope.ServiceProvider.GetRequiredService<McfhDbContext>();
                 try
                 {
-                    dbContext.Database.Migrate();
-                    MCFH.Models.DataSeeder.SeedData(dbContext);
+                    // dbContext.Database.Migrate();
+                    // MCFH.Models.DataSeeder.SeedData(dbContext);
                 }
                 catch (Exception ex)
                 {
