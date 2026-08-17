@@ -180,18 +180,6 @@ const WorkspaceSettings = () => {
     }
   };
 
-  const handleApproveInvitation = async (invitationId: number) => {
-    if (!workspace || !isOwner) return;
-
-    try {
-      await workspaceApi.approveInvitation(workspace.workspaceId, invitationId);
-      showSuccess('Đã duyệt lời mời.');
-      await loadData();
-    } catch (error) {
-      setErrorMessage(extractApiError(error, 'Không thể duyệt lời mời.'));
-    }
-  };
-
   const handleRejectInvitation = async (invitationId: number) => {
     if (!workspace || !isOwner) return;
     try {
