@@ -361,7 +361,7 @@ public class ProjectReportService
         var generated = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
 
         var dominantSentiment = ResolveDominantSentiment(overview?.PositiveCount ?? 0, overview?.NegativeCount ?? 0, overview?.NeutralCount ?? 0) ?? "N/A";
-        var topChannel = channels?.Channels.FirstOrDefault();
+        var topChannel = channels?.Channels.OrderByDescending(c => c.Mentions).FirstOrDefault();
         var topRiskChannel = channels?.Channels.OrderByDescending(c => c.NegativePercent).FirstOrDefault();
         var topInfluencer = influencers?.Influencers.FirstOrDefault();
         
@@ -369,16 +369,32 @@ public class ProjectReportService
         var topNegativeAspects = aspects?.Aspects.OrderByDescending(a => a.Negative).Take(3).Select(a => a.Label).ToList();
         var topNegStr = topNegativeAspects != null && topNegativeAspects.Any() ? string.Join(", ", topNegativeAspects) : "Không có";
 
-        var pinnedQuotes = mentions.Where(m => m.PinnedForReport).Select(m => m.Content ?? "").Where(c => !string.IsNullOrWhiteSpace(c)).Take(5).ToList();
+        var pinnedQuotes = mentions.Where(m => m.PinnedForReport).Select(m => m.Content ?? "").Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Length > 300 ? c.Substring(0, 300) + "..." : c).Take(5).ToList();
+        var topReputableMentions = mentions
+            .Where(m => !string.IsNullOrWhiteSpace(m.Content) && m.Content.Length > 20)
+            .OrderByDescending(m => m.CommentsCount)
+            .Select(m => m.Content!)
+            .Select(c => c.Length > 400 ? c.Substring(0, 400) + "..." : c)
+            .Take(10)
+            .ToList();
+
+        var topInfluencersList = influencers?.Influencers
+            .Where(i => !string.IsNullOrWhiteSpace(i.Name))
+            .OrderByDescending(i => i.Mentions)
+            .Select(i => $"{i.Name} ({i.Platform}, {i.Mentions} mentions, {i.DominantSentiment})")
+            .Take(5)
+            .ToList();
 
         var aiInsights = await _aiSentiment.GenerateReportInsightsAsync(
-            projectName, totalMentions, nsrScore, topChannelInfo, topNegStr, pinnedQuotes);
+            projectName, totalMentions, nsrScore, topChannelInfo, topNegStr, pinnedQuotes, topReputableMentions, topInfluencersList);
 
         var executiveInsights = aiInsights?.ExecutiveInsights ?? BuildExecutiveInsights(
                 totalMentions, totalComments, pendingCount, coverage, dominantSentiment,
                 topChannel, topRiskChannel, topInfluencer, aspects);
 
-        var actionItems = aiInsights?.ActionItems ?? BuildActionItems(pendingCount, topRiskChannel, topInfluencer, aspects);
+        var contentDirections = aiInsights?.ContentDirections ?? new List<string> { "Tập trung nội dung tương tác cộng đồng." };
+        var riskMitigation = aiInsights?.RiskMitigation ?? new List<string> { "Chăm sóc khách hàng và phản hồi nhanh." };
+        var productOptimization = aiInsights?.ProductOptimization ?? new List<string> { "Đang cập nhật dựa trên phản hồi." };
         
         var nsrComment = !string.IsNullOrWhiteSpace(aiInsights?.NsrComment) ? aiInsights.NsrComment : "Chênh lệch tích cực so với tiêu cực.";
         var sentimentAnalysis = !string.IsNullOrWhiteSpace(aiInsights?.SentimentAnalysis) ? aiInsights.SentimentAnalysis : "Phân tích cảm xúc đang được AI túm gọn.";
@@ -544,7 +560,7 @@ public class ProjectReportService
             sb.AppendLine("<div class=\"slide-col-right\">");
             sb.AppendLine($"<img src=\"{GenerateQuickChartUrl(channelChartConfig, 900, 500)}\" style=\"width:100%; display:block; margin-bottom: 40px;\" />");
             sb.AppendLine("<table class=\"slide-table\"><thead><tr><th>Nền tảng</th><th>Mentions</th><th>% SOV</th><th>NSR</th></tr></thead><tbody>");
-            foreach (var ch in channels.Channels.Take(3))
+            foreach (var ch in channels.Channels.OrderByDescending(c => c.Mentions).Take(3))
             {
                 sb.AppendLine($"<tr><td>{EscapeHtml(ch.Label)}</td><td>{FormatNumber(ch.Mentions)}</td><td>{ch.MentionShare:0.#}%</td><td style=\"color:{(ch.NsrScore >= 0 ? "#10b981" : "#ef4444")}\">{FormatNsr(ch.NsrScore)}</td></tr>");
             }
@@ -601,24 +617,31 @@ public class ProjectReportService
             sb.AppendLine("</div></div></div>");
         }
 
-        // SLIDE 6: CHIẾN LƯỢC
-        if (aiInsights?.MarketingStrategies?.Count > 0 || actionItems.Count > 0)
+        // SLIDE 6: CHIẾN LƯỢC & ĐỀ XUẤT CỤ THỂ
+        if (contentDirections.Count > 0 || riskMitigation.Count > 0 || productOptimization.Count > 0)
         {
             sb.AppendLine("<div class=\"slide\"><div class=\"slide-bg-shape\"></div>");
-            sb.AppendLine(BuildSlideHeader("06", "CHIẾN LƯỢC & HÀNH ĐỘNG"));
-            sb.AppendLine("<div class=\"slide-content\">");
+            sb.AppendLine(BuildSlideHeader("06", "CHIẾN LƯỢC & HÀNH ĐỘNG THỰC CHIẾN"));
+            sb.AppendLine("<div class=\"slide-content\" style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 40px 80px;\">");
             
-            sb.AppendLine("<div class=\"slide-col-left\">");
-            sb.AppendLine("<h2 class=\"section-title\">Chiến lược tiếp thị đề xuất</h2>");
-            sb.AppendLine("<div class=\"ai-box\" style=\"border-left-color: #3b82f6;\"><ul class=\"insight-list\">");
-            foreach (var strategy in aiInsights?.MarketingStrategies ?? new List<string>()) sb.AppendLine($"<li>{EscapeHtml(strategy)}</li>");
+            sb.AppendLine("<div style=\"display: flex; flex-direction: column; gap: 40px;\">");
+            sb.AppendLine("<div><h2 class=\"section-title\" style=\"font-size: 36px;\">📝 Định hướng nội dung</h2>");
+            sb.AppendLine("<div class=\"ai-box\" style=\"border-left-color: #3b82f6; padding: 24px;\"><ul class=\"insight-list\" style=\"font-size: 22px;\">");
+            foreach (var item in contentDirections) sb.AppendLine($"<li>{EscapeHtml(item)}</li>");
             sb.AppendLine("</ul></div></div>");
             
-            sb.AppendLine("<div class=\"slide-col-right\">");
-            sb.AppendLine("<h2 class=\"section-title\" style=\"color: #10b981;\">Gợi ý hành động (Action Items)</h2>");
-            sb.AppendLine("<div class=\"ai-box\" style=\"border-left-color: #10b981; background: #ecfdf5;\"><ul class=\"insight-list\">");
-            foreach (var action in actionItems) sb.AppendLine($"<li>{EscapeHtml(action)}</li>");
+            sb.AppendLine("<div><h2 class=\"section-title\" style=\"color: #ef4444; font-size: 36px;\">🛡️ Xử lý rủi ro & Khủng hoảng</h2>");
+            sb.AppendLine("<div class=\"ai-box\" style=\"border-left-color: #ef4444; background: #fef2f2; padding: 24px;\"><ul class=\"insight-list\" style=\"font-size: 22px;\">");
+            foreach (var item in riskMitigation) sb.AppendLine($"<li>{EscapeHtml(item)}</li>");
             sb.AppendLine("</ul></div></div>");
+            sb.AppendLine("</div>");
+
+            sb.AppendLine("<div style=\"display: flex; flex-direction: column; gap: 40px;\">");
+            sb.AppendLine("<div><h2 class=\"section-title\" style=\"color: #10b981; font-size: 36px;\">💡 Tối ưu Sản phẩm / Dịch vụ</h2>");
+            sb.AppendLine("<div class=\"ai-box\" style=\"border-left-color: #10b981; background: #ecfdf5; padding: 24px; height: 100%;\"><ul class=\"insight-list\" style=\"font-size: 22px;\">");
+            foreach (var item in productOptimization) sb.AppendLine($"<li>{EscapeHtml(item)}</li>");
+            sb.AppendLine("</ul></div></div>");
+            sb.AppendLine("</div>");
             
             sb.AppendLine("</div></div>");
         }
@@ -854,8 +877,15 @@ public class ProjectReportService
             .Take(5)
             .ToList();
 
+        var topReputableMentionsBespoke = mentions
+            .Where(m => !string.IsNullOrWhiteSpace(m.Content) && m.Content.Length > 20)
+            .OrderByDescending(m => m.CommentsCount)
+            .Select(m => m.Content!)
+            .Take(20)
+            .ToList();
+
         var aiInsights = await _aiSentiment.GenerateReportInsightsAsync(
-            projectName, totalMentions, nsrScore, topChannelInfo, "Không có", bespokePinnedQuotes);
+            projectName, totalMentions, nsrScore, topChannelInfo, "Không có", bespokePinnedQuotes, topReputableMentionsBespoke);
 
         var executiveInsights = aiInsights?.ExecutiveInsights?.Count > 0
             ? aiInsights.ExecutiveInsights
@@ -863,9 +893,15 @@ public class ProjectReportService
                 totalMentions, totalComments, pendingCount, coverage, dominantSentiment,
                 topChannel, topRiskChannel, topInfluencer, null);
 
-        var actionItems = aiInsights?.ActionItems?.Count > 0
-            ? aiInsights.ActionItems
-            : BuildActionItems(pendingCount, topRiskChannel, topInfluencer, null);
+        var actionItems = new List<string>();
+        if (aiInsights?.ContentDirections?.Count > 0) actionItems.AddRange(aiInsights.ContentDirections);
+        if (aiInsights?.RiskMitigation?.Count > 0) actionItems.AddRange(aiInsights.RiskMitigation);
+        if (aiInsights?.ProductOptimization?.Count > 0) actionItems.AddRange(aiInsights.ProductOptimization);
+        
+        if (actionItems.Count == 0)
+        {
+            actionItems = BuildActionItems(pendingCount, topRiskChannel, topInfluencer, null);
+        }
 
         if (actionItems.Count == 0)
             actionItems.Add("Tiếp tục theo dõi mentions mới và cập nhật phân tích khi có thêm dữ liệu.");

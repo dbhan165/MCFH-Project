@@ -192,6 +192,12 @@ function InfluencerCard({ kol, rank, maxSov }: { kol: ProjectInfluencer; rank: n
           <div className="min-w-[120px]">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">SOV</p>
             <p className="text-lg font-black text-[#00B4D8] tabular-nums">{kol.shareOfVoice}%</p>
+            <div className="mt-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#00B4D8] to-[#00B4D8]/70 transition-all duration-500"
+                style={{ width: `${Math.max(barWidth, kol.shareOfVoice > 0 ? 4 : 0)}%` }}
+              />
+            </div>
           </div>
           <div className="text-center">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Mentions</p>
@@ -205,46 +211,43 @@ function InfluencerCard({ kol, rank, maxSov }: { kol: ProjectInfluencer; rank: n
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Score</p>
             <p className="text-lg font-bold text-violet-400 tabular-nums">{kol.influenceScore}</p>
           </div>
-          {kol.dominantSentiment ? (
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getSentimentBadgeClass(kol.dominantSentiment)}`}>
-              {getSentimentLabel(kol.dominantSentiment)}
-            </span>
-          ) : null}
+          
+          <div className="flex flex-col items-center min-w-[100px]">
+            {kol.dominantSentiment ? (
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getSentimentBadgeClass(kol.dominantSentiment)} mb-1.5`}>
+                {getSentimentLabel(kol.dominantSentiment)}
+              </span>
+            ) : <span className="h-[26px] mb-1.5" />}
+            
+            {totalSentiment > 0 && (
+              <div className="w-full h-1.5 rounded-full flex overflow-hidden bg-white/5">
+                {kol.positiveCount > 0 && (
+                  <div style={{ flex: kol.positiveCount, background: SENTIMENT_COLORS.positive }} title={`Tích cực: ${kol.positiveCount}`} />
+                )}
+                {kol.neutralCount > 0 && (
+                  <div style={{ flex: kol.neutralCount, background: SENTIMENT_COLORS.neutral }} title={`Trung lập: ${kol.neutralCount}`} />
+                )}
+                {kol.negativeCount > 0 && (
+                  <div style={{ flex: kol.negativeCount, background: SENTIMENT_COLORS.negative }} title={`Tiêu cực: ${kol.negativeCount}`} />
+                )}
+              </div>
+            )}
+          </div>
+
           {kol.handleUrl ? (
             <a
               href={kol.handleUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 rounded-lg text-gray-500 hover:text-[#00B4D8] hover:bg-[#00B4D8]/10 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:text-[#00B4D8] hover:bg-[#00B4D8]/10 transition-colors shrink-0"
             >
               <ExternalLink size={16} />
             </a>
-          ) : null}
+          ) : (
+            <div className="w-[32px] shrink-0" />
+          )}
         </div>
       </div>
-
-      <div className="mt-4">
-        <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[#00B4D8] to-[#00B4D8]/70 transition-all duration-500"
-            style={{ width: `${Math.max(barWidth, kol.shareOfVoice > 0 ? 4 : 0)}%` }}
-          />
-        </div>
-      </div>
-
-      {totalSentiment > 0 && (
-        <div className="mt-3 h-1.5 rounded-full flex overflow-hidden bg-white/5">
-          {kol.positiveCount > 0 && (
-            <div style={{ flex: kol.positiveCount, background: SENTIMENT_COLORS.positive }} title={`Tích cực: ${kol.positiveCount}`} />
-          )}
-          {kol.neutralCount > 0 && (
-            <div style={{ flex: kol.neutralCount, background: SENTIMENT_COLORS.neutral }} title={`Trung lập: ${kol.neutralCount}`} />
-          )}
-          {kol.negativeCount > 0 && (
-            <div style={{ flex: kol.negativeCount, background: SENTIMENT_COLORS.negative }} title={`Tiêu cực: ${kol.negativeCount}`} />
-          )}
-        </div>
-      )}
     </article>
   );
 }

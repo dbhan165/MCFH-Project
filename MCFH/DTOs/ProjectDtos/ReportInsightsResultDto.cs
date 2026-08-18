@@ -3,8 +3,9 @@ namespace MCFH.DTOs.ProjectDtos;
 public class ReportInsightsResultDto
 {
     public List<string> ExecutiveInsights { get; set; } = new();
-    public List<string> ActionItems { get; set; } = new();
-    public List<string> MarketingStrategies { get; set; } = new();
+    public List<string> ContentDirections { get; set; } = new();
+    public List<string> RiskMitigation { get; set; } = new();
+    public List<string> ProductOptimization { get; set; } = new();
     public string? NsrComment { get; set; }
     public string? SentimentAnalysis { get; set; }
     public string? ChannelAnalysis { get; set; }

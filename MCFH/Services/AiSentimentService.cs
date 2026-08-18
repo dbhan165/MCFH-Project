@@ -30,6 +30,8 @@ public interface IAiSentimentService
         string topChannelInfo,
         string topNegativeAspects,
         List<string>? pinnedMentions,
+        List<string>? topReputableMentions = null,
+        List<string>? topInfluencers = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -383,6 +385,8 @@ public class AiSentimentService : IAiSentimentService
         string topChannelInfo,
         string topNegativeAspects,
         List<string>? pinnedMentions,
+        List<string>? topReputableMentions = null,
+        List<string>? topInfluencers = null,
         CancellationToken cancellationToken = default)
     {
         var (apiKey, dynamicModel, dynamicBaseUrl) = await ResolveSettingsAsync(cancellationToken);
@@ -393,25 +397,37 @@ public class AiSentimentService : IAiSentimentService
             ? "\n- Các trích dẫn đáng chú ý (Pinned Quotes):\n" + string.Join("\n", pinnedMentions.Select(p => $"  + \"{p}\""))
             : "";
 
+        var topMentionsStr = topReputableMentions != null && topReputableMentions.Count > 0
+            ? "\n- Top bình luận/bài viết uy tín (đã lọc nhiễu, tương tác cao):\n" + string.Join("\n", topReputableMentions.Select(p => $"  + {p}"))
+            : "";
+
+        var topInfluencersStr = topInfluencers != null && topInfluencers.Count > 0
+            ? "\n- Các tài khoản/người ảnh hưởng dẫn dắt thảo luận (KOLs/KOCs):\n" + string.Join("\n", topInfluencers.Select(p => $"  + {p}"))
+            : "";
+
         var prompt = 
-            $"Bạn là chuyên gia tư vấn chiến lược truyền thông (PR Consultant). " +
-            $"Hãy đọc các dữ liệu tóm tắt sau đây của dự án '{projectName}' và viết báo cáo.\n\n" +
+            $"Bạn là chuyên gia tư vấn chiến lược truyền thông (PR Consultant) xuất sắc. " +
+            $"Hãy đọc các dữ liệu thực tế sau đây của dự án '{projectName}' và viết báo cáo phân tích chiến lược.\n\n" +
             $"Dữ liệu:\n" +
             $"- Tổng mentions: {totalMentions}\n" +
             $"- NSR Score (Net Sentiment Rate): {nsrScore}%\n" +
             $"- Kênh dẫn đầu/nổi bật: {topChannelInfo}\n" +
-            $"- Các khía cạnh bị chê nhiều (Negative Aspects): {topNegativeAspects}{quotesStr}\n\n" +
-            "Yêu cầu:\n" +
-            "1. Viết 3-4 câu 'executiveInsights' (Tóm tắt điều hành) thật sắc bén, chỉ ra điểm sáng và rủi ro lớn nhất.\n" +
-            "2. Đề xuất 2-3 'actionItems' (Gợi ý hành động) cụ thể, mang tính thực chiến cho đội ngũ Marketing/CSKH.\n" +
-            "3. Đề xuất 3-4 'marketingStrategies' (Chiến lược Marketing) đi sâu vào việc giải quyết thách thức hoặc tận dụng cơ hội.\n" +
-            "4. Viết một 'nsrComment' (1-2 câu) bình luận khách quan về sức khỏe thương hiệu dựa trên chỉ số NSR. (Lưu ý: NSR > 0 là thương hiệu đang có dư luận tích cực chiếm ưu thế, NSR < 0 là đang gặp khủng hoảng tiêu cực).\n" +
-            "5. Viết 1 đoạn văn 'sentimentAnalysis' (Tình hình cảm xúc) phân tích nguyên nhân hình thành làn sóng cảm xúc hiện tại (tích cực/tiêu cực) và tầm ảnh hưởng.\n" +
-            "6. Viết 1 đoạn văn 'channelAnalysis' (Phân tích kênh) giải thích lý do tại sao kênh hàng đầu lại chiếm volume thảo luận lớn và hành vi người dùng trên kênh đó.\n" +
-            "7. Viết 1 đoạn văn 'influencerAnalysis' (Phân tích người ảnh hưởng) đánh giá cách các tài khoản nổi bật đang định hướng dư luận và mức độ lan truyền.\n" +
-            "8. Phân tích SWOT ngắn gọn (điền vào 'swotAnalysis') dựa trên các điểm trên.\n" +
+            $"- Các khía cạnh bị phàn nàn nhiều (Negative Aspects): {topNegativeAspects}{quotesStr}{topMentionsStr}{topInfluencersStr}\n\n" +
+            "YÊU CẦU (BẮT BUỘC ĐỌC KỸ):\n" +
+            "- PHẢI TRẢ LỜI 100% BẰNG TIẾNG VIỆT.\n" +
+            "- KHÔNG dùng từ ngữ sáo rỗng, phải bám sát dữ liệu uy tín ở trên.\n" +
+            "- JSON KHÔNG được thiếu bất kỳ trường nào.\n" +
+            "1. Viết 3-4 câu 'executiveInsights' (Tóm tắt điều hành) bằng Tiếng Việt, chỉ ra điểm sáng và rủi ro lớn nhất.\n" +
+            "2. Đề xuất 3 'contentDirections' (Định hướng nội dung) cụ thể: Các chủ đề/từ khóa nên khai thác trong tuần tới dựa trên trend.\n" +
+            "3. Đề xuất 3 'riskMitigation' (Chiến lược xử lý rủi ro): Các bước cụ thể để dập tắt hoặc phản hồi các điểm chê bai.\n" +
+            "4. Đề xuất 3 'productOptimization' (Tối ưu sản phẩm/dịch vụ): Góp ý thẳng thắn vào sản phẩm dựa trên feedback của khách hàng.\n" +
+            "5. Viết một 'nsrComment' (1-2 câu) bình luận khách quan về sức khỏe thương hiệu dựa trên chỉ số NSR.\n" +
+            "6. Viết 1 đoạn văn 'sentimentAnalysis' phân tích nguyên nhân hình thành làn sóng cảm xúc hiện tại và tầm ảnh hưởng.\n" +
+            "7. Viết 1 đoạn văn 'channelAnalysis' giải thích lý do kênh hàng đầu lại chiếm volume lớn.\n" +
+            "8. Viết 1 đoạn văn 'influencerAnalysis' đánh giá cách các KOLs đang định hướng dư luận.\n" +
+            "9. Phân tích SWOT ngắn gọn (điền vào 'swotAnalysis').\n" +
             "Trả về JSON ĐÚNG cấu trúc sau (không bọc trong markdown):\n" +
-            "{\n  \"executiveInsights\": [\"câu 1\", \"câu 2\"],\n  \"actionItems\": [\"hành động 1\", \"hành động 2\"],\n  \"marketingStrategies\": [\"chiến lược 1\", \"chiến lược 2\"],\n  \"nsrComment\": \"bình luận\",\n  \"sentimentAnalysis\": \"phân tích cảm xúc...\",\n  \"channelAnalysis\": \"phân tích kênh...\",\n  \"influencerAnalysis\": \"phân tích KOLs...\",\n  \"swotAnalysis\": {\n    \"strengths\": [\"điểm 1\"],\n    \"weaknesses\": [\"điểm 1\"],\n    \"opportunities\": [\"điểm 1\"],\n    \"threats\": [\"điểm 1\"]\n  }\n}";
+            "{\n  \"executiveInsights\": [\"câu 1\", \"câu 2\"],\n  \"contentDirections\": [\"định hướng 1\", \"định hướng 2\"],\n  \"riskMitigation\": [\"chiến lược 1\", \"chiến lược 2\"],\n  \"productOptimization\": [\"đề xuất 1\", \"đề xuất 2\"],\n  \"nsrComment\": \"bình luận\",\n  \"sentimentAnalysis\": \"phân tích cảm xúc...\",\n  \"channelAnalysis\": \"phân tích kênh...\",\n  \"influencerAnalysis\": \"phân tích KOLs...\",\n  \"swotAnalysis\": {\n    \"strengths\": [\"điểm 1\"],\n    \"weaknesses\": [\"điểm 1\"],\n    \"opportunities\": [\"điểm 1\"],\n    \"threats\": [\"điểm 1\"]\n  }\n}";
 
         var models = GetModelCandidates(dynamicModel).ToList();
         
@@ -453,7 +469,7 @@ public class AiSentimentService : IAiSentimentService
                     if (!string.IsNullOrWhiteSpace(jsonContent))
                     {
                         var result = JsonSerializer.Deserialize<ReportInsightsResultDto>(jsonContent, JsonOptions);
-                        if (result != null && (result.ExecutiveInsights.Any() || result.ActionItems.Any()))
+                        if (result != null && (result.ExecutiveInsights.Any() || result.ContentDirections.Any()))
                         {
                             return result;
                         }

@@ -1,4 +1,4 @@
-﻿using MCFH.DTOs.WorkspaceDtos;
+using MCFH.DTOs.WorkspaceDtos;
 using MCFH.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -151,9 +151,9 @@ namespace MCFH.Controllers.Workspaces
             var success = await _workspaceService.RejectInvitationAsync(id, userId, invitationId);
 
             if (!success)
-                return BadRequest(new { message = "Không thể từ chối lời mời." });
+                return BadRequest(new { message = "Không thể hủy lời mời." });
 
-            return Ok(new { message = "Đã từ chối lời mời." });
+            return Ok(new { message = "Đã hủy lời mời." });
         }
 
         // PUT api/workspaces/5/members/3/role

@@ -1,7 +1,7 @@
 services:
   frontend:
     container_name: mcfh-frontend
-    image: ${DOCKER_USERNAME:-truongnhat2102}/mcfh-frontend:${IMAGE_TAG:-latest}
+    image: truongnhat2102/mcfh-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./MCFH-Frontend
       dockerfile: Dockerfile
@@ -25,7 +25,7 @@ services:
 
   backend:
     container_name: mcfh-backend
-    image: ${DOCKER_USERNAME:-truongnhat2102}/mcfh-backend:${IMAGE_TAG:-latest}
+    image: truongnhat2102/mcfh-backend:${IMAGE_TAG:-latest}
     build:
       context: ./MCFH
       dockerfile: Dockerfile
@@ -42,9 +42,6 @@ services:
       TZ: Asia/Ho_Chi_Minh
 
       Auth__FrontendBaseUrl: https://mcfh.io.vn
-      Auth__GoogleClientId: ${VITE_GOOGLE_CLIENT_ID:-}
-      AzureBlob__ConnectionString: ${ConnectionString:-}
-      AzureBlob__ContainerName: ${ContainerName:-comments-prod}
 
       ConnectionStrings__MyCnn: >-
         Server=sqlserver,1433;
@@ -65,7 +62,6 @@ services:
       - backend_temp:/app/Temp
       - backend_cookies:/app/Cookies
       - backend_exports:/app/Export
-      - backend_storage_data:/app/StorageData
 
     restart: unless-stopped
 
@@ -149,18 +145,9 @@ networks:
 
 volumes:
   sqlserver_data:
-    name: mcfh-sqlserver-data
   backend_logs:
-    name: mcfh-backend-logs
   backend_reports:
-    name: mcfh-backend-reports
   backend_uploads:
-    name: mcfh-backend-uploads
   backend_temp:
-    name: mcfh-backend-temp
   backend_cookies:
-    name: mcfh-backend-cookies
   backend_exports:
-    name: mcfh-backend-exports
-  backend_storage_data:
-    name: mcfh-backend-storagedata
