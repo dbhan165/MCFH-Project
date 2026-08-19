@@ -1710,7 +1710,6 @@ public class ProjectReportService
     {
         var totalMentions = mentions.Count;
         var totalComments = mentions.Sum(m => m.CommentsCount);
-        var platformOrder = new[] { "facebook", "youtube", "tiktok", "news", "threads" };
 
         var channels = mentions
             .GroupBy(m => (m.Platform ?? "unknown").ToLowerInvariant())
@@ -1739,12 +1738,7 @@ public class ProjectReportService
                     NeutralPercent = analyzed > 0 ? Math.Round(counts.Neutral * 100.0 / analyzed, 1) : 0
                 };
             })
-            .OrderBy(c =>
-            {
-                var idx = Array.IndexOf(platformOrder, c.Platform);
-                return idx >= 0 ? idx : 99;
-            })
-            .ThenByDescending(c => c.Mentions)
+            .OrderByDescending(c => c.Mentions)
             .ToList();
 
         return new ChannelComparisonDto
