@@ -63,6 +63,7 @@ services:
       - backend_temp:/app/Temp
       - backend_cookies:/app/Cookies
       - backend_exports:/app/Export
+      - backend_storage_data:/app/StorageData
 
     restart: unless-stopped
 
@@ -146,10 +147,15 @@ networks:
 
 volumes:
   sqlserver_data:
+    name: mcfh-sqlserver-data
   backend_logs:
   backend_reports:
   backend_uploads:
   backend_temp:
   backend_cookies:
   backend_exports:
+  backend_storage_data:
+    name: mcfh-backend-storagedata
+
+
 
