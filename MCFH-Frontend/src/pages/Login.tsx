@@ -6,6 +6,7 @@ import { authApi } from '../api/authApi';
 import { saveAuthSession, markEmailPendingVerification, clearEmailPendingVerification, isEmailPendingVerification, extractApiError } from '../utils/authStorage';
 import { resolvePostLoginPath } from '../utils/onboardingHelpers';
 import { getPasswordValidationError, PASSWORD_REQUIREMENT_MESSAGE } from '../utils/passwordValidation';
+import { getPhoneValidationError, PHONE_REQUIREMENT_MESSAGE } from '../utils/phoneValidation';
 import loginImage from '../assets/login.png';
 import McfhLogo from '../components/brand/McfhLogo';
 
@@ -53,6 +54,12 @@ const Login = () => {
         }
 
       } else if (mode === 'register') {
+        const phoneError = getPhoneValidationError(phone);
+        if (phoneError) {
+          setErrorMessage(phoneError);
+          return;
+        }
+
         const passwordError = getPasswordValidationError(password);
         if (passwordError) {
           setErrorMessage(passwordError);
@@ -246,8 +253,22 @@ const Login = () => {
                         <label className="text-[13px] font-bold text-gray-700 tracking-wider">Số điện thoại</label>
                         <div className="relative group">
                           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Phone className="h-5 w-5 text-gray-400 group-focus-within:text-[#00B4D8] transition-colors" /></div>
-                          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0987654321" className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300" required disabled={isLoading} />
+                          <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                            placeholder="0987654321"
+                            maxLength={11}
+                            inputMode="numeric"
+                            pattern="0[0-9]{9,10}"
+                            className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 text-gray-900 placeholder-gray-400 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#00B4D8]/15 focus:border-[#00B4D8] transition-all shadow-sm hover:border-gray-300"
+                            required
+                            disabled={isLoading}
+                          />
                         </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          {PHONE_REQUIREMENT_MESSAGE}
+                        </p>
                       </div>
                     </>
                   )}
