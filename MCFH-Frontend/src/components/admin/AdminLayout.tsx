@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  CreditCard,
   Server,
   Globe,
   Cookie,
@@ -21,7 +20,6 @@ import { loadProfileFromStorage, clearAuthSession, getAvatarFallback } from '../
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
   { label: 'Quản lý người dùng', icon: Users, href: '/admin/users' },
-  { label: 'Gói đăng ký', icon: CreditCard, href: '/admin/subscriptions' },
   { label: 'Quản lý Proxy', icon: Server, href: '/admin/proxies' },
   { label: 'Nguồn Facebook', icon: Globe, href: '/admin/fb-sources' },
   { label: 'Gói Cào', icon: Package, href: '/admin/scrape-packages' },
