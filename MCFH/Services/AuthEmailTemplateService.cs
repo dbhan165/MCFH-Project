@@ -68,11 +68,7 @@ public class AuthEmailTemplateService : IAuthEmailTemplateService
                     Đặt Lại Mật Khẩu
                 </a>
             </div>
-            {BuildWarningBanner($"⚠️ <b>Lưu ý thời hạn:</b> Liên kết khôi phục này có giá trị sử dụng duy nhất trong vòng <b>{_authOptions.OtpExpiryMinutes} phút</b>. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua thư này để bảo vệ tài khoản an toàn.")}
-            <p style='font-size: 12.5px; color: #64748b; margin-bottom: 0; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px dashed #cbd5e1;'>
-                Nếu không tương tác được với nút bấm, bạn có thể sao chép liên kết dưới đây dán trực tiếp vào thanh địa chỉ trình duyệt:<br/>
-                <a href='{resetLink}' style='color: #2563eb; word-break: break-all; text-decoration: underline;'>{resetLink}</a>
-            </p>";
+            {BuildWarningBanner($"⚠️ <b>Lưu ý thời hạn:</b> Liên kết khôi phục này có giá trị sử dụng duy nhất trong vòng <b>{_authOptions.OtpExpiryMinutes} phút</b>. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua thư này để bảo vệ tài khoản an toàn.")}";
 
         return new AuthEmailMessage(
             "MCFH Hub - Yêu cầu đặt lại mật khẩu tài khoản",

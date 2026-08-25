@@ -11,6 +11,8 @@ using System.Security.Claims;
 using System.Text;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace MCFH.Controllers
 {
@@ -23,19 +25,25 @@ namespace MCFH.Controllers
         private readonly IEmailService _emailService;
         private readonly IAuthEmailTemplateService _emailTemplates;
         private readonly AuthOptions _authOptions;
+        private readonly IWebHostEnvironment _env;
+        private readonly ILogger<AuthController> _logger;
 
         public AuthController(
             McfhDbContext context,
             IConfiguration config,
             IEmailService emailService,
             IAuthEmailTemplateService emailTemplates,
-            IOptions<AuthOptions> authOptions)
+            IOptions<AuthOptions> authOptions,
+            IWebHostEnvironment env,
+            ILogger<AuthController> logger)
         {
             _context = context;
             _config = config;
             _emailService = emailService;
             _emailTemplates = emailTemplates;
             _authOptions = authOptions.Value;
+            _env = env;
+            _logger = logger;
         }
 
         // ==========================================
@@ -498,6 +506,20 @@ namespace MCFH.Controllers
             await _context.SaveChangesAsync();
 
             string resetLink = $"{_authOptions.FrontendBaseUrl.TrimEnd('/')}/reset-password?token={resetToken}";
+
+            if (!_env.IsDevelopment() &&
+                (resetLink.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
+                 resetLink.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase)))
+            {
+                _logger.LogError(
+                    "Auth:FrontendBaseUrl chưa được override trong môi trường Production — resetLink = {ResetLink}. Email sẽ KHÔNG được gửi để tránh gửi link sai cho user.",
+                    resetLink);
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "Cấu hình hệ thống chưa sẵn sàng (Auth:FrontendBaseUrl). Vui lòng liên hệ quản trị viên."
+                });
+            }
+
             var email = _emailTemplates.BuildPasswordResetEmail(resetLink);
             try
             {
