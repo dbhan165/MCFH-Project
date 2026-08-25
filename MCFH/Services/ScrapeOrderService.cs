@@ -220,7 +220,9 @@ public class ScrapeOrderService
             CreatedAt = now,
             OrderCode = orderCode,
             PaymentLinkId = link2.PaymentLinkId,
-            CheckoutUrl = link2.CheckoutUrl
+            CheckoutUrl = link2.CheckoutUrl,
+            WorkspaceId = order.WorkspaceId,
+            ProjectId = order.ProjectId
         };
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
@@ -260,7 +262,9 @@ public class ScrapeOrderService
             CreatedAt = now,
             OrderCode = orderCode,
             PaymentLinkId = "local-bypass",
-            CheckoutUrl = null
+            CheckoutUrl = null,
+            WorkspaceId = order.WorkspaceId,
+            ProjectId = order.ProjectId
         };
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
@@ -424,6 +428,54 @@ public class ScrapeOrderService
         {
             FulfillRunning.TryRemove(order.OrderId, out _);
         }
+    }
+
+    /// <summary>
+    /// Cộng dồn 1 mention vào package đang active của project (FIFO theo CreatedAt).
+    /// - Nếu project không có package active nào → không làm gì (coi như free-tier, không chặn).
+    /// - Nếu gói là unlimited (MentionsIncluded == -1) → vẫn tăng MentionsUsed để hiển thị thống kê.
+    /// - Nếu gói đã đầy → chuyển sang gói active tiếp theo; nếu hết → giữ nguyên (không xoá feedback đã lưu).
+    /// </summary>
+    public static async Task ConsumeProjectMentionAsync(McfhDbContext context, int projectId, int count = 1)
+    {
+        if (count <= 0) return;
+
+        var remaining = count;
+        var packages = await context.ProjectMentionPackages
+            .Where(p => p.ProjectId == projectId && p.Status == "active")
+            .OrderBy(p => p.CreatedAt)
+            .ToListAsync();
+
+        if (packages.Count == 0) return;
+
+        foreach (var pkg in packages)
+        {
+            if (remaining <= 0) break;
+
+            // Unlimited package: cộng dồn nhưng không bao giờ chuyển exhausted.
+            if (pkg.MentionsIncluded == -1)
+            {
+                pkg.MentionsUsed += remaining;
+                remaining = 0;
+                continue;
+            }
+
+            var capacity = pkg.MentionsIncluded - pkg.MentionsUsed;
+            if (capacity <= 0)
+            {
+                if (pkg.Status == "active") pkg.Status = "exhausted";
+                continue;
+            }
+
+            var take = Math.Min(capacity, remaining);
+            pkg.MentionsUsed += take;
+            remaining -= take;
+
+            if (pkg.MentionsUsed >= pkg.MentionsIncluded && pkg.Status == "active")
+                pkg.Status = "exhausted";
+        }
+
+        await context.SaveChangesAsync();
     }
 
     /// <summary>

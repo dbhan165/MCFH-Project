@@ -1294,6 +1294,8 @@ public class ScrapeByKeywordService
             _db.ScrapedFeedbacks.Add(feedback);
             await _db.SaveChangesAsync();
 
+            await ScrapeOrderService.ConsumeProjectMentionAsync(_db, projectId);
+
             var savedCount = await _bundleStorage.SaveAsync(feedback.FeedbackId, normalized);
             feedback.CommentsCount = savedCount;
             feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
@@ -1354,6 +1356,8 @@ public class ScrapeByKeywordService
 
             _db.ScrapedFeedbacks.Add(feedback);
             await _db.SaveChangesAsync();
+
+            await ScrapeOrderService.ConsumeProjectMentionAsync(_db, projectId);
 
             var savedCount = await _bundleStorage.SaveAsync(feedback.FeedbackId, normalized);
             feedback.CommentsCount = savedCount;

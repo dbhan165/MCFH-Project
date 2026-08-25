@@ -126,8 +126,7 @@ function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/workspaces" element={<Workspaces />} />
           <Route path="/invitations" element={<Invitations />} />
-          <Route
-            path="/workspace/:workspaceId/settings"
+          <Route path="/workspace/:workspaceId/settings"
             element={<WorkspaceSettings />}
           />
           <Route

@@ -53,6 +53,10 @@ export interface PaymentHistory {
   status: string | null;
   type: string | null;
   planName: string | null;
+  workspaceId: number | null;
+  workspaceName: string | null;
+  projectId: number | null;
+  projectName: string | null;
   createdAt: string | null;
 }
 
@@ -116,6 +120,10 @@ function mapPayment(data: Record<string, unknown>): PaymentHistory {
     status: pickNullableString(data, 'status', 'Status'),
     type: pickNullableString(data, 'type', 'Type'),
     planName: pickNullableString(data, 'planName', 'PlanName'),
+    workspaceId: pickField<number>(data, 'workspaceId', 'WorkspaceId') ?? null,
+    workspaceName: pickNullableString(data, 'workspaceName', 'WorkspaceName'),
+    projectId: pickField<number>(data, 'projectId', 'ProjectId') ?? null,
+    projectName: pickNullableString(data, 'projectName', 'ProjectName'),
     createdAt: pickNullableString(data, 'createdAt', 'CreatedAt'),
   };
 }

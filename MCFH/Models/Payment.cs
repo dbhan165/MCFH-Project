@@ -23,6 +23,10 @@ public partial class Payment
 
     public DateTime? CreatedAt { get; set; }
 
+    public int? WorkspaceId { get; set; }
+
+    public int? ProjectId { get; set; }
+
     /// <summary>PayOS orderCode (duy nhất) — dùng để đối soát webhook / tra cứu payment link.</summary>
     public long? OrderCode { get; set; }
 
@@ -40,4 +44,8 @@ public partial class Payment
     public virtual SubscriptionPlan? Plan { get; set; }
 
     public virtual BespokeRequest? Request { get; set; }
+
+    public virtual Workspace? Workspace { get; set; }
+
+    public virtual Project? Project { get; set; }
 }

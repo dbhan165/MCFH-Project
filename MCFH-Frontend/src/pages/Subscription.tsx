@@ -1,17 +1,31 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { CheckCircle2, CreditCard, Loader2, Zap } from 'lucide-react';
+import { CheckCircle2, Clock, CreditCard, Loader2, XCircle, Zap } from 'lucide-react';
 import { subscriptionApi, type BillingSummary, type PaymentHistory } from '../api/subscriptionApi';
 import { workspaceApi } from '../api/workspaceApi';
 import type { Workspace } from '../types/workspace';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
 
+type PaymentStatus = 'success' | 'pending' | 'failed' | string;
+
+const STATUS_CONFIG: Record<string, { label: string; className: string; icon: typeof CheckCircle2 }> = {
+  success: { label: 'Thành công', className: 'text-emerald-400', icon: CheckCircle2 },
+  pending: { label: 'Đang chờ', className: 'text-amber-400', icon: Clock },
+  failed: { label: 'Thất bại', className: 'text-red-400', icon: XCircle },
+};
+
+function getStatusConfig(status: string | null | undefined) {
+  return STATUS_CONFIG[status ?? ''] ?? { label: status ?? '—', className: 'text-gray-400', icon: Clock };
+}
+
+const PAGE_SIZE = 5;
+
 const Subscription = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState<number | null>(null);
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [payments, setPayments] = useState<PaymentHistory[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -51,10 +65,16 @@ const Subscription = () => {
 
   const handleWorkspaceChange = async (wid: number) => {
     setWorkspaceId(wid);
+    setCurrentPage(1);
     await loadData(wid);
   };
 
-
+  const totalPages = Math.max(1, Math.ceil(payments.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedPayments = payments.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   if (isLoading) {
     return (
@@ -70,80 +90,166 @@ const Subscription = () => {
         <div className="text-gray-300 font-medium tracking-wide">Quản lý Tài chính</div>
       </header>
 
-      <div className="p-8 md:p-10 max-w-5xl mx-auto w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div className="p-8 md:p-10 w-full">
+        <div className="max-w-5xl mx-auto mb-8">
           <h1 className="text-4xl font-bold tracking-tight">Hạn mức & Thanh toán</h1>
-          {workspaces.length > 1 && (
-            <select
-              value={workspaceId ?? ''}
-              onChange={(e) => handleWorkspaceChange(Number(e.target.value))}
-              className="bg-[#151B2B] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#FF7575]"
-            >
-              {workspaces.map((ws) => (
-                <option key={ws.workspaceId} value={ws.workspaceId}>
-                  {ws.name}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
 
         {errorMessage && (
-          <div className="mb-6 text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm">
+          <div className="max-w-5xl mx-auto mb-6 text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm">
             {errorMessage}
           </div>
         )}
 
         {workspaces.length === 0 ? (
-          <div className="bg-[#0A101D] border border-white/10 rounded-2xl p-8 text-center">
-            <p className="text-gray-400 mb-4">Tạo workspace để quản lý gói cước và hạn mức.</p>
-            <Link to="/create-workspace" className="text-[#FF7575] font-semibold hover:underline">
-              Tạo workspace
-            </Link>
+          <div className="max-w-5xl mx-auto bg-[#0A101D] border border-white/10 rounded-2xl p-8 text-center">
+            <p className="text-gray-400">Bạn chưa có workspace nào.</p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-              <div className="lg:col-span-2 bg-gradient-to-br from-[#0A101D] to-[#151B2B] border border-[#FF7575]/30 rounded-2xl p-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                  <Zap size={100} />
-                </div>
-                <div className="relative z-10">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <span className="inline-block px-3 py-1 bg-[#FF7575]/20 text-[#FF7575] rounded-full text-xs font-bold uppercase border border-[#FF7575]/30">
-                      Workspace
-                    </span>
-                  </div>
-                  <h2 className="text-3xl font-bold mb-1">{billing?.workspaceName}</h2>
-                  <p className="text-gray-500 text-sm mb-6">Quản lý các dự án và hạn mức tài nguyên chung.</p>
-                  {workspaces.find(w => w.workspaceId === workspaceId)?.myRole !== 'Viewer' && (
-                    <Link
-                      to={workspaceId ? `/create-project?wid=${workspaceId}` : '/create-project'}
-                      className="inline-flex items-center gap-2 bg-[#FF7575] hover:bg-[#ff6262] text-white px-6 py-3 rounded-lg font-bold transition-colors"
-                    >
-                      Tạo dự án mới
-                    </Link>
-                  )}
-                </div>
+            {/* Phần trên: Toàn bộ giao dịch (rộng) */}
+            <div className="max-w-7xl mx-auto bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden mb-8">
+              <div className="p-6 border-b border-white/5 flex items-center gap-2">
+                <CreditCard className="text-[#FF7575]" size={22} />
+                <h3 className="text-xl font-bold">Toàn bộ giao dịch</h3>
+                <span className="ml-auto text-sm text-gray-500">
+                  {payments.length} giao dịch
+                </span>
               </div>
+              {payments.length === 0 ? (
+                <p className="p-6 text-gray-500 text-sm">
+                  Chưa có giao dịch nào trên các workspace của bạn.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-white/[0.02]">
+                        <th className="px-8 py-5 text-sm font-bold text-gray-400 uppercase tracking-wider">Mã hóa đơn</th>
+                        <th className="px-8 py-5 text-sm font-bold text-gray-400 uppercase tracking-wider">Ngày</th>
+                        <th className="px-8 py-5 text-sm font-bold text-gray-400 uppercase tracking-wider">Workspace</th>
+                        <th className="px-8 py-5 text-sm font-bold text-gray-400 uppercase tracking-wider">Project</th>
+                        <th className="px-8 py-5 text-sm font-bold text-gray-400 uppercase tracking-wider text-right">Số tiền</th>
+                        <th className="px-8 py-5 text-sm font-bold text-gray-400 uppercase tracking-wider">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {paginatedPayments.map((invoice) => {
+                        const statusCfg = getStatusConfig(invoice.status);
+                        const StatusIcon = statusCfg.icon;
+                        return (
+                          <tr key={invoice.paymentId} className="hover:bg-white/[0.02]">
+                            <td className="px-8 py-5 font-mono text-base text-white">{invoice.transactionRef ?? `#${invoice.paymentId}`}</td>
+                            <td className="px-8 py-5 text-base text-gray-200">{formatWorkspaceDateTime(invoice.createdAt)}</td>
+                            <td className="px-8 py-5 text-base text-gray-200">{invoice.workspaceName ?? '—'}</td>
+                            <td className="px-8 py-5 text-base text-gray-200">{invoice.projectName ?? '—'}</td>
+                            <td className="px-8 py-5 text-right font-bold text-base text-white">{invoice.amountLabel}</td>
+                            <td className="px-8 py-5">
+                              <span className={`inline-flex items-center gap-2 text-base font-semibold ${statusCfg.className}`}>
+                                <StatusIcon size={18} />
+                                {statusCfg.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-              <div className="bg-[#0A101D] border border-white/5 rounded-2xl p-8">
-                <h3 className="text-lg font-bold mb-6">Mức sử dụng tài nguyên (Workspace)</h3>
-                <div className="space-y-6">
-                  <UsageBar label="AI Credits (Dùng chung)" used={billing?.aiCreditUsed ?? 0} limit={billing?.aiCreditLimit ?? 100} color="bg-violet-500" />
+              {payments.length > PAGE_SIZE && (
+                <div className="p-4 border-t border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <span className="text-sm text-gray-500">
+                    Trang {safePage} / {totalPages} · {payments.length} giao dịch
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage === 1}
+                      className="px-3 py-1.5 rounded-lg bg-[#151B2B] border border-white/10 text-sm text-white disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#FF7575]/60 transition-colors"
+                    >
+                      ← Trước
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setCurrentPage(p)}
+                        className={`min-w-[36px] px-2 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                          p === safePage
+                            ? 'bg-[#FF7575] border-[#FF7575] text-white'
+                            : 'bg-[#151B2B] border-white/10 text-gray-300 hover:border-[#FF7575]/60'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage === totalPages}
+                      className="px-3 py-1.5 rounded-lg bg-[#151B2B] border border-white/10 text-sm text-white disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#FF7575]/60 transition-colors"
+                    >
+                      Sau →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Phần dưới: Chi tiết workspace được chọn (hẹp hơn) */}
+            <div className="max-w-5xl mx-auto">
+            <div className="bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden mb-8">
+              <div className="p-6 border-b border-white/5 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="text-[#FF7575]" />
+                  <h3 className="text-lg font-bold">
+                    Chi tiết {billing?.workspaceName ?? 'workspace'}
+                  </h3>
+                </div>
+                {workspaces.length > 1 && (
+                  <select
+                    value={workspaceId ?? ''}
+                    onChange={(e) => handleWorkspaceChange(Number(e.target.value))}
+                    className="sm:ml-auto bg-[#151B2B] border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[#FF7575]"
+                  >
+                    {workspaces.map((ws) => (
+                      <option key={ws.workspaceId} value={ws.workspaceId}>
+                        {ws.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <InfoRow
+                    label="Số Dự án"
+                    value={`${(billing?.projectUsed ?? 0).toLocaleString('vi-VN')}`}
+                  />
+                  <InfoRow
+                    label="Số Mention"
+                    value={`${(billing?.mentionUsed ?? 0).toLocaleString('vi-VN')}`}
+                  />
+                  <InfoRow
+                    label="Số Thành viên"
+                    value={`${(billing?.memberUsed ?? 0).toLocaleString('vi-VN')}`}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Section: Project Packages */}
-            <div className="bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden mb-8">
+            {/* Section: Project Packages của workspace được chọn */}
+            <div className="bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden">
               <div className="p-6 border-b border-white/5 flex items-center gap-2">
                 <Zap className="text-[#FF7575]" />
-                <h3 className="text-lg font-bold">Gói dữ liệu dự án (Project Packages)</h3>
+                <h3 className="text-lg font-bold">Gói dữ liệu dự án — {billing?.workspaceName ?? ''}</h3>
               </div>
               {!billing?.projectPackages || billing.projectPackages.length === 0 ? (
                 <p className="p-6 text-gray-500 text-sm">
-                  Bạn chưa mua gói Mentions nào cho các dự án trong Workspace này.
+                  Workspace này chưa mua gói Mentions nào cho các dự án.
                 </p>
               ) : (
                 <table className="w-full text-left">
@@ -158,9 +264,11 @@ const Subscription = () => {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {billing.projectPackages.map((pkg) => {
-                      const percent = pkg.mentionsIncluded > 0 
+                      const percent = pkg.mentionsIncluded > 0
                           ? Math.min(100, Math.round((pkg.mentionsUsed / pkg.mentionsIncluded) * 100))
                           : pkg.mentionsIncluded === -1 ? 0 : 100;
+                      const pkgStatusCfg = getStatusConfig(pkg.paymentStatus);
+                      const PkgStatusIcon = pkgStatusCfg.icon;
                       return (
                       <tr key={pkg.packageId} className="hover:bg-white/[0.02]">
                         <td className="px-6 py-4 text-sm font-semibold">{pkg.projectName}</td>
@@ -175,8 +283,8 @@ const Subscription = () => {
                               <span>{pkg.mentionsUsed} / {pkg.mentionsIncluded === -1 ? '∞' : pkg.mentionsIncluded}</span>
                             </div>
                             <div className="w-full bg-[#151B2B] h-1.5 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full ${percent > 85 ? 'bg-amber-500' : 'bg-blue-500'}`} 
+                              <div
+                                className={`h-full ${percent > 85 ? 'bg-amber-500' : 'bg-blue-500'}`}
                                 style={{ width: `${pkg.mentionsIncluded === -1 ? 0 : percent}%` }}
                               />
                             </div>
@@ -184,7 +292,10 @@ const Subscription = () => {
                         </td>
                         <td className="px-6 py-4 font-bold text-sm">{pkg.amount.toLocaleString('vi-VN')} ₫</td>
                         <td className="px-6 py-4">
-                          <span className="text-sm font-semibold text-emerald-500">{pkg.paymentStatus}</span>
+                          <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${pkgStatusCfg.className}`}>
+                            <PkgStatusIcon size={16} />
+                            {pkgStatusCfg.label}
+                          </span>
                         </td>
                       </tr>
                     )})}
@@ -192,44 +303,6 @@ const Subscription = () => {
                 </table>
               )}
             </div>
-
-            <div className="bg-[#0A101D] border border-white/5 rounded-2xl overflow-hidden">
-              <div className="p-6 border-b border-white/5 flex items-center gap-2">
-                <CreditCard className="text-[#FF7575]" />
-                <h3 className="text-lg font-bold">Lịch sử thanh toán</h3>
-              </div>
-              {payments.length === 0 ? (
-                <p className="p-6 text-gray-500 text-sm">
-                  Chưa có giao dịch. Các hóa đơn mua gói dữ liệu cho dự án sẽ hiển thị tại đây.
-                </p>
-              ) : (
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-white/[0.02]">
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Mã hóa đơn</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Ngày</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Gói</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Số tiền</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {payments.map((invoice) => (
-                      <tr key={invoice.paymentId} className="hover:bg-white/[0.02]">
-                        <td className="px-6 py-4 font-mono text-sm">{invoice.transactionRef ?? `#${invoice.paymentId}`}</td>
-                        <td className="px-6 py-4 text-gray-300">{formatWorkspaceDateTime(invoice.createdAt)}</td>
-                        <td className="px-6 py-4 text-gray-300">{invoice.planName ?? '—'}</td>
-                        <td className="px-6 py-4 font-bold">{invoice.amountLabel}</td>
-                        <td className="px-6 py-4">
-                          <span className="flex items-center gap-1.5 text-emerald-500 text-sm font-semibold">
-                            <CheckCircle2 size={16} /> {invoice.status === 'success' ? 'Thành công' : invoice.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
             </div>
           </>
         )}
@@ -237,6 +310,15 @@ const Subscription = () => {
     </div>
   );
 };
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{label}</span>
+      <span className="text-base font-semibold text-white">{value}</span>
+    </div>
+  );
+}
 
 function UsageBar({
   label,
