@@ -144,11 +144,23 @@ public static class PlatformCookieFileHelper
     public static readonly string[] TikTokRequired = ["sessionid", "sid_tt"];
     public static readonly string[] ThreadsRequired = ["auth_token", "ds_user_id"];
 
+    /// <summary>
+    /// Chuẩn hoá mã platform: trim + lowercase. Không giới hạn tập giá trị — admin có thể
+    /// thêm platform mới (instagram, youtube, ...) qua UI. Validate cú pháp khi cần.
+    /// </summary>
     public static string NormalizePlatform(string platform)
     {
+        if (string.IsNullOrWhiteSpace(platform))
+            throw new ArgumentException("platform là bắt buộc.");
+
         var p = platform.Trim().ToLowerInvariant();
-        if (p is not ("facebook" or "tiktok" or "threads"))
-            throw new ArgumentException("Platform phải là 'facebook', 'tiktok', hoặc 'threads'.");
+
+        // Validate cú pháp: chỉ chữ thường / chữ số / dấu gạch dưới / dấu gạch ngang, dài 2..50.
+        // Trùng rule trong PlatformCookieAdminService.CreateAsync để không khiến UI tạo
+        // platform hợp lệ rồi bị reject ở bước update content.
+        if (p.Length is < 2 or > 50 || !p.All(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-'))
+            throw new ArgumentException("platform phải là chữ thường/chữ số/dấu gạch, dài 2-50 ký tự.");
+
         return p;
     }
 
