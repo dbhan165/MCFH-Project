@@ -82,7 +82,7 @@ public static class ThreadsStealthHelper
         bool headless,
         Action<string>? onStatus = null)
     {
-        onStatus?.Invoke("[Threads] Creating browser context...");
+        onStatus?.Invoke("Threads: đang tạo phiên trình duyệt...");
 
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
@@ -110,7 +110,7 @@ public static class ThreadsStealthHelper
             window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
         ");
 
-        onStatus?.Invoke("[Threads] Browser context ready.");
+        ThreadsLog.Debug("Browser context ready.");
         return context;
     }
 
@@ -140,7 +140,7 @@ public static class ThreadsStealthHelper
                 if (await btn.IsVisibleAsync(new LocatorIsVisibleOptions { Timeout = 1000 }))
                 {
                     await btn.ClickAsync(new LocatorClickOptions { Timeout = 2000 });
-                    onStatus?.Invoke($"[Threads] Dismissed cookie banner via: {selector}");
+                    ThreadsLog.Debug($"Dismissed cookie banner via: {selector}");
                     await Task.Delay(300);
                     return;
                 }
@@ -165,7 +165,7 @@ public static class ThreadsStealthHelper
                 if (await btn.IsVisibleAsync(new LocatorIsVisibleOptions { Timeout = 500 }))
                 {
                     await btn.ClickAsync(new LocatorClickOptions { Timeout = 2000 });
-                    onStatus?.Invoke($"[Threads] Dismissed login prompt: '{label}'");
+                    ThreadsLog.Debug($"Dismissed login prompt: '{label}'");
                     await Task.Delay(300);
                     return;
                 }

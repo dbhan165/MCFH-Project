@@ -182,12 +182,12 @@ public static class ThreadsCommentExtractor
             var finalJs = js.Replace("__MAX__", maxComments.ToString());
 
             var comments = await page.EvaluateAsync<string[]>(finalJs) ?? Array.Empty<string>();
-            onStatus?.Invoke($"[Threads] DOM extracted {comments.Length} comments");
+            ThreadsLog.Debug($"DOM extracted {comments.Length} comments");
             return comments.ToList();
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] DOM extraction error: {ex.Message}");
+            ThreadsLog.Debug($"DOM extraction error: {ex.Message}");
             return new List<string>();
         }
     }
@@ -207,12 +207,12 @@ public static class ThreadsCommentExtractor
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] Comment extraction: {ex.Message}");
+            ThreadsLog.Debug($"Comment extraction: {ex.Message}");
         }
 
         var filtered = CommentTextHelper.FilterThreads(comments, maxComments);
 
-        onStatus?.Invoke($"[Threads] Extracted {filtered.Count} comments.");
+        ThreadsLog.Debug($"Extracted {filtered.Count} comments.");
         return filtered;
     }
 }

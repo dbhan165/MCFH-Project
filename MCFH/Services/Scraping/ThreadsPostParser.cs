@@ -89,12 +89,12 @@ public static class ThreadsPostParser
 
             var finalJs = js.Replace("__MAX__", maxComments.ToString());
             var comments = await page.EvaluateAsync<string[]>(finalJs) ?? Array.Empty<string>();
-            onStatus?.Invoke($"[Threads] Pagelet fallback extracted {comments.Length} comments");
+            ThreadsLog.Debug($"Pagelet fallback extracted {comments.Length} comments");
             return comments.ToList();
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] Pagelet fallback error: {ex.Message}");
+            ThreadsLog.Debug($"Pagelet fallback error: {ex.Message}");
             return new List<string>();
         }
     }
@@ -134,20 +134,20 @@ public static class ThreadsPostParser
         string? postIdHint = null)
     {
         var currentUrl = page.Url;
-        onStatus?.Invoke($"[Threads] Post page URL: {currentUrl}");
+        ThreadsLog.Debug($"Post page URL: {currentUrl}");
 
         var urlMatch = Regex.Match(currentUrl, @"threads\.(?:net|com)/(@[\w.]+)/post/");
         if (urlMatch.Success)
         {
             post.AuthorUsername = urlMatch.Groups[1].Value;
-            onStatus?.Invoke($"[Threads] Author from URL: {post.AuthorUsername}");
+            ThreadsLog.Debug($"Author from URL: {post.AuthorUsername}");
         }
 
         if (networkCapture != null && !string.IsNullOrEmpty(postIdHint))
         {
             if (networkCapture.TryGetPost(postIdHint, out var captured) && captured != null)
             {
-                onStatus?.Invoke($"[Threads] [NetworkCapture] Got post: @{captured.Username}, {captured.Replies.Count} replies");
+                ThreadsLog.Debug($"[NetworkCapture] Got post: @{captured.Username}, {captured.Replies.Count} replies");
                 if (!string.IsNullOrEmpty(captured.Username) && (string.IsNullOrEmpty(post.AuthorUsername) || post.AuthorUsername == "@"))
                     post.AuthorUsername = "@" + captured.Username;
                 if (!string.IsNullOrEmpty(captured.Text) && string.IsNullOrEmpty(post.Text))
@@ -166,13 +166,13 @@ public static class ThreadsPostParser
                     if (commentTexts.Count > 0)
                     {
                         post.Comments = commentTexts;
-                        onStatus?.Invoke($"[Threads] [NetworkCapture] Set {commentTexts.Count} comments from captured replies");
+                        ThreadsLog.Debug($"[NetworkCapture] Set {commentTexts.Count} comments from captured replies");
                     }
                 }
             }
             else
             {
-                onStatus?.Invoke("[Threads] [NetworkCapture] No captured data for this post yet");
+                ThreadsLog.Debug("[NetworkCapture] No captured data for this post yet");
             }
         }
 
@@ -181,12 +181,12 @@ public static class ThreadsPostParser
         if (!post.PostedAt.HasValue && domMeta.PostedAt.HasValue)
         {
             post.PostedAt = domMeta.PostedAt;
-            onStatus?.Invoke($"[Threads] [DOM] PostedAt: {post.PostedAt:yyyy-MM-dd HH:mm}");
+            ThreadsLog.Debug($"[DOM] PostedAt: {post.PostedAt:yyyy-MM-dd HH:mm}");
         }
         if (domMeta.ViewCount > 0)
         {
             post.ViewCount = domMeta.ViewCount;
-            onStatus?.Invoke($"[Threads] [DOM] ViewCount: {post.ViewCount}");
+            ThreadsLog.Debug($"[DOM] ViewCount: {post.ViewCount}");
         }
 
         debugPause?.Invoke();
@@ -198,7 +198,7 @@ public static class ThreadsPostParser
         if (pageletFallback.Count > 0)
         {
             extractedComments = MergeCommentResults(extractedComments, pageletFallback, options.EffectiveThreadsMaxComments);
-            onStatus?.Invoke($"[Threads] After pagelet fallback: {extractedComments.Count} comments");
+            ThreadsLog.Debug($"After pagelet fallback: {extractedComments.Count} comments");
         }
         if (post.Comments == null || post.Comments.Count == 0)
         {
@@ -210,7 +210,7 @@ public static class ThreadsPostParser
                 post.Comments.Add(c);
         }
 
-        onStatus?.Invoke($"[Threads] Post: {post.AuthorUsername} | Text: {(post.Text?.Length > 50 ? post.Text[..50] + "..." : post.Text)} | Comments: {post.Comments?.Count ?? 0}");
+        ThreadsLog.Debug($"Post: {post.AuthorUsername} | Text: {(post.Text?.Length > 50 ? post.Text[..50] + "..." : post.Text)} | Comments: {post.Comments?.Count ?? 0}");
     }
 
     /// <summary>
@@ -294,7 +294,7 @@ public static class ThreadsPostParser
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] DOM meta extraction error: {ex.Message}");
+            ThreadsLog.Debug($"DOM meta extraction error: {ex.Message}");
             return (null, null);
         }
     }

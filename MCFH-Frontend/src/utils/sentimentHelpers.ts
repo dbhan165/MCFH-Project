@@ -161,7 +161,7 @@ export const PLATFORM_CHART_COLORS: Record<string, string> = {
   youtube: '#EF4444',
   tiktok: '#EC4899',
   news: '#F59E0B',
-  threads: '#FAFAFA',
+  threads: '#E4E4E7',
   unknown: '#64748B',
 };
 

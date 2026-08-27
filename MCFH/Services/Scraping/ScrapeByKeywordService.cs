@@ -684,9 +684,16 @@ public class ScrapeByKeywordService
                     ? post.AuthorUsername
                     : post.AuthorDisplayName;
 
+                // Content: ưu tiên post.Text; nếu rỗng → lấy 2 dòng đầu comment làm tiêu đề; cuối cùng mới fallback URL.
+                var postContent = !string.IsNullOrWhiteSpace(post.Text)
+                    ? post.Text
+                    : commentTexts.Count > 0
+                        ? string.Join("\n", commentTexts.Take(2))
+                        : $"Threads post: {post.PostUrl}";
+
                 var (feedbackId, savedComments, wasSkipped) = await SaveFeedbackWithMetricsAsync(
                     projectId, "threads",
-                    post.Text ?? $"Threads post: {post.PostUrl}",
+                    postContent,
                     authorName, post.PostUrl, commentTexts, post.PostedAt,
                     post.LikeCount, post.CommentCount, post.ViewCount);
 
@@ -1360,8 +1367,13 @@ public class ScrapeByKeywordService
             await ScrapeOrderService.ConsumeProjectMentionAsync(_db, projectId);
 
             var savedCount = await _bundleStorage.SaveAsync(feedback.FeedbackId, normalized);
-            feedback.CommentsCount = savedCount;
             feedback.CommentsFileUrl = CommentBundleStorage.GetRelativeBundlePath(feedback.FeedbackId);
+
+            // Threads: khi bundle rỗng (savedCount=0) nhưng platform báo có commentCount > 0,
+            // dùng commentCount làm CommentsCount để UI hiển thị số bình luận thực tế.
+            feedback.CommentsCount = (commentCount.HasValue && commentCount.Value > 0 && savedCount == 0)
+                ? commentCount.Value
+                : savedCount;
 
             // engagement_count = like + comment, only when both are known
             if (likeCount.HasValue && commentCount.HasValue)

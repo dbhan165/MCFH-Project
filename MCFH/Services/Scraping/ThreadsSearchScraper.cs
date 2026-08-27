@@ -19,7 +19,7 @@ public static class ThreadsSearchScraper
         ThreadsNetworkCapture networkCapture)
     {
         var searchUrl = $"https://www.threads.com/search?q={Uri.EscapeDataString(keyword)}&serp_type=default";
-        onStatus?.Invoke($"[Threads] Navigating to search: {searchUrl}");
+        ThreadsLog.Debug($"Navigating to search: {searchUrl}");
 
         try
         {
@@ -30,7 +30,7 @@ public static class ThreadsSearchScraper
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] Navigation failed: {ex.Message}");
+            ThreadsLog.Debug($"Navigation failed: {ex.Message}");
             throw;
         }
 
@@ -38,14 +38,14 @@ public static class ThreadsSearchScraper
         await ThreadsStealthHelper.DelayAsync(rng,
             options.ThreadsHumanizeDelayMinMs, options.ThreadsHumanizeDelayMaxMs);
 
-        onStatus?.Invoke("[Threads] Scrolling to load search results...");
+        ThreadsLog.Debug("Scrolling to load search results...");
         debugPause?.Invoke();
         await ThreadsScrollingHelper.ScrollToLoadAsync(rng, page, options.ThreadsMaxScrollSteps,
             options.ThreadsHumanizeDelayMinMs, options.ThreadsHumanizeDelayMaxMs, onStatus);
 
-        onStatus?.Invoke("[Threads] Extracting post URLs from search page...");
+        ThreadsLog.Debug("Extracting post URLs from search page...");
         var postUrls = await ExtractPostUrlsFromSearchPageAsync(page, maxPosts, onStatus);
-        onStatus?.Invoke($"[Threads] Found {postUrls.Count} post URLs.");
+        ThreadsLog.Debug($"Found {postUrls.Count} post URLs.");
 
         for (var i = 0; i < postUrls.Count; i++)
         {
@@ -65,7 +65,7 @@ public static class ThreadsSearchScraper
             {
                 var postUrl = postUrls[i];
                 var post = result.Posts[i];
-                onStatus?.Invoke($"[Threads] [{i + 1}/{postUrls.Count}] Navigating to: {postUrl}");
+                onStatus?.Invoke($"Threads: đang xem bài {i + 1}/{postUrls.Count}...");
 
                 try
                 {
@@ -98,11 +98,11 @@ public static class ThreadsSearchScraper
                     await ThreadsStealthHelper.DelayAsync(rng,
                         options.ThreadsHumanizeDelayMinMs, options.ThreadsHumanizeDelayMaxMs);
 
-                    onStatus?.Invoke($"[Threads] Back on search page. Comments: {post.Comments.Count}");
+                    ThreadsLog.Debug($"Back on search page. Comments: {post.Comments.Count}");
                 }
                 catch (Exception ex)
                 {
-                    onStatus?.Invoke($"[Threads] Error scraping {postUrl}: {ex.Message}");
+                    ThreadsLog.Debug($"Error scraping {postUrl}: {ex.Message}");
                     try
                     {
                         await page.GoBackAsync(new PageGoBackOptions { Timeout = 10000 });
@@ -124,7 +124,7 @@ public static class ThreadsSearchScraper
         urls = await TryExtractUrlsFromJsonAsync(page, maxPosts, seenUrls, onStatus);
         if (urls.Count > 0) return urls;
 
-        onStatus?.Invoke("[Threads] Trying DOM extraction for post URLs...");
+        ThreadsLog.Debug("Trying DOM extraction for post URLs...");
         urls = await TryExtractUrlsFromDomAsync(page, maxPosts, seenUrls, onStatus);
 
         return urls;
@@ -217,7 +217,7 @@ public static class ThreadsSearchScraper
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] JSON URL extraction: {ex.Message}");
+            ThreadsLog.Debug($"JSON URL extraction: {ex.Message}");
         }
 
         return urls;
@@ -283,7 +283,7 @@ public static class ThreadsSearchScraper
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] DOM URL extraction: {ex.Message}");
+            ThreadsLog.Debug($"DOM URL extraction: {ex.Message}");
         }
 
         return urls;
