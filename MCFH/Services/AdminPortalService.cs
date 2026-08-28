@@ -105,11 +105,36 @@ public class AdminPortalService
             }
         }
 
+        // Auto-sync payment status for BespokeRequests that are paid, gathering data, assigned, in progress, completed, etc.
+        var paidBespokeRequests = await _context.BespokeRequests
+            .Include(r => r.Client)
+            .Where(r => r.Status != "pending" && r.Status != "quoted" && r.Status != "pending_payment" && r.Status != "rejected" && r.Status != "cancelled")
+            .AsNoTracking()
+            .ToListAsync();
+
+        var paidBespokeRequestIds = paidBespokeRequests.Select(r => r.RequestId).ToList();
+        if (paidBespokeRequestIds.Count > 0)
+        {
+            var pendingBespokePaymentsToFix = await _context.Payments
+                .Where(p => p.RequestId.HasValue && paidBespokeRequestIds.Contains(p.RequestId.Value) && p.Status != "success" && p.Status != "paid")
+                .ToListAsync();
+
+            if (pendingBespokePaymentsToFix.Count > 0)
+            {
+                foreach (var p in pendingBespokePaymentsToFix)
+                {
+                    p.Status = "success";
+                    if (!p.PaidAt.HasValue) p.PaidAt = p.CreatedAt ?? now;
+                }
+                await _context.SaveChangesAsync();
+            }
+        }
+
         var allSuccessfulPayments = await _context.Payments
             .Include(p => p.CreatedByNavigation)
             .Include(p => p.Plan)
             .Include(p => p.Request)
-            .Where(p => (p.Status == "success" || p.Status == "paid") && p.RequestId == null && (p.Type == null || p.Type.ToLower() == "scrape_order"))
+            .Where(p => p.Status == "success" || p.Status == "paid")
             .AsNoTracking()
             .ToListAsync();
 
@@ -139,6 +164,33 @@ public class AdminPortalService
             }
         }
 
+        // Add paid BespokeRequests if payment record was not in allSuccessfulPayments
+        foreach (var bespokeReq in paidBespokeRequests)
+        {
+            var hasPayment = allSuccessfulPayments.Any(p => p.RequestId == bespokeReq.RequestId);
+            if (!hasPayment && (bespokeReq.AgreedPrice ?? 0) > 0)
+            {
+                var paymentId = 200000 + bespokeReq.RequestId;
+                if (existingPaymentIds.Add(paymentId))
+                {
+                    allSuccessfulPayments.Add(new Payment
+                    {
+                        PaymentId = paymentId,
+                        TransactionRef = $"BESPOKE-{bespokeReq.RequestId}",
+                        Amount = bespokeReq.AgreedPrice!.Value,
+                        Status = "success",
+                        Type = "bespoke",
+                        RequestId = bespokeReq.RequestId,
+                        Request = bespokeReq,
+                        CreatedBy = bespokeReq.ClientId,
+                        CreatedByNavigation = bespokeReq.Client,
+                        CreatedAt = bespokeReq.AssignedAt ?? bespokeReq.SubmittedAt ?? now,
+                        PaidAt = bespokeReq.AssignedAt ?? bespokeReq.SubmittedAt ?? now
+                    });
+                }
+            }
+        }
+
         var totalRevenue = allSuccessfulPayments.Sum(p => p.Amount);
 
         var monthlyRevenue = allSuccessfulPayments
@@ -154,11 +206,18 @@ public class AdminPortalService
             ? Math.Round((double)((monthlyRevenue - prevMonthlyRevenue) / prevMonthlyRevenue * 100), 1)
             : 0;
 
-        // Build revenue breakdown by feature (Only Scrape Order has real revenue; Bespoke is set to 0 until officially implemented)
+        // Build revenue breakdown by feature
         var scrapePayments = allSuccessfulPayments.Where(p => (p.Type ?? "scrape_order").ToLower() == "scrape_order").ToList();
         var scrapeTotal = scrapePayments.Sum(p => p.Amount);
         var scrapeCount = scrapePayments.Count;
         var scrapeAvg = scrapeCount > 0 ? scrapeTotal / scrapeCount : 0;
+
+        var bespokePayments = allSuccessfulPayments.Where(p => (p.Type ?? "").ToLower() == "bespoke" || p.RequestId != null).ToList();
+        var bespokeTotal = bespokePayments.Sum(p => p.Amount);
+        var bespokeCount = bespokePayments.Count;
+        var bespokeAvg = bespokeCount > 0 ? bespokeTotal / bespokeCount : 0;
+
+        var maxFeatureAmount = Math.Max(scrapeTotal, bespokeTotal);
 
         var revenueByTypeGroup = new List<AdminRevenueByTypeDto>
         {
@@ -169,18 +228,18 @@ public class AdminPortalService
                 TotalAmount = scrapeTotal,
                 TransactionCount = scrapeCount,
                 AverageOrderValue = scrapeAvg,
-                Percentage = totalRevenue > 0 ? Math.Round((double)(scrapeTotal / totalRevenue * 100), 1) : (scrapeTotal > 0 ? 100 : 0),
-                IsTopFeature = scrapeTotal > 0
+                Percentage = totalRevenue > 0 ? Math.Round((double)(scrapeTotal / totalRevenue * 100), 1) : 0,
+                IsTopFeature = scrapeTotal > 0 && scrapeTotal >= maxFeatureAmount
             },
             new AdminRevenueByTypeDto
             {
                 Type = "bespoke",
                 TypeName = "Tạo Báo Cáo Chuyên Sâu (Bespoke)",
-                TotalAmount = 0,
-                TransactionCount = 0,
-                AverageOrderValue = 0,
-                Percentage = 0,
-                IsTopFeature = false
+                TotalAmount = bespokeTotal,
+                TransactionCount = bespokeCount,
+                AverageOrderValue = bespokeAvg,
+                Percentage = totalRevenue > 0 ? Math.Round((double)(bespokeTotal / totalRevenue * 100), 1) : 0,
+                IsTopFeature = bespokeTotal > 0 && bespokeTotal >= maxFeatureAmount
             }
         };
 
@@ -190,7 +249,7 @@ public class AdminPortalService
                 if (p.Plan != null) return p.Plan.Name;
                 var t = (p.Type ?? "").ToLower();
                 if (t == "scrape_order") return "Đơn Cào Dữ Liệu Custom";
-                if (t == "bespoke") return "Báo Cáo Bespoke";
+                if (t == "bespoke" || p.RequestId != null) return "Báo Cáo Bespoke";
                 return "Gói Tiêu Chuẩn";
             })
             .Select(g => new AdminRevenueByPlanDto
@@ -208,11 +267,15 @@ public class AdminPortalService
             .Select(p =>
             {
                 var typeKey = (p.Type ?? "").ToLower();
+                if (p.RequestId.HasValue && string.IsNullOrEmpty(typeKey)) typeKey = "bespoke";
+
                 var featureName = typeKey switch
                 {
                     "subscription" => $"Gói {p.Plan?.Name ?? "Đăng Ký System"}",
                     "scrape_order" => "Đơn cào dữ liệu custom",
-                    "bespoke" => $"Báo cáo Bespoke #{p.RequestId}",
+                    "bespoke" => p.Request != null && !string.IsNullOrWhiteSpace(p.Request.Title)
+                        ? $"Báo cáo Bespoke #{p.RequestId}: {p.Request.Title}"
+                        : $"Báo cáo Bespoke #{p.RequestId}",
                     _ => "Tính năng hệ thống"
                 };
 
