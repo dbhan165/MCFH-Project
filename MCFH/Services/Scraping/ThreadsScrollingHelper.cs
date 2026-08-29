@@ -9,7 +9,7 @@ public static class ThreadsScrollingHelper
     {
         try
         {
-            onStatus?.Invoke("[Threads] Scrolling comments...");
+            ThreadsLog.Debug("Scrolling comments...");
 
             await page.EvaluateAsync<bool>(@"() => {
                 const candidates = document.body.querySelectorAll('div, section');
@@ -152,7 +152,7 @@ public static class ThreadsScrollingHelper
 
                 previousCommentCount = currentCommentCount;
 
-                onStatus?.Invoke($"[Threads] Scroll step {i + 1}: {currentCommentCount} comment authors, pagelet #{currentPagelets}");
+                onStatus?.Invoke($"Threads: đang cuộn để lấy thêm bình luận ({currentCommentCount} comments)...");
 
                 var stableEnough = grewCount >= minGrowthRounds && noChangeCount >= stableRoundsNeeded;
                 var flatEnough = consecutiveDeltaBelowOne >= stableRoundsNeeded + 2;
@@ -172,11 +172,11 @@ public static class ThreadsScrollingHelper
             await page.EvaluateAsync(@"() => { window.scrollTo(0, 0); }");
             await page.WaitForTimeoutAsync(1000);
 
-            onStatus?.Invoke($"[Threads] Comment scroll complete. Max iterations: {iterations}, stopped after {noChangeCount} stable reads (grew {grewCount} times).");
+            ThreadsLog.Debug($"Comment scroll complete. Max iterations: {iterations}, stopped after {noChangeCount} stable reads (grew {grewCount} times).");
         }
         catch (Exception ex)
         {
-            onStatus?.Invoke($"[Threads] Comment scroll: {ex.Message}");
+            ThreadsLog.Debug($"Comment scroll: {ex.Message}");
         }
     }
 
@@ -206,7 +206,7 @@ public static class ThreadsScrollingHelper
                 noProgressCount++;
                 if (noProgressCount >= 2)
                 {
-                    onStatus?.Invoke($"[Threads] Reached end at step {i + 1}");
+                    onStatus?.Invoke($"Threads: đang cuộn để tải thêm bài...");
                     break;
                 }
             }

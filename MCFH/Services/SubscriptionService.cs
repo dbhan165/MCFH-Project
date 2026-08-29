@@ -126,7 +126,10 @@ public class SubscriptionService
     public async Task<List<PaymentHistoryDto>> GetPaymentHistoryAsync(int userId)
     {
         return await _context.Payments
+            .AsNoTracking()
             .Include(p => p.Plan)
+            .Include(p => p.Workspace)
+            .Include(p => p.Project)
             .Where(p => p.CreatedBy == userId)
             .OrderByDescending(p => p.CreatedAt)
             .Select(p => new PaymentHistoryDto
@@ -138,6 +141,10 @@ public class SubscriptionService
                 Status = p.Status,
                 Type = p.Type,
                 PlanName = p.Plan != null ? p.Plan.Name : null,
+                WorkspaceId = p.WorkspaceId,
+                WorkspaceName = p.Workspace != null ? p.Workspace.Name : null,
+                ProjectId = p.ProjectId,
+                ProjectName = p.Project != null ? p.Project.Name : null,
                 CreatedAt = p.CreatedAt
             })
             .ToListAsync();
@@ -196,7 +203,8 @@ public class SubscriptionService
             Type = "subscription",
             PlanId = plan.PlanId,
             CreatedBy = userId,
-            CreatedAt = now
+            CreatedAt = now,
+            WorkspaceId = workspace.WorkspaceId
         });
 
         await _context.SaveChangesAsync();

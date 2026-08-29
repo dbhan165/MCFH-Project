@@ -530,6 +530,8 @@ public partial class McfhDbContext : DbContext
                 .HasFilter("[order_code] IS NOT NULL");
             entity.Property(e => e.PlanId).HasColumnName("plan_id");
             entity.Property(e => e.RequestId).HasColumnName("request_id");
+            entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
+            entity.Property(e => e.ProjectId).HasColumnName("project_id");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -554,6 +556,16 @@ public partial class McfhDbContext : DbContext
             entity.HasOne(d => d.Request).WithMany(p => p.Payments)
                 .HasForeignKey(d => d.RequestId)
                 .HasConstraintName("FK_Payment_Request");
+
+            entity.HasOne(d => d.Workspace).WithMany()
+                .HasForeignKey(d => d.WorkspaceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Payment_Workspace");
+
+            entity.HasOne(d => d.Project).WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Payment_Project");
         });
 
         modelBuilder.Entity<Project>(entity =>

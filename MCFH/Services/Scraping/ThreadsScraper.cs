@@ -37,7 +37,7 @@ public class ThreadsScraper
 
         try
         {
-            onStatus?.Invoke("[Threads] Launching browser...");
+            ThreadsLog.Debug("Launching browser...");
             playwright = await Playwright.CreateAsync();
             browser = await playwright.Chromium.LaunchAsync(
                 ThreadsStealthHelper.CreateLaunchOptions(options.ThreadsHeadless, proxy));
@@ -64,7 +64,7 @@ public class ThreadsScraper
         {
             result.Success = false;
             result.ErrorMessage = ex.Message;
-            onStatus?.Invoke($"[Threads] Error: {ex.Message}");
+            ThreadsLog.Debug($"Error: {ex.Message}");
         }
         finally
         {
@@ -112,7 +112,7 @@ public class ThreadsScraper
 
             try
             {
-                onStatus?.Invoke($"[Threads] Navigating to: {postUrl}");
+                ThreadsLog.Debug($"Navigating to: {postUrl}");
                 debugPause?.Invoke();
 
                 await page.GotoAsync(postUrl, new PageGotoOptions
@@ -140,7 +140,7 @@ public class ThreadsScraper
                     .ToList();
 
                 result.Success = true;
-                onStatus?.Invoke($"[Threads] Scraped {result.Comments.Count} comments from {postUrl}");
+                ThreadsLog.Debug($"Scraped {result.Comments.Count} comments from {postUrl}");
             }
             finally
             {
@@ -153,7 +153,7 @@ public class ThreadsScraper
         {
             result.Success = false;
             result.ErrorMessage = ex.Message;
-            onStatus?.Invoke($"[Threads] Error scraping comments: {ex.Message}");
+            ThreadsLog.Debug($"Error scraping comments: {ex.Message}");
         }
         finally
         {

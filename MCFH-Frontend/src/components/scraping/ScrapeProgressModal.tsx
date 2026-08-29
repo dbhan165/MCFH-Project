@@ -5,7 +5,7 @@ const PLATFORM_STYLE: Record<string, { dot: string; label: string }> = {
   facebook: { dot: 'bg-blue-400', label: 'Facebook' },
   youtube: { dot: 'bg-red-400', label: 'YouTube' },
   tiktok: { dot: 'bg-cyan-300', label: 'TikTok' },
-  threads: { dot: 'bg-zinc-100', label: 'Threads' },
+  threads: { dot: 'bg-zinc-400', label: 'Threads' },
   news: { dot: 'bg-amber-400', label: 'Tin tức' },
 };
 

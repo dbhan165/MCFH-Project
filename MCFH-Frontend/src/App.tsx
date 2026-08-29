@@ -18,7 +18,6 @@ import ScrapePackagesPublic from "./pages/ScrapePackagesPublic";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserManagement from "./pages/admin/UserManagement";
 import AdminUserDetail from "./pages/admin/AdminUserDetail";
-import SubscriptionPlans from "./pages/admin/SubscriptionPlans";
 import ProxyManagement from "./pages/admin/ProxyManagement";
 import FbSourceManagement from "./pages/admin/FbSourceManagement";
 import ScrapePackageManagement from "./pages/admin/ScrapePackageManagement";
@@ -95,7 +94,6 @@ function AppRoutes() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/users/:userId" element={<AdminUserDetail />} />
-          <Route path="/admin/subscriptions" element={<SubscriptionPlans />} />
           <Route path="/admin/proxies" element={<ProxyManagement />} />
           <Route path="/admin/fb-sources" element={<FbSourceManagement />} />
           <Route path="/admin/scrape-packages" element={<ScrapePackageManagement />} />
@@ -128,8 +126,7 @@ function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/workspaces" element={<Workspaces />} />
           <Route path="/invitations" element={<Invitations />} />
-          <Route
-            path="/workspace/:workspaceId/settings"
+          <Route path="/workspace/:workspaceId/settings"
             element={<WorkspaceSettings />}
           />
           <Route

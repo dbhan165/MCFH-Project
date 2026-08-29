@@ -280,7 +280,9 @@ public class BespokeReportService
             CreatedAt = now,
             OrderCode = orderCode,
             PaymentLinkId = link2.PaymentLinkId,
-            CheckoutUrl = link2.CheckoutUrl
+            CheckoutUrl = link2.CheckoutUrl,
+            WorkspaceId = workspaceId,
+            ProjectId = projectId
         };
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
@@ -306,7 +308,9 @@ public class BespokeReportService
             CreatedAt = now,
             OrderCode = orderCode,
             PaymentLinkId = "local-bypass",
-            CheckoutUrl = null
+            CheckoutUrl = null,
+            WorkspaceId = meta.WorkspaceId,
+            ProjectId = meta.ProjectId
         };
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
@@ -1521,7 +1525,9 @@ public class BespokeReportService
                     RequestId = request.RequestId,
                     CreatedBy = userId,
                     CreatedAt = DateTime.UtcNow,
-                    PaidAt = DateTime.UtcNow
+                    PaidAt = DateTime.UtcNow,
+                    WorkspaceId = workspaceId,
+                    ProjectId = projectId
                 });
             }
         }

@@ -935,6 +935,10 @@ namespace MCFHBackend.Migrations
                         .HasColumnType("int")
                         .HasColumnName("plan_id");
 
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("project_id");
+
                     b.Property<int?>("RequestId")
                         .HasColumnType("int")
                         .HasColumnName("request_id");
@@ -957,12 +961,18 @@ namespace MCFHBackend.Migrations
                         .HasColumnType("varchar(50)")
                         .HasColumnName("type");
 
+                    b.Property<int?>("WorkspaceId")
+                        .HasColumnType("int")
+                        .HasColumnName("workspace_id");
+
                     b.HasKey("PaymentId")
                         .HasName("PK__PAYMENTS__ED1FC9EA8603306C");
 
                     b.HasIndex("CreatedBy");
 
                     b.HasIndex("PlanId");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("RequestId");
 
@@ -973,6 +983,8 @@ namespace MCFHBackend.Migrations
                     b.HasIndex(new[] { "TransactionRef" }, "UQ_TxRef")
                         .IsUnique()
                         .HasFilter("[transaction_ref] IS NOT NULL");
+
+                    b.HasIndex(new[] { "WorkspaceId" }, "IX_PAYMENTS_workspace_id");
 
                     b.ToTable("PAYMENTS", (string)null);
                 });
@@ -2356,11 +2368,25 @@ namespace MCFHBackend.Migrations
                         .HasForeignKey("RequestId")
                         .HasConstraintName("FK_Payment_Request");
 
+                    b.HasOne("MCFH.Models.Workspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .HasConstraintName("FK_Payment_Workspace");
+
+                    b.HasOne("MCFH.Models.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .HasConstraintName("FK_Payment_Project");
+
                     b.Navigation("CreatedByNavigation");
 
                     b.Navigation("Plan");
 
+                    b.Navigation("Project");
+
                     b.Navigation("Request");
+
+                    b.Navigation("Workspace");
                 });
 
             modelBuilder.Entity("MCFH.Models.Project", b =>

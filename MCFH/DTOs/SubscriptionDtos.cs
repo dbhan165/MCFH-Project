@@ -56,6 +56,10 @@ public class PaymentHistoryDto
     public string? Status { get; set; }
     public string? Type { get; set; }
     public string? PlanName { get; set; }
+    public int? WorkspaceId { get; set; }
+    public string? WorkspaceName { get; set; }
+    public int? ProjectId { get; set; }
+    public string? ProjectName { get; set; }
     public DateTime? CreatedAt { get; set; }
 }
 

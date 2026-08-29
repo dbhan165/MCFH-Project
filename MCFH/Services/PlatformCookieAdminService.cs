@@ -101,12 +101,52 @@ public class PlatformCookieAdminService
         if (dto.Note != null)
             row.Note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim();
 
+        // Đổi tên file JSON trên disk nếu file_path thay đổi.
+        // - Source path phải hợp lệ (đã được lưu trước đó).
+        // - Target path phải nằm trong cookies/, chưa tồn tại trên disk.
+        // - Backup file (nếu có) được đổi tên tương ứng.
         if (!string.IsNullOrWhiteSpace(dto.FilePath))
         {
             var relative = dto.FilePath.Replace('\\', '/').Trim();
             if (!_pathProvider.IsRelativePathAllowed(relative))
                 throw new ArgumentException("file_path phải nằm trong thư mục cookies/.");
-            row.FilePath = relative;
+
+            if (!string.Equals(relative, row.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                var oldFullPath = _pathProvider.IsRelativePathAllowed(row.FilePath)
+                    ? _pathProvider.ToFullPath(row.FilePath)
+                    : null;
+                var newFullPath = _pathProvider.ToFullPath(relative);
+
+                if (oldFullPath != null && File.Exists(oldFullPath))
+                {
+                    if (File.Exists(newFullPath))
+                        throw new ArgumentException(
+                            $"File mới '{relative}' đã tồn tại trên disk. Hãy đổi tên khác hoặc xóa file cũ trước.");
+
+                    var oldDir = Path.GetDirectoryName(oldFullPath);
+                    var newDir = Path.GetDirectoryName(newFullPath);
+                    if (!string.IsNullOrEmpty(newDir) && newDir != oldDir)
+                        Directory.CreateDirectory(newDir);
+
+                    File.Move(oldFullPath, newFullPath);
+
+                    // Backup cũ (nếu có) cũng theo tên mới để không mất lịch sử.
+                    var oldBackup = _pathProvider.ToFullPath(
+                        _pathProvider.GetBackupRelativePath(platform, row.FilePath));
+                    var newBackup = _pathProvider.ToFullPath(
+                        _pathProvider.GetBackupRelativePath(platform, relative));
+                    if (File.Exists(oldBackup) && !File.Exists(newBackup))
+                    {
+                        var newBackupDir = Path.GetDirectoryName(newBackup);
+                        if (!string.IsNullOrEmpty(newBackupDir))
+                            Directory.CreateDirectory(newBackupDir);
+                        File.Move(oldBackup, newBackup);
+                    }
+                }
+
+                row.FilePath = relative;
+            }
         }
 
         await _context.SaveChangesAsync();
