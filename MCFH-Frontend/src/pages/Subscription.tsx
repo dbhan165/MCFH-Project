@@ -6,8 +6,6 @@ import type { Workspace } from '../types/workspace';
 import { extractApiError } from '../utils/authStorage';
 import { formatWorkspaceDateTime } from '../utils/workspaceHelpers';
 
-type PaymentStatus = 'success' | 'pending' | 'failed' | string;
-
 const STATUS_CONFIG: Record<string, { label: string; className: string; icon: typeof CheckCircle2 }> = {
   success: { label: 'Thành công', className: 'text-emerald-400', icon: CheckCircle2 },
   pending: { label: 'Đang chờ', className: 'text-amber-400', icon: Clock },
@@ -316,34 +314,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className="flex flex-col gap-1">
       <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{label}</span>
       <span className="text-base font-semibold text-white">{value}</span>
-    </div>
-  );
-}
-
-function UsageBar({
-  label,
-  used,
-  limit,
-  color,
-}: {
-  label: string;
-  used: number;
-  limit: number;
-  color: string;
-}) {
-  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const isNearLimit = percent >= 85;
-  return (
-    <div>
-      <div className="flex justify-between text-sm mb-2">
-        <span className="text-gray-400">{label}</span>
-        <span className={`font-bold ${isNearLimit ? 'text-amber-400' : ''}`}>
-          {used.toLocaleString('vi-VN')} / {limit.toLocaleString('vi-VN')}
-        </span>
-      </div>
-      <div className="w-full bg-[#151B2B] h-2 rounded-full overflow-hidden">
-        <div className={`${color} h-full transition-all`} style={{ width: `${percent}%` }} />
-      </div>
     </div>
   );
 }
