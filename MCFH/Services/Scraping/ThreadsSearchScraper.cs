@@ -16,7 +16,8 @@ public static class ThreadsSearchScraper
         ScrapeOptions options,
         Action<string>? onStatus,
         Action? debugPause,
-        ThreadsNetworkCapture networkCapture)
+        ThreadsNetworkCapture networkCapture,
+        Func<string, bool>? isAlreadyScraped = null)
     {
         var searchUrl = $"https://www.threads.com/search?q={Uri.EscapeDataString(keyword)}&serp_type=default";
         ThreadsLog.Debug($"Navigating to search: {searchUrl}");
@@ -65,6 +66,13 @@ public static class ThreadsSearchScraper
             {
                 var postUrl = postUrls[i];
                 var post = result.Posts[i];
+                
+                if (isAlreadyScraped != null && isAlreadyScraped(postUrl))
+                {
+                    post.IsSkipped = true;
+                    continue;
+                }
+
                 onStatus?.Invoke($"Threads: đang xem bài {i + 1}/{postUrls.Count}...");
 
                 try

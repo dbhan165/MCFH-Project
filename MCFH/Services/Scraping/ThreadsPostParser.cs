@@ -189,6 +189,17 @@ public static class ThreadsPostParser
             ThreadsLog.Debug($"[DOM] ViewCount: {post.ViewCount}");
         }
 
+        // DOM fallback for post body text when network capture misses
+        if (string.IsNullOrWhiteSpace(post.Text))
+        {
+            var domText = await ExtractPostTextFromDomAsync(page, post.AuthorUsername, onStatus);
+            if (!string.IsNullOrWhiteSpace(domText))
+            {
+                post.Text = domText;
+                ThreadsLog.Debug($"[DOM] Post text: {(domText.Length > 80 ? domText[..80] + "..." : domText)}");
+            }
+        }
+
         debugPause?.Invoke();
 
         await ThreadsScrollingHelper.ScrollCommentsAsync(page, onStatus, options);
@@ -296,6 +307,83 @@ public static class ThreadsPostParser
         {
             ThreadsLog.Debug($"DOM meta extraction error: {ex.Message}");
             return (null, null);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the body text of the main post from the DOM when the network capture
+    /// didn't provide it. Targets the first pagelet (<c>threads_post_page_0</c>) which
+    /// contains the original post (not replies). Walks all <c>&lt;span&gt;</c> elements,
+    /// filters out UI labels, timestamps, numbers, and the author username, then
+    /// concatenates the remaining text fragments.
+    /// </summary>
+    public static async Task<string?> ExtractPostTextFromDomAsync(
+        IPage page,
+        string? authorUsername,
+        Action<string>? onStatus)
+    {
+        try
+        {
+            // Pass the author username (stripped of leading @) so we can exclude it from the text
+            var cleanAuthor = (authorUsername ?? "").TrimStart('@');
+
+            const string jsTemplate = @"(authorUser) => {
+                const rootSel = '[data-pagelet=""threads_post_page_0""]';
+                const root = document.querySelector(rootSel);
+                if (!root) return null;
+
+                const isUiText = (s) => {
+                    if (!s) return true;
+                    const t = s.trim();
+                    if (!t) return true;
+                    if (t.length < 2) return true;
+                    return /^(Reply|Trả lời|Tra loi|Share|Chia sẻ|Chia se|Follow|Theo dõi|Theo doi|Translate|Tác giả|Tac gia|Loading|Dang tai|More|Like|Repost|Hide|Xem bản dịch|Xem hoạt động|Xem hoat dong|Pinned|Đã ghim|Saved|Lưu|Save|Replies|replies|Send|Gửi|View activity|View replies|View all)$/i.test(t);
+                };
+                const isTimestamp = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test((s||'').trim());
+                const isRelativeTime = (s) => {
+                    const t = (s||'').trim();
+                    return /^\d{1,3}\s*(ngày|giờ|phút|giây|tuần|tháng|năm|ngay|gio|phut|giay|tuan|thang|nam|d|h|w|m|y)$/i.test(t) ||
+                           /^\d{1,3}[dhmwys]$/i.test(t);
+                };
+                const isNumberOnly = (s) => /^\d+$/.test((s||'').trim());
+                const isLikesCount = (s) => /^[\d.,]+\s*[KkMm]?\s*(lượt thích|likes?|lượt xem|views?)$/i.test((s||'').trim()) ||
+                                            /^[\d.,]+\s*[KkMm]$/.test((s||'').trim());
+                const isUrl = (s) => /^https?:\/\//i.test((s||'').trim());
+
+                // Find the first pressable container (the main post body area)
+                const containers = root.querySelectorAll('[data-pressable-container=""true""]');
+                const firstContainer = containers.length > 0 ? containers[0] : root;
+
+                const seen = new Set();
+                const parts = [];
+                const allSpans = firstContainer.querySelectorAll('span');
+                for (const s of allSpans) {
+                    const t = (s.textContent || '').trim();
+                    if (!t) continue;
+                    if (isUiText(t)) continue;
+                    if (isTimestamp(t)) continue;
+                    if (isRelativeTime(t)) continue;
+                    if (isNumberOnly(t)) continue;
+                    if (isLikesCount(t)) continue;
+                    if (isUrl(t)) continue;
+                    if (authorUser && (t === authorUser || t === '@' + authorUser)) continue;
+                    const key = t.toLowerCase().substring(0, 80);
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    parts.push(t);
+                }
+
+                if (parts.length === 0) return null;
+                return parts.join(' ').replace(/\s+/g, ' ').trim();
+            }";
+
+            var text = await page.EvaluateAsync<string?>(jsTemplate, cleanAuthor);
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch (Exception ex)
+        {
+            ThreadsLog.Debug($"DOM post text extraction error: {ex.Message}");
+            return null;
         }
     }
 }
