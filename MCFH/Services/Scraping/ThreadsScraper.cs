@@ -1,4 +1,4 @@
-﻿using MCFH.Configuration;
+using MCFH.Configuration;
 using MCFH.Models.Scraping;
 using Microsoft.Playwright;
 
@@ -24,7 +24,8 @@ public class ThreadsScraper
         ScrapeOptions options,
         Proxy? proxy = null,
         Action<string>? onStatus = null,
-        Action? debugPause = null)
+        Action? debugPause = null,
+        Func<string, bool>? isAlreadyScraped = null)
     {
         var result = new ThreadsScrapeResult
         {
@@ -53,7 +54,7 @@ public class ThreadsScraper
             try
             {
                 await ThreadsSearchScraper.ScrapeSearchOnPageAsync(
-                    _rng, page, keyword, result, maxPosts, options, onStatus, debugPause, networkCapture);
+                    _rng, page, keyword, result, maxPosts, options, onStatus, debugPause, networkCapture, isAlreadyScraped);
             }
             finally
             {

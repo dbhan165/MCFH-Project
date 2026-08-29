@@ -23,6 +23,7 @@ public class ThreadsPost
     public int? CommentCount { get; set; }
     public int? ViewCount { get; set; }
     public List<string> Comments { get; set; } = [];
+    public bool IsSkipped { get; set; }
 }
 
 /// <summary>
