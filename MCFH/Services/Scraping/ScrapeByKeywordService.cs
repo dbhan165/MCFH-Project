@@ -606,7 +606,8 @@ public class ScrapeByKeywordService
                 targetCount,
                 _activeOptions,
                 proxy: CurrentPlaywrightProxy(),
-                onStatus: msg => progress?.UpdatePlatform("threads", result.Threads.Count, msg));
+                onStatus: msg => progress?.UpdatePlatform("threads", result.Threads.Count, msg),
+                isAlreadyScraped: url => IsAlreadyScraped("threads", url));
 
             if (!scrapeResult.Success || scrapeResult.Posts.Count == 0)
             {
@@ -645,7 +646,7 @@ public class ScrapeByKeywordService
                 if (string.IsNullOrEmpty(post.PostUrl))
                     continue;
 
-                if (IsAlreadyScraped("threads", post.PostUrl))
+                if (post.IsSkipped || IsAlreadyScraped("threads", post.PostUrl))
                 {
                     NoteSkipped();
                     skipped++;
