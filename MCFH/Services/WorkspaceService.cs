@@ -1,6 +1,7 @@
 using MCFH.DTOs.WorkspaceDtos;
 using MCFH.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MCFH.Services
 {
@@ -8,11 +9,13 @@ namespace MCFH.Services
     {
         private readonly McfhDbContext _context;
         private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public WorkspaceService(McfhDbContext context, IEmailService emailService)
+        public WorkspaceService(McfhDbContext context, IEmailService emailService, IConfiguration configuration)
         {
             _context = context;
             _emailService = emailService;
+            _configuration = configuration;
         }
 
         // ── Helper: kiểm tra user có phải Owner không ──
@@ -272,7 +275,7 @@ namespace MCFH.Services
                         <strong>'{workspace?.Name}'</strong> trên hệ thống MCFH.
                     </p>
                     <p>Vui lòng đăng nhập vào hệ thống để xem lời mời:</p>
-                    <a href='http://localhost:3000/workspaces'
+                    <a href='{_configuration["Auth:FrontendBaseUrl"] ?? "http://localhost:3000"}/workspaces'
                        style='background-color: #4F46E5; color: white; padding: 12px 24px;
                               text-decoration: none; border-radius: 6px; display: inline-block;
                               margin: 16px 0;'>
@@ -367,7 +370,7 @@ namespace MCFH.Services
                         của bạn đã được Owner chấp nhận.
                     </p>
                     <p>Bạn có thể đăng nhập ngay để bắt đầu làm việc:</p>
-                    <a href='http://localhost:3000/workspaces'
+                    <a href='{_configuration["Auth:FrontendBaseUrl"] ?? "http://localhost:3000"}/workspaces'
                        style='background-color: #10B981; color: white; padding: 12px 24px;
                               text-decoration: none; border-radius: 6px; display: inline-block;
                               margin: 16px 0;'>
