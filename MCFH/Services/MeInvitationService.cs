@@ -12,16 +12,18 @@ public class MeInvitationService
     private readonly McfhDbContext _context;
     private readonly INotificationService _notificationService;
     private readonly IEmailService _emailService;
-    private const string FrontendBaseUrl = "http://localhost:5173";
+    private readonly IConfiguration _configuration;
 
     public MeInvitationService(
         McfhDbContext context,
         INotificationService notificationService,
-        IEmailService emailService)
+        IEmailService emailService,
+        IConfiguration configuration)
     {
         _context = context;
         _notificationService = notificationService;
         _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<List<ReceivedInvitationDto>> GetMyReceivedInvitationsAsync(int userId)

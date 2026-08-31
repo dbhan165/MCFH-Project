@@ -4,6 +4,7 @@ using MCFH.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Microsoft.Extensions.Configuration;
 
 namespace MCFH.Controllers;
 
@@ -15,11 +16,11 @@ public class MeController : ControllerBase
     private readonly MeInvitationService _invitationService;
     private readonly INotificationService _notificationService;
 
-    public MeController(McfhDbContext db, IEmailService emailService)
+    public MeController(McfhDbContext db, IEmailService emailService, IConfiguration configuration)
     {
         var notifications = new NotificationService(db);
         _notificationService = notifications;
-        _invitationService = new MeInvitationService(db, notifications, emailService);
+        _invitationService = new MeInvitationService(db, notifications, emailService, configuration);
     }
 
     private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);

@@ -9,17 +9,20 @@ public class ProjectAlertService
     private readonly INotificationService _notifications;
     private readonly IEmailService _emailService;
     private readonly ILogger<ProjectAlertService> _logger;
+    private readonly IConfiguration _configuration;
 
     public ProjectAlertService(
         McfhDbContext context,
         INotificationService notifications,
         IEmailService emailService,
-        ILogger<ProjectAlertService> logger)
+        ILogger<ProjectAlertService> logger,
+        IConfiguration configuration)
     {
         _context = context;
         _notifications = notifications;
         _emailService = emailService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task NotifyAfterAnalysisAsync(int projectId, int crisisCountInBatch = 0)
@@ -137,7 +140,7 @@ public class ProjectAlertService
                 Hệ thống AI của chúng tôi vừa phát hiện hoạt động bất thường hoặc xu hướng tiêu cực tăng đột biến liên quan đến dự án của bạn. Vui lòng kiểm tra ngay để có phương án xử lý kịp thời.
             </p>
             <div style='text-align: center;'>
-                <a href='http://localhost:5173/admin' class='btn'>Truy cập hệ thống MCFH ngay</a>
+                <a href='{_configuration["Auth:FrontendBaseUrl"] ?? "http://localhost:5173"}/admin' class='btn'>Truy cập hệ thống MCFH ngay</a>
             </div>
         </div>
         <div class='footer'>
