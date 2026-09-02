@@ -878,13 +878,6 @@ public class ProjectReportService
         if (actionItems.Count < 3)
             actionItems.Add("Lặp lại báo cáo định kỳ để so sánh biến động sentiment và share of voice theo thời gian.");
 
-        var mentionHighlights = mentions
-            .OrderByDescending(m => string.Equals(m.Sentiment, "negative", StringComparison.OrdinalIgnoreCase))
-            .ThenByDescending(m => m.CommentsCount)
-            .ThenByDescending(m => m.PostedAt ?? m.ScrapedAt ?? DateTime.MinValue)
-            .Take(4)
-            .ToList();
-
         var periodParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(dateFrom) || !string.IsNullOrWhiteSpace(dateTo))
             periodParts.Add($"{dateFrom ?? "…"} → {dateTo ?? "…"}");
@@ -1024,7 +1017,6 @@ public class ProjectReportService
         var platformNames = channelList.Count > 0
             ? string.Join(" · ", channelList.Select(c => c.Label))
             : "Chưa xác định";
-        var uniqueAuthors = influencers?.UniqueInfluencers ?? 0;
         sb.AppendLine("<section class=\"slide bokeh\">");
         sb.AppendLine("<div class=\"offer\">");
         sb.AppendLine("<div class=\"offer-left\" style=\"padding:0.5in 0.6in 0.5in 0.8in;\">");
@@ -1037,7 +1029,7 @@ public class ProjectReportService
 
         sb.AppendLine("<div class=\"agenda-row\"><div class=\"num-circle\">2</div><div>");
         sb.AppendLine("<div class=\"agenda-title\">Phân tích</div>");
-        sb.AppendLine($"<div class=\"agenda-desc\">Cơ cấu cảm xúc trên <strong>{FormatNumber(analyzedTotal)}</strong> bài đã phân tích (độ phủ {coverage:0.#}%), so sánh hiệu quả <strong>{channelList.Count}</strong> kênh và xếp hạng <strong>{FormatNumber(uniqueAuthors)}</strong> tác giả kèm các mention đáng đọc nhất.</div>");
+        sb.AppendLine($"<div class=\"agenda-desc\">Cơ cấu cảm xúc trên <strong>{FormatNumber(analyzedTotal)}</strong> bài đã phân tích (độ phủ {coverage:0.#}%) và so sánh hiệu quả <strong>{channelList.Count}</strong> kênh theo share of voice.</div>");
         sb.AppendLine("</div></div>");
 
         sb.AppendLine("<div class=\"agenda-row\"><div class=\"num-circle\">3</div><div>");
@@ -1059,7 +1051,7 @@ public class ProjectReportService
         sb.AppendLine("<div class=\"offer-right\">");
         sb.AppendLine("<h1>Nội dung</h1><div class=\"subh\">Báo cáo</div>");
         sb.AppendLine("<div class=\"toc-item\"><strong>01 · Tổng quan</strong>Chỉ số then chốt · Tóm tắt điều hành · Kênh dẫn đầu &amp; điểm cần theo dõi</div>");
-        sb.AppendLine("<div class=\"toc-item\"><strong>02 · Phân tích</strong>Tình hình sentiment · Hiệu quả kênh · Creator &amp; mentions nổi bật</div>");
+        sb.AppendLine("<div class=\"toc-item\"><strong>02 · Phân tích</strong>Tình hình sentiment · Hiệu quả kênh</div>");
         sb.AppendLine("<div class=\"toc-item\"><strong>03 · Khuyến nghị</strong>Hành động ưu tiên theo dữ liệu thực tế</div>");
         sb.AppendLine($"<div class=\"toc-meta\">Xuất {generated}<br/>{FormatNumber(totalMentions)} mentions · {FormatNumber(totalComments)} bình luận</div>");
         sb.AppendLine("</div></div></section>");
@@ -1234,86 +1226,7 @@ public class ProjectReportService
         sb.AppendLine($"<div class=\"foot\"><span>Phân tích</span><span>{EscapeHtml(projectName)}</span></div>");
         sb.AppendLine("</section>");
 
-        // 7. Creator & mentions — trái: bảng xếp hạng creator; phải: 4 mention nổi bật kèm ngày đăng
-        sb.AppendLine("<section class=\"slide bokeh\" style=\"padding:0.45in 0.7in;\">");
-        sb.AppendLine("<div style=\"display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;\">");
-        sb.AppendLine("<div class=\"title-stack\"><p class=\"top\">Phân tích</p><h1 class=\"bot\" style=\"margin-bottom:0;\">Creator &amp; mentions</h1></div>");
-        sb.AppendLine($"<p style=\"margin:0;font-size:12px;color:#6b7280;\">{FormatNumber(influencers?.UniqueInfluencers ?? 0)} tác giả · {FormatNumber(totalMentions)} bài · {FormatNumber(totalComments)} bình luận</p>");
-        sb.AppendLine("</div>");
-        sb.AppendLine("<div style=\"display:grid;grid-template-columns:1fr 1.15fr;gap:20px;align-items:start;\">");
-
-        // Bảng creator
-        sb.AppendLine("<div class=\"chart-wrap\" style=\"padding:14px 16px;\">");
-        sb.AppendLine("<div style=\"font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin-bottom:10px;\">Top creator theo ảnh hưởng</div>");
-        if (influencers?.Influencers.Count > 0)
-        {
-            sb.AppendLine("<table style=\"width:100%;border-collapse:collapse;font-size:12.5px;\">");
-            sb.AppendLine("<thead><tr style=\"text-align:left;color:#9ca3af;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;\">");
-            sb.AppendLine("<th style=\"padding:4px 6px;\">#</th><th style=\"padding:4px 6px;\">Tác giả</th><th style=\"padding:4px 6px;\">Kênh</th><th style=\"padding:4px 6px;text-align:right;\">Bài</th><th style=\"padding:4px 6px;text-align:right;\">Bình luận</th><th style=\"padding:4px 6px;text-align:right;\">SOV</th><th style=\"padding:4px 6px;\">Sentiment</th></tr></thead><tbody>");
-            var rank = 0;
-            foreach (var kol in influencers.Influencers.Take(5))
-            {
-                rank++;
-                var sentColor = (kol.DominantSentiment ?? "").ToLowerInvariant() switch
-                {
-                    "positive" => "#16a34a",
-                    "negative" => "#dc2626",
-                    "neutral" => "#6b7280",
-                    _ => "#9ca3af"
-                };
-                sb.AppendLine("<tr style=\"border-top:1px solid #f1f5f9;\">");
-                sb.AppendLine($"<td style=\"padding:8px 6px;font-weight:800;color:var(--brand);\">{rank}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 6px;font-weight:700;color:#111827;\">{EscapeHtml(ClipText(kol.Name, 26))}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 6px;color:#4b5563;\">{EscapeHtml(FormatPlatformLabel(kol.Platform))}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 6px;text-align:right;\">{FormatNumber(kol.Mentions)}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 6px;text-align:right;\">{FormatNumber(kol.TotalComments)}</td>");
-                sb.AppendLine($"<td style=\"padding:8px 6px;text-align:right;\">{kol.ShareOfVoice:0.#}%</td>");
-                sb.AppendLine($"<td style=\"padding:8px 6px;\"><span style=\"color:{sentColor};font-weight:700;\">{EscapeHtml(FormatSentimentLabel(kol.DominantSentiment))}</span></td>");
-                sb.AppendLine("</tr>");
-            }
-            sb.AppendLine("</tbody></table>");
-            if (topInfluencer != null)
-                sb.AppendLine($"<p style=\"margin:10px 0 0;font-size:12px;color:#6b7280;line-height:1.5;\"><strong style=\"color:#111827;\">{EscapeHtml(topInfluencer.Name)}</strong> dẫn đầu về ảnh hưởng: {FormatNumber(topInfluencer.Mentions)} bài, {FormatNumber(topInfluencer.TotalComments)} bình luận, chiếm {topInfluencer.ShareOfVoice:0.#}% tổng thảo luận.</p>");
-        }
-        else sb.AppendLine("<p class=\"body-copy\">Chưa đủ dữ liệu creator.</p>");
-        sb.AppendLine("</div>");
-
-        // 4 mention nổi bật, lưới 2x2
-        sb.AppendLine("<div>");
-        sb.AppendLine("<div style=\"font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin-bottom:10px;\">Mentions đáng đọc nhất</div>");
-        if (mentionHighlights.Count > 0)
-        {
-            sb.AppendLine("<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;\">");
-            foreach (var m in mentionHighlights.Take(4))
-            {
-                var mSent = (m.Sentiment ?? "").ToLowerInvariant();
-                var badge = mSent switch
-                {
-                    "positive" => "background:#dcfce7;color:#15803d;",
-                    "negative" => "background:#fee2e2;color:#b91c1c;",
-                    "neutral" => "background:#f3f4f6;color:#4b5563;",
-                    _ => "background:#f3f4f6;color:#9ca3af;"
-                };
-                var postedLabel = (m.PostedAt ?? m.ScrapedAt)?.ToString("dd/MM/yyyy") ?? "";
-                sb.AppendLine("<div class=\"chart-wrap\" style=\"padding:12px 14px;\">");
-                sb.AppendLine("<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;\">");
-                sb.AppendLine($"<span style=\"font-weight:700;font-size:13px;color:#111827;\">{EscapeHtml(ClipText(m.AuthorName ?? "Tác giả không rõ", 22))}</span>");
-                sb.AppendLine($"<span style=\"{badge}font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;\">{EscapeHtml(FormatSentimentLabel(m.Sentiment))}</span>");
-                sb.AppendLine("</div>");
-                sb.AppendLine($"<div style=\"font-size:11px;color:#9ca3af;margin-bottom:6px;\">{EscapeHtml(FormatPlatformLabel(m.Platform))} · {FormatNumber(m.CommentsCount)} bình luận{(postedLabel != "" ? $" · {postedLabel}" : "")}</div>");
-                sb.AppendLine($"<div style=\"font-size:12px;line-height:1.5;color:#374151;\">{EscapeHtml(ClipText(m.Content, 105))}</div>");
-                sb.AppendLine("</div>");
-            }
-            sb.AppendLine("</div>");
-            if (totalMentions > 4)
-                sb.AppendLine($"<p style=\"margin:10px 0 0;font-size:11px;color:#9ca3af;\">Ưu tiên hiển thị bài tiêu cực và bài nhiều bình luận · Còn {FormatNumber(totalMentions - Math.Min(4, mentionHighlights.Count))} bài khác trong hệ thống.</p>");
-        }
-        else sb.AppendLine("<p class=\"body-copy\">Chưa có mention nổi bật.</p>");
-        sb.AppendLine("</div></div>");
-        sb.AppendLine($"<div class=\"foot\"><span>Phân tích</span><span>{EscapeHtml(projectName)}</span></div>");
-        sb.AppendLine("</section>");
-
-        // 8. Khuyến nghị — thẻ hành động theo mức ưu tiên + mục tiêu theo dõi
+        // 7. Khuyến nghị — thẻ hành động theo mức ưu tiên + mục tiêu theo dõi
         sb.AppendLine("<section class=\"slide bokeh pad\">");
         sb.AppendLine("<div style=\"display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;\">");
         sb.AppendLine("<div class=\"title-stack\"><p class=\"top\">Khuyến nghị</p><h1 class=\"bot\" style=\"margin-bottom:0;\">Hành động ưu tiên</h1></div>");
