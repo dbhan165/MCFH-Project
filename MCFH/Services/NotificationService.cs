@@ -58,6 +58,7 @@ public class NotificationService : INotificationService
     public async Task<List<NotificationDto>> GetRecentAsync(int userId, int limit = 30)
     {
         return await _context.Notifications
+            .AsNoTracking()
             .Where(n => n.UserId == userId)
             .OrderByDescending(n => n.CreatedAt)
             .Take(limit)
@@ -70,6 +71,7 @@ public class NotificationService : INotificationService
                 RelatedType = n.RelatedType,
                 RelatedId = n.RelatedId,
                 ProjectId = n.ProjectId,
+                // Explicit join — tránh WorkspaceId luôn null khi không Include Project.
                 WorkspaceId = n.Project != null ? n.Project.WorkspaceId : null,
                 IsRead = n.IsRead == true,
                 CreatedAt = n.CreatedAt
