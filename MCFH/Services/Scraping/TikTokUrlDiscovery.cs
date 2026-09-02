@@ -168,6 +168,13 @@ public static class TikTokUrlDiscovery
         if (!string.IsNullOrWhiteSpace(keyword))
             variants.Add(keyword.Trim());
 
+        // @tuyendungfpt → cũng thử không có @ (ô search TikTok)
+        if (TryExtractTikTokHandle(keyword, out var handle))
+        {
+            variants.Add("@" + handle);
+            variants.Add(handle);
+        }
+
         var firstWord = keyword.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(firstWord))
             variants.Add(firstWord);
@@ -177,6 +184,20 @@ public static class TikTokUrlDiscovery
             variants.Add(compact);
 
         return variants.Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Nhận diện từ khóa dạng @tuyendungfpt hoặc tuyendungfpt (không khoảng trắng).</summary>
+    public static bool TryExtractTikTokHandle(string? keyword, out string handle)
+    {
+        handle = "";
+        if (string.IsNullOrWhiteSpace(keyword)) return false;
+        var raw = keyword.Trim();
+        // Chỉ coi là handle khi là 1 token (có/không @), không phải cụm từ khóa dài.
+        if (raw.Contains(' ') || raw.Contains(',') || raw.Length < 2) return false;
+        if (raw.StartsWith('@')) raw = raw[1..];
+        if (!Regex.IsMatch(raw, @"^[\w.\-]{2,24}$")) return false;
+        handle = raw;
+        return true;
     }
 
     public static async Task<List<string>> DiscoverAsync(
@@ -190,6 +211,19 @@ public static class TikTokUrlDiscovery
         TikTokCaptchaTracker? captchaTracker = null)
     {
         var all = new List<string>();
+
+        // Từ khóa @username → vào trang profile trước (chính xác hơn search chung).
+        if (TryExtractTikTokHandle(keyword, out var profileHandle))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            onStatus?.Invoke($"TikTok: đang mở trang @{profileHandle}...");
+            Console.WriteLine($"[TikTok] Discover qua profile: @{profileHandle}");
+            all.AddRange(await SearchViaUserProfileAsync(
+                page, profileHandle, maxVideos, options, onStatus, cancellationToken, sessionHeadless, captchaTracker));
+            all = NormalizeUrls(all);
+            if (all.Count >= maxVideos)
+                return all.Take(maxVideos).ToList();
+        }
 
         foreach (var variant in BuildKeywordVariants(keyword))
         {
@@ -237,6 +271,59 @@ public static class TikTokUrlDiscovery
         }
 
         return all.Take(maxVideos).ToList();
+    }
+
+    /// <summary>Thu thập video từ trang profile https://www.tiktok.com/@handle</summary>
+    private static async Task<List<string>> SearchViaUserProfileAsync(
+        IPage page,
+        string handle,
+        int maxVideos,
+        ScrapeOptions options,
+        Action<string>? onStatus,
+        CancellationToken cancellationToken,
+        bool sessionHeadless = true,
+        TikTokCaptchaTracker? captchaTracker = null)
+    {
+        var urls = new List<string>();
+        var profileUrl = $"https://www.tiktok.com/@{handle}";
+        try
+        {
+            Console.WriteLine($"[TikTok] Profile page: {profileUrl}");
+            await page.GotoAsync(profileUrl, new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded,
+                Timeout = 45000
+            });
+            await TikTokStealthHelper.DismissBlockingDialogsAsync(page);
+            if (!await TikTokCaptchaHelper.TryContinueAsync(
+                    page, options, "profile", sessionHeadless, captchaTracker))
+                return urls;
+
+            await TikTokHumanizeHelper.AfterNavigationAsync(page, options);
+
+            var scrolls = Math.Clamp(maxVideos / 3 + 2, 3, 10);
+            for (var i = 0; i < scrolls && urls.Count < maxVideos; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                urls.AddRange(await ExtractFromSearchCardsAsync(page));
+                urls.AddRange(await ExtractFromEmbeddedJsonAsync(page));
+                urls = NormalizeUrls(urls)
+                    .Where(u => u.Contains($"/@{handle}/", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (urls.Count >= maxVideos) break;
+                await page.Keyboard.PressAsync("End");
+                await TikTokHumanizeHelper.DelayAsync(page, options, 800, 600, 1400);
+            }
+
+            onStatus?.Invoke($"TikTok: @{handle} — tìm thấy {urls.Count} video trên profile");
+            Console.WriteLine($"[TikTok] Profile @{handle}: {urls.Count} URL(s)");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TikTok] Profile @{handle} lỗi: {ex.Message}");
+        }
+
+        return urls.Take(maxVideos).ToList();
     }
 
     private static async Task<List<string>> SearchWithNetworkCaptureAsync(

@@ -33,10 +33,11 @@ const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellP
       } else {
         const [count, list] = await Promise.all([
           meApi.getUnreadCount(),
-          meApi.getNotifications(15),
+          meApi.getNotifications(30),
         ]);
         setUnreadCount(count);
-        setNotifications(list);
+        // Panel chỉ hiện chưa đọc — click xong là "tắt" khỏi list.
+        setNotifications(list.filter((n) => !n.isRead));
       }
     } catch {
       setUnreadCount(0);
@@ -72,9 +73,18 @@ const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellP
   };
 
   const handleNotificationClick = async (notification: AppNotification) => {
+    // Luôn đánh dấu đã đọc + gỡ khỏi list + trừ badge ngay khi click.
     if (!notification.isRead) {
-      await meApi.markNotificationRead(notification.notificationId);
-      await refresh();
+      setNotifications((prev) => prev.filter((n) => n.notificationId !== notification.notificationId));
+      setUnreadCount((c) => Math.max(0, c - 1));
+      try {
+        await meApi.markNotificationRead(notification.notificationId);
+      } catch {
+        await refresh();
+      }
+    } else {
+      // Đã đọc rồi thì cũng ẩn khỏi panel cho gọn.
+      setNotifications((prev) => prev.filter((n) => n.notificationId !== notification.notificationId));
     }
 
     if (notification.type === 'workspace_invite') {
@@ -102,21 +112,35 @@ const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellP
     }
 
     if (
-      (notification.type === 'bespoke_revision_request' ||
-        notification.type === 'bespoke_assigned' ||
-        notification.type === 'bespoke_ready' ||
-        notification.type === 'bespoke_delivered') &&
-      notification.relatedId
+      notification.type === 'bespoke_revision_request' ||
+      notification.type === 'bespoke_assigned' ||
+      notification.type === 'bespoke_ready' ||
+      notification.type === 'bespoke_delivered'
     ) {
       setOpen(false);
       if (notification.type === 'bespoke_ready' || notification.type === 'bespoke_delivered') {
         if (notification.workspaceId) {
           navigate(`/workspace/${notification.workspaceId}/project/bespoke-reports`);
+        } else {
+          navigate('/workspaces');
         }
-      } else {
+      } else if (notification.relatedId) {
         navigate(`/reporter/requests/${notification.relatedId}`);
       }
       return;
+    }
+
+    setOpen(false);
+  };
+
+  const handleMarkAllRead = async () => {
+    if (unreadCount <= 0) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setUnreadCount(0);
+    try {
+      await meApi.markAllNotificationsRead();
+    } catch {
+      await refresh();
     }
   };
 
@@ -139,7 +163,7 @@ const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellP
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
@@ -161,15 +185,26 @@ const NotificationBell = ({ theme = 'dark', isAdmin = false }: NotificationBellP
                 {isAdmin ? 'Thông Báo Doanh Thu (App Ngân Hàng)' : 'Thông báo'}
               </span>
             </div>
-            {inviteCount > 0 && !isAdmin && (
-              <Link
-                to="/invitations"
-                onClick={() => setOpen(false)}
-                className="text-xs text-[#FF7575] hover:underline"
-              >
-                {inviteCount} lời mời
-              </Link>
-            )}
+            <div className="flex items-center gap-2">
+              {inviteCount > 0 && !isAdmin && (
+                <Link
+                  to="/invitations"
+                  onClick={() => setOpen(false)}
+                  className="text-xs text-[#FF7575] hover:underline"
+                >
+                  {inviteCount} lời mời
+                </Link>
+              )}
+              {!isAdmin && unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  className="text-xs font-semibold text-[#00B4D8] hover:underline"
+                >
+                  Đánh dấu tất cả đã đọc
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="max-h-96 overflow-y-auto p-2 space-y-2">
